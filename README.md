@@ -1,137 +1,11 @@
 # 🔱 Hermes Pipeline Plugin
 
 > Multi-agent pipeline orchestrator for [Hermes Agent](https://github.com/NousResearch/hermes-agent).
-> Автоматизирует сложные задачи (фичи, багфиксы, рефакторинг, security audit) через пайплайн специализированных агентов с quality gates.
+> Автоматизирует сложные задачи (фичи, багфиксы, рефакторинг, security audit)
+> через пайплайн специализированных агентов с quality gates.
 
 [![Tests](https://github.com/akrhin/hermes-pipeline-plugin/actions/workflows/test.yml/badge.svg)](https://github.com/akrhin/hermes-pipeline-plugin/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
----
-
-## 🇬🇧 English
-
-### Overview
-
-Pipeline Plugin adds 6 tools to Hermes Agent that orchestrate multi-agent pipelines:
-
-| Tool | Purpose |
-|------|---------|
-| `pipeline_classify` | Classify user request → pipeline category + agent list |
-| `pipeline_save` | Save pipeline state (resumable after restart) |
-| `pipeline_load` | Load saved pipeline state |
-| `pipeline_clear` | Clear pipeline state |
-| `agent_prompt` | Build a prompt for a specific agent with context injection |
-| `agent_model` | Get provider + model for a specific agent |
-
-### How It Works
-
-```
-You say:   "/pipeline Add JWT authentication"
-               │
-               ▼
-    pipeline_classify("Add JWT auth")
-               │
-               ▼
-    { category: "SECURITY_RELATED",
-      pipeline: [finder, analyst, researcher, architect,
-                 planner, coder, reviewer, security, tester, documenter] }
-               │
-               ▼
-    ┌─────────────────────────────────────────┐
-    │       @finder    — codebase search       │  ← done directly
-    │       @analyst   — deep analysis         │
-    │       @researcher — best practices        │  ← via OpenRouter free
-    │       @architect — solution design       │  ← via delegate_task (Pro)
-    │       @planner   — task decomposition    │  ← done directly
-    │       @coder     — implementation        │
-    │       @reviewer  — code review           │  ← via delegate_task (Pro)
-    │       @security  — vulnerability audit   │  ← via delegate_task (Pro)
-    │       @tester    — tests                 │
-    │       @documenter — docs                 │
-    └─────────────────────────────────────────┘
-```
-
-Each pipeline has **checkpoints** where the user confirms before proceeding:
-1. ✅ Research complete → **continue?**
-2. ✅ Plan ready → **start implementation?**
-3. ✅ Code written → **run quality gates?** (auto)
-4. ✅ Pipeline complete
-
-### Installation
-
-Two components are required — plugin (tools) + skill (orchestration):
-
-```bash
-# 1. Plugin — Python tools (classify, state, model routing)
-git clone https://github.com/akrhin/hermes-pipeline-plugin.git ~/git/hermes-pipeline-plugin
-ln -sf ~/git/hermes-pipeline-plugin ~/.hermes/plugins/pipeline
-
-# 2. Skill — agent instructions (checkpoints, revision loops, resume)
-ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator ~/.hermes/skills/hermes/pipeline-orchestrator
-
-# 3. Enable & restart
-hermes plugins enable pipeline
-systemctl --user restart hermes-gateway   # or restart CLI session
-```
-
-### How to Change Models
-
-Models are defined in [`__init__.py`](__init__.py) — the `MODEL_MAP` dict:
-
-```python
-MODEL_MAP = {
-    # Direct agents (use your current Hermes model)
-    "finder":       {"provider": "direct", "model": "deepseek-v4-flash"},
-    "analyst":      {"provider": "direct", "model": "deepseek-v4-flash"},
-    "planner":      {"provider": "direct", "model": "deepseek-v4-flash"},
-    "coder":        {"provider": "direct", "model": "deepseek-v4-flash"},
-    "tester":       {"provider": "direct", "model": "deepseek-v4-flash"},
-    "documenter":   {"provider": "direct", "model": "deepseek-v4-flash"},
-
-    # Delegate agents (called via delegate_task → V4 Pro by default)
-    "architect":    {"provider": "delegate", "model": "deepseek-v4-pro"},
-    "reviewer":     {"provider": "delegate", "model": "deepseek-v4-pro"},
-    "security":     {"provider": "delegate", "model": "deepseek-v4-pro"},
-
-    # Free agents (called via OpenRouter free tier)
-    "researcher":   {"provider": "delegate_free", "model": "openrouter/free"},
-    "commenter":    {"provider": "delegate_free", "model": "openrouter/free"},
-}
-```
-
-**Provider types:**
-
-| Provider | Meaning |
-|----------|---------|
-| `direct` | Agent does the work itself — uses **your current Hermes model** |
-| `delegate` | Spawns a sub-agent via `delegate_task()` using your configured delegation model |
-| `delegate_free` | Spawns a sub-agent with OpenRouter free model (for cheap research/comment tasks) |
-
-**To change any model — just edit the dict.** Or tell the agent "change @architect to claude-sonnet-4" and it'll do it for you.
-
-### Pipeline Categories
-
-| Category | Pipeline | Triggers |
-|----------|----------|----------|
-| **SECURITY_RELATED** | finder → analyst → researcher → architect → planner → coder → reviewer → security → tester → documenter | auth, jwt, password, token, security |
-| **BUG_UNKNOWN** | finder → debugger → fixer → reviewer → tester | crash, exception, broken |
-| **BUG_KNOWN** | finder → fixer → reviewer → tester | fix, исправь |
-| **REFACTORING** | finder → analyst → refactorer → reviewer → tester | refactor, рефакторинг |
-| **PERFORMANCE** | finder → analyst → optimizer → reviewer → tester | optimize, slow, memory |
-| **INFRASTRUCTURE** | finder → devops → reviewer → tester | docker, deploy, config |
-| **DOCUMENTATION** | finder → documenter | docs, readme, документация |
-| **FEATURE** | finder → analyst → architect → planner → coder → reviewer → tester → documenter | default (everything else) |
-
-### Quick Commands
-
-| Command | What it does |
-|---------|--------------|
-| `/pipeline Add JWT auth` | Full pipeline: research → plan → code → review → security → test → docs |
-| `/review auth.go` | Code review only (one file) |
-| `/test auth_test.go` | Write/run tests only |
-| `/security auth.go` | Security audit only |
-| `/status` | Show current pipeline state |
-| `/abort` | Cancel current pipeline |
 
 ---
 
@@ -139,11 +13,13 @@ MODEL_MAP = {
 
 ### Что это
 
-Плагин-оркестратор для Hermes Agent, реализующий multi-agent пайплайны с quality gates. Позволяет автоматизировать сложные задачи — от разведки и планирования до реализации, ревью, безопасности и документации — одной командой.
+Плагин-оркестратор для Hermes Agent, реализующий multi-agent пайплайны с quality gates.
+Позволяет автоматизировать сложные задачи — от разведки и планирования до реализации,
+ревью, безопасности и документации — одной командой.
 
 ### Установка
 
-**Нужно установить два компонента.** Плагин даёт инструменты, скилл — оркестрацию:
+**Нужно установить два компонента:** плагин (инструменты) + скилл (оркестрация).
 
 ```bash
 # 1. Плагин — Python-инструменты (классификация, состояние, модели)
@@ -151,7 +27,8 @@ git clone https://github.com/akrhin/hermes-pipeline-plugin.git ~/git/hermes-pipe
 ln -sf ~/git/hermes-pipeline-plugin ~/.hermes/plugins/pipeline
 
 # 2. Скилл-оркестратор — инструкции для агента (обязательно!)
-ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator ~/.hermes/skills/hermes/pipeline-orchestrator
+ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator \
+      ~/.hermes/skills/hermes/pipeline-orchestrator
 ```
 
 Пропиши в `~/.hermes/config.yaml`:
@@ -168,12 +45,39 @@ systemctl --user restart hermes-gateway
 # Если CLI: просто перезапусти сессию
 ```
 
-### Требования
+### Как работает
 
-- Hermes Agent (любая версия с поддержкой `register_tool` и `delegate_task`)
-- Python ≥ 3.11
-- Для delegate-агентов (architect, reviewer, security) — настроенный delegation провайдер
-- Для delegate_free (researcher) — OpenRouter API ключ в `OPENROUTER_API_KEY`
+```
+Ты:    "/pipeline добавь JWT аутентификацию"
+              │
+              ▼
+    pipeline_classify("добавь JWT аутентификацию")
+              │
+              ▼
+    { category: "SECURITY_RELATED",
+      pipeline: [finder, analyst, researcher, architect,
+                 planner, coder, reviewer, security, tester, documenter] }
+              │
+              ▼
+    ┌─────────────────────────────────────────┐
+    │  @finder     — поиск по коду            │  ← сам (Flash)
+    │  @analyst    — глубокий анализ          │
+    │  @researcher — best practices           │  ← OpenRouter free
+    │  @architect  — архитектура решения      │  ← delegate (Pro)
+    │  @planner    — декомпозиция             │  ← сам (Flash)
+    │  @coder      — реализация               │
+    │  @reviewer   — code review              │  ← delegate (Pro)
+    │  @security   — аудит безопасности        │  ← delegate (Pro)
+    │  @tester     — тесты                    │
+    │  @documenter — документация             │
+    └─────────────────────────────────────────┘
+```
+
+**Checkpoint'ы на каждом этапе:**
+1. ✅ Исследование готово → **продолжаем?**
+2. ✅ План готов → **начинаем реализацию?**
+3. ✅ Код написан → **запускаем quality gates?** (авто)
+4. ✅ Пайплайн завершён
 
 ### Как пользоваться
 
@@ -196,32 +100,57 @@ systemctl --user restart hermes-gateway
 
 Каждый этап — с checkpoint'ом: ты подтверждаешь или корректируешь.
 
+### Категории пайплайнов
+
+| Категория | Пайплайн | Триггеры |
+|-----------|----------|----------|
+| **SECURITY_RELATED** | finder → analyst → researcher → architect → planner → coder → reviewer → security → tester → documenter | auth, jwt, password, token, security |
+| **BUG_UNKNOWN** | finder → debugger → fixer → reviewer → tester | crash, exception, broken |
+| **BUG_KNOWN** | finder → fixer → reviewer → tester | fix, исправь |
+| **REFACTORING** | finder → analyst → refactorer → reviewer → tester | refactor, рефакторинг |
+| **PERFORMANCE** | finder → analyst → optimizer → reviewer → tester | optimize, slow, memory |
+| **INFRASTRUCTURE** | finder → devops → reviewer → tester | docker, deploy, config |
+| **DOCUMENTATION** | finder → documenter | docs, readme, документация |
+| **FEATURE** | finder → analyst → architect → planner → coder → reviewer → tester → documenter | всё остальное |
+
+### Быстрые команды
+
+| Команда | Что делает |
+|---------|------------|
+| `/pipeline <задача>` | Полный пайплайн: research → plan → code → review → security → test → docs |
+| `/review <файл>` | Только code review |
+| `/test <файл>` | Только тесты |
+| `/security <файл>` | Только security audit |
+| `/status` | Статус текущего пайплайна |
+| `/abort` | Отменить пайплайн |
+
 ### Как менять модели агентов
 
+Модели заданы в `MODEL_MAP` в [`__init__.py`](__init__.py):
+
+| Провайдер | Что значит |
+|-----------|------------|
+| `direct` | Агент работает сам — твоя текущая модель |
+| `delegate` | Спавнит под-агента через `delegate_task()` |
+| `delegate_free` | Спавнит под-агента через OpenRouter free |
+
+Открой файл и поменяй нужную модель:
 ```bash
-# Открой файл плагина:
 vim ~/.hermes/plugins/pipeline/__init__.py
-# Найди MODEL_MAP — словарь в середине файла
-# Поменяй нужную модель:
+# Или просто скажи агенту:
+# "Смени @architect на claude-sonnet-4"
 ```
-
-Или просто скажи агенту:
-
-> "Смени @architect на claude-sonnet-4"
-> "Используй deepseek-chat для @reviewer"
-> "Сделай @tester на direct, а @architect на openai/gpt-4o"
 
 ### Структура проекта
 
 ```
 hermes-pipeline-plugin/
 ├── __init__.py          # Ядро плагина — схемы, хендлеры, MODEL_MAP
-├── classify.py          # Классификация запросов (keyword-based, 8 категорий)
+├── classify.py          # Классификация запросов (8 категорий)
 ├── state.py             # Состояние пайплайна (JSON на диске, TTL 24h)
 ├── plugin.yaml          # Манифест плагина
 ├── AGENTS.md            # Шпаргалка для AI-ассистентов
 ├── ARCHITECTURE.md      # Архитектура плагина
-├── README.md            ← этот файл
 ├── pyproject.toml       # Ruff-линтер конфиг + build-system
 ├── LICENSE              # MIT
 ├── .github/workflows/   # CI (ruff + bandit + pytest)
@@ -234,36 +163,114 @@ hermes-pipeline-plugin/
 │   └── pipeline-orchestrator/  # Скилл оркестратора
 ├── .cursor/backlog/       # История изменений
 └── tests/
-    ├── test_classify.py  # 16 тестов для классификации
-    └── test_state.py     # 8 тестов для state persistence
+    ├── test_classify.py  # 16 тестов классификации
+    ├── test_state.py     # 8 тестов state persistence
+    └── test_init.py      # 12 тестов ядра плагина
 ```
 
 ### Безопасность
 
-- **Path traversal protection** — `handle_prompt()` проверяет, что файл агента лежит внутри `agents/`
+- **Path traversal protection** — `handle_prompt()` проверяет, что файл агента внутри `agents/`
 - **Нет хардкоженных ключей** — все credentials через Hermes credential pool
-- **No shell injection** — `exec.Command` с `shell=false` (утром Go-стиль)
 - **CI quality gates** — ruff (линтер) + bandit (SAST) + pytest перед каждым мержем
-- **state.json** — живёт локально в директории плагина, не в git
+- **state.json** — живёт локально, не в git
 
-### License
+### Требования
 
-MIT
+- Hermes Agent (с поддержкой `register_tool` и `delegate_task`)
+- Python ≥ 3.11
+- Для delegate-агентов (architect, reviewer, security) — настроенный delegation провайдер
+- Для delegate_free (researcher) — OpenRouter API ключ в `OPENROUTER_API_KEY`
+
+---
+
+## 🇬🇧 English
+
+### Overview
+
+Pipeline Plugin adds 6 tools to Hermes Agent that orchestrate multi-agent pipelines:
+
+| Tool | Purpose |
+|------|---------|
+| `pipeline_classify` | Classify request → category + agent list |
+| `pipeline_save` | Save pipeline state (resumable) |
+| `pipeline_load` | Load saved state |
+| `pipeline_clear` | Clear state |
+| `agent_prompt` | Build agent prompt with context |
+| `agent_model` | Get provider + model for an agent |
+
+### Installation
+
+Two components required — plugin (tools) + skill (orchestration):
+
+```bash
+# 1. Plugin — Python tools
+git clone https://github.com/akrhin/hermes-pipeline-plugin.git ~/git/hermes-pipeline-plugin
+ln -sf ~/git/hermes-pipeline-plugin ~/.hermes/plugins/pipeline
+
+# 2. Skill — agent orchestration instructions
+ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator \
+      ~/.hermes/skills/hermes/pipeline-orchestrator
+
+# 3. Enable & restart
+hermes plugins enable pipeline
+systemctl --user restart hermes-gateway   # or restart CLI session
+```
+
+### How to Change Models
+
+Edit `MODEL_MAP` in [`__init__.py`](__init__.py):
+
+```python
+MODEL_MAP = {
+    "finder":       {"provider": "direct", "model": "deepseek-v4-flash"},
+    "architect":    {"provider": "delegate", "model": "deepseek-v4-pro"},
+    "researcher":   {"provider": "delegate_free", "model": "openrouter/free"},
+}
+```
+
+### Pipeline Categories
+
+| Category | Pipeline | Triggers |
+|----------|----------|----------|
+| **SECURITY_RELATED** | finder → analyst → researcher → architect → planner → coder → reviewer → security → tester → documenter | auth, jwt, password |
+| **BUG_UNKNOWN** | finder → debugger → fixer → reviewer → tester | crash, exception |
+| **BUG_KNOWN** | finder → fixer → reviewer → tester | fix |
+| **REFACTORING** | finder → analyst → refactorer → reviewer → tester | refactor |
+| **PERFORMANCE** | finder → analyst → optimizer → reviewer → tester | slow, memory |
+| **INFRASTRUCTURE** | finder → devops → reviewer → tester | docker, deploy |
+| **DOCUMENTATION** | finder → documenter | docs |
+| **FEATURE** | finder → analyst → architect → planner → coder → reviewer → tester → documenter | default |
+
+### Quick Commands
+
+| Command | What it does |
+|---------|--------------|
+| `/pipeline <task>` | Full pipeline: research → plan → code → review → security → test → docs |
+| `/review <file>` | Code review only |
+| `/test <file>` | Write/run tests only |
+| `/security <file>` | Security audit only |
+| `/status` | Show current pipeline state |
+| `/abort` | Cancel current pipeline |
 
 ---
 
 ## Development
 
 ```bash
-# Установка зависимостей
+# Install deps
 pip install pytest ruff bandit
 
-# Запуск тестов
+# Run tests
 python -m pytest tests/ -q -v
 
-# Линтер
+# Lint
 ruff check .
 
 # SAST
 bandit -r . -ll -q
 ```
+
+## License
+
+MIT
