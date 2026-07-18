@@ -141,42 +141,31 @@ MODEL_MAP = {
 
 Плагин-оркестратор для Hermes Agent, реализующий multi-agent пайплайны с quality gates. Позволяет автоматизировать сложные задачи — от разведки и планирования до реализации, ревью, безопасности и документации — одной командой.
 
-## Installation
+### Установка
 
-### 1. Plugin (Python)
+**Нужно установить два компонента.** Плагин даёт инструменты, скилл — оркестрацию:
 
 ```bash
+# 1. Плагин — Python-инструменты (классификация, состояние, модели)
 git clone https://github.com/akrhin/hermes-pipeline-plugin.git ~/git/hermes-pipeline-plugin
 ln -sf ~/git/hermes-pipeline-plugin ~/.hermes/plugins/pipeline
+
+# 2. Скилл-оркестратор — инструкции для агента (обязательно!)
+ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator ~/.hermes/skills/hermes/pipeline-orchestrator
 ```
 
-Enable in `~/.hermes/config.yaml`:
+Пропиши в `~/.hermes/config.yaml`:
 ```yaml
 plugins:
   enabled:
     - pipeline
 ```
 
-### 2. Orchestrator Skill (agent instructions)
-
-The plugin is just the toolbox. The **orchestration logic** lives in a Hermes skill that tells the agent how to use it:
-
+Перезагрузи:
 ```bash
-# Symlink the skill into Hermes skills directory
-ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator ~/.hermes/skills/hermes/pipeline-orchestrator
-```
-
-Once installed, the skill auto-loads when you send `/pipeline`, `/review`, `/test`, `/security`, `/status`, or any `/abort` command — the agent knows exactly how to classify, delegate, checkpoint, and resume.
-
-> **Why two components?** The plugin handles tool registration (classification, state management, model routing). The skill handles orchestration logic (how to run a pipeline, checkpoint flow, revision loops). Both are needed for the full experience.
-
-### 3. Restart
-
-```bash
-# If using Hermes Gateway:
+# Если Hermes Gateway:
 systemctl --user restart hermes-gateway
-
-# If using CLI: restart the session
+# Если CLI: просто перезапусти сессию
 ```
 
 ### Требования
