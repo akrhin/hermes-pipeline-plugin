@@ -405,3 +405,91 @@ print(f"⚠️ Статус: {state['status']}")
 | @reviewer | delegate_task | DeepSeek V4 Pro |
 | @security | delegate_task | DeepSeek V4 Pro |
 | @researcher | delegate_task | OpenRouter free |
+
+---
+
+## Kanban Dashboard (TickTick)
+
+Публикует прогресс пайплайна на TickTick Kanban-доску для наглядности.
+
+### Setup
+
+Один раз:
+1. TickTick MCP включён (`~/.hermes/mcp.json` или `config.yaml`)
+2. Проект **«🧪 Пайплайны»** (ID: `6a5bc9488f0846c75c8cdbb8`, kanban view)
+
+### Как использовать
+
+#### При старте пайплайна
+
+```python
+from hermes_tools import tool_call
+
+# Создать таску на прогон
+task = tool_call("mcp__ticktick__create_task", {
+    "project_id": "6a5bc9488f0846c75c8cdbb8",
+    "title": f"🔷 Пайплайн: {request[:40]}",
+    "content": f"Категория: {category}\nЗапрос: {request}",
+    "priority": 3,
+    "due_date": "2026-07-18T23:00:00+0000",
+})
+pipeline_task_id = task["ID"]
+```
+
+Потом создаёшь сабтаски для каждой стадии (сразу все):
+
+```python
+stages = [
+    ("🔍", "finder", "аудит кода"),
+    ("📋", "analyst", "анализ"),
+    ("🔬", "researcher", "исследование"),
+    ("🏗️", "architect", "архитектура"),
+    ("📐", "planner", "план"),
+    ("💻", "coder", "реализация"),
+    ("👁️", "reviewer", "ревью"),
+    ("🛡️", "security", "безопасность"),
+    ("🧪", "tester", "тесты"),
+    ("📝", "documenter", "документация"),
+]
+subtask_ids = {}
+for emoji, agent, desc in stages:
+    st = tool_call("mcp__ticktick__create_subtask", {
+        "parent_task_id": pipeline_task_id,
+        "project_id": "6a5bc9488f0846c75c8cdbb8",
+        "subtask_title": f"{emoji} {agent} — {desc}",
+        "priority": 3 if agent in ("architect", "reviewer", "security") else 1,
+    })
+    subtask_ids[agent] = st["ID"]
+```
+
+#### При завершении стадии
+
+```python
+# Обновить сабтаску (не complete — просто data)
+# TickTick API не имеет update_subtask, но можно:
+tool_call("mcp__ticktick__update_task", {
+    "task_id": subtask_ids["coder"],
+    "project_id": "6a5bc9488f0846c75c8cdbb8",
+    "title": f"✅ @coder — реализация (done, 3 findings)",
+    "priority": 0,
+})
+```
+
+#### При завершении пайплайна
+
+```python
+# Обновить заголовок родительской таски
+tool_call("mcp__ticktick__update_task", {
+    "task_id": pipeline_task_id,
+    "project_id": "6a5bc9488f0846c75c8cdbb8",
+    "title": f"✅ Пайплайн: {request[:40]} (converged, round 2/3)",
+    "priority": 0,
+})
+```
+
+### Принцип
+
+- Логика дашборда — **в SKILL.md**, не в плагине
+- Плагин (`__init__.py`) ничего не знает про TickTick
+- Оркестратор (я) сам вызывает TickTick MCP на каждом чекпойнте
+- Kanban — read-only для пользователя: смотреть прогресс, не управлять
