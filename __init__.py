@@ -189,6 +189,14 @@ def handle_convergence(args, **kwargs):
                 "round": 0,
             })
 
+        # Guard: if no findings provided AND state has none → cannot evaluate
+        if findings is None and not state.get("findings"):
+            return json.dumps({
+                "decision": "unknown",
+                "reason": "No findings available — cannot evaluate convergence",
+                "round": state.get("round", 0),
+            })
+
         if findings is not None:
             # Save findings, compute fingerprint, bump round
             prev_fp = state.get("findings_fingerprint", "")

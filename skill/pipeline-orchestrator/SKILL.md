@@ -1,7 +1,7 @@
 ---
 name: pipeline-orchestrator
 description: Orchestration logic for Pipeline Plugin — how to classify, run checkpoints, delegate agents, handle revision loops, and resume state.
-version: 1.0.0
+version: 1.1.0
 author: akrhin
 category: hermes
 tags: [pipeline, orchestration, multi-agent, quality-gates]
