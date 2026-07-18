@@ -141,11 +141,20 @@ hermes-pipeline-plugin/
 ├── __init__.py                ← ядро плагина
 ├── classify.py                ← классификация запросов
 ├── state.py                   ← управление состоянием
+├── LICENSE                    ← MIT
+├── pyproject.toml             ← ruff config + build system
+├── .github/
+│   └── workflows/
+│       └── test.yml           ← CI (ruff + bandit + pytest)
 ├── agents/
 │   ├── architect.prompt
 │   ├── reviewer.prompt
 │   ├── security.prompt
 │   └── researcher.prompt
+├── tests/
+│   ├── test_classify.py
+│   ├── test_init.py
+│   └── test_state.py
 ├── skill/
 │   └── pipeline-orchestrator/
 │       ├── SKILL.md                    ← оркестратор (checkpoints, revision loops)
@@ -154,11 +163,6 @@ hermes-pipeline-plugin/
 │       │   └── pipeline_lessons.md     ← реальные gotcha
 │       └── scripts/
 │           └── go-quality-gates.sh     ← скрипт проверки качества
-├── .cursor/backlog/
-│   ├── each-step-log.mdc      ← per-turn лог
-│   └── significant-changes-summary.mdc  ← сводка
-├── pyproject.toml             ← ruff config + build system
-├── LICENSE                    ← MIT
 └── state.json                 ← runtime state (gitignored)
 ```
 
