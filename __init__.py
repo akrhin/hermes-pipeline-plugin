@@ -204,11 +204,9 @@ def handle_convergence(args, **kwargs):
 
         # Auto-save convergence status on terminal decisions
         if result["decision"] in ("converged", "stuck", "maxed_out"):
-            state_copy = pstate.load()
-            if state_copy:
-                state_copy["status"] = "done"
-                state_copy["convergence"] = result["decision"]
-                pstate.save(state_copy)
+            state["status"] = "done"
+            state["convergence"] = result["decision"]
+            pstate.save(state)
 
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:

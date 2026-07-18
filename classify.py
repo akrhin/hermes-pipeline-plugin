@@ -10,7 +10,7 @@ from functools import lru_cache
 # ── Category definitions ─────────────────────────────────────────────────────┘
 
 # Minimum length for plain substring matching
-_SHORT_KW_LEN = 3  # keywords <= this length use word-boundary matching
+_SHORT_KW_LEN = 5  # keywords <= this length use word-boundary matching
 
 
 @lru_cache(maxsize=256)

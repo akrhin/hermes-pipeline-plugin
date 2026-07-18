@@ -26,20 +26,32 @@ MAX_CONVERGENCE_ROUNDS = 3
 
 def save(state: dict) -> None:
     """Persist pipeline state to disk. Overwrites previous state."""
-    state["updated_at"] = _now_iso()
-    if "created_at" not in state:
-        state["created_at"] = _now_iso()
+    # Work on a copy to avoid side effects on caller's dict
+    snapshot = dict(state)
+    snapshot["updated_at"] = _now_iso()
+    if "created_at" not in snapshot:
+        snapshot["created_at"] = _now_iso()
     # Ensure convergence fields have defaults
-    state.setdefault("round", 0)
-    state.setdefault("max_rounds", MAX_CONVERGENCE_ROUNDS)
-    state.setdefault("findings", [])
-    state.setdefault("findings_fingerprint", "")
-    state.setdefault("prev_findings_fingerprint", "")
-    state.setdefault("convergence", "running")
+    snapshot.setdefault("round", 0)
+    snapshot.setdefault("max_rounds", MAX_CONVERGENCE_ROUNDS)
+    snapshot.setdefault("findings", [])
+    snapshot.setdefault("findings_fingerprint", "")
+    snapshot.setdefault("prev_findings_fingerprint", "")
+    snapshot.setdefault("convergence", "running")
+    # Atomic write: write to temp file, then rename
+    tmp_path = STATE_PATH + ".tmp"
     try:
-        with open(STATE_PATH, "w", encoding="utf-8") as f:
-            json.dump(state, f, ensure_ascii=False, indent=2)
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(snapshot, f, ensure_ascii=False, indent=2, allow_nan=False)
+            f.flush()
+            os.fsync(f.fileno())  # Ensure data is on disk before replacing
+        os.replace(tmp_path, STATE_PATH)
     except (OSError, PermissionError) as e:
+        # Clean up temp file on failure
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
         raise RuntimeError(f"Cannot save state to {STATE_PATH}: {e}") from e
 
 
@@ -91,12 +103,25 @@ def evaluate_convergence(state: dict) -> dict:
     round_num = state.get("round", 0)
     max_rounds = state.get("max_rounds", MAX_CONVERGENCE_ROUNDS)
 
-    # Count by severity
+    # Count by severity, then check converged first (no P0/P1 → clean exit)
     p0 = [f for f in findings if f.get("severity") == "P0"]
     p1 = [f for f in findings if f.get("severity") == "P1"]
     p2 = [f for f in findings if f.get("severity") == "P2"]
 
-    # Hard stop 1: max rounds
+    p0p1_findings = list(p0) + list(p1)
+
+    # No P0/P1 findings → converged
+    if not p0p1_findings:
+        return {
+            "decision": "converged",
+            "reason": f"No P0/P1 findings ({len(p2)} P2 advisories)",
+            "round": round_num,
+            "p0_count": 0,
+            "p1_count": 0,
+            "p2_count": len(p2),
+        }
+
+    # Hard stop: max rounds (only if P0/P1 remain)
     if round_num >= max_rounds:
         return {
             "decision": "maxed_out",
@@ -105,18 +130,6 @@ def evaluate_convergence(state: dict) -> dict:
             "round": round_num,
             "p0_count": len(p0),
             "p1_count": len(p1),
-            "p2_count": len(p2),
-        }
-
-    # No P0/P1 findings → converged
-    p0p1_findings = list(p0) + list(p1)
-    if not p0p1_findings:
-        return {
-            "decision": "converged",
-            "reason": f"No P0/P1 findings ({len(p2)} P2 advisories)",
-            "round": round_num,
-            "p0_count": 0,
-            "p1_count": 0,
             "p2_count": len(p2),
         }
 
@@ -154,10 +167,10 @@ def _compute_fingerprint(findings: list) -> str:
         return ""
     items = sorted(
         f"{f.get('severity', '')}:{f.get('file', '')}:"
-        f"{f.get('category', '')}:{f.get('description', '')[:80]}"
+        f"{f.get('category', '')}:{(f.get('description') or '')[:80]}"
         for f in findings
     )
-    return hashlib.md5("|".join(items).encode()).hexdigest()[:12]
+    return hashlib.md5("|".join(items).encode(), usedforsecurity=False).hexdigest()[:12]  # nosec B324
 
 
 def _now_iso() -> str:
