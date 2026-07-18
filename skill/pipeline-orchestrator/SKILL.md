@@ -177,64 +177,55 @@ Present checkpoint only if user said yes to continue — otherwise wait for conf
 
 #### Phase 4: Quality Gates
 
-**@reviewer — always after code changes**
+Принципиальное отличие от старой версии: пайплайн — это **когерентный цикл с конвергенцией**, а не линейный конвейер. 
+
+Вместо одного прохода coder→reviewer:
+
+```
+coder → (reviewer + security + tester) → 
+    ├── P0/P1 findings = 0 → ГОТОВО (converged)
+    ├── same findings 2× → STUCK (escalation)
+    ├── max 3 раунда → MAXED_OUT (forced stop)
+    └── есть новые findings → coder с фидбеком (continue)
+```
+
+### Инструмент конвергенции
 
 ```python
-reviewer_results = run_agent_pro("reviewer", "Review the implemented code", context)
-context["quality"]["reviewer"] = reviewer_results
-save_state()
-
-# If reviewer returned NEEDS_REVISION:
-for attempt in range(3):  # max 3 iterations
-    fixer_results = run_agent("fixer", f"Fix these issues: {reviewer_issues}")
-    context["quality"]["fixer"] = fixer_results
-    reviewer_results = run_agent_pro("reviewer", "Verify fixes", context)
-    context["quality"]["reviewer"] = reviewer_results
-    save_state()
-    if reviewer_results.status == "PASS":
-        break
-# If still FAIL after 3 → escalate to user
+# После quality gates — оценить конвергенцию
+result = tool_call("pipeline_convergence", {
+    "findings": [
+        {"severity": "P0", "file": "auth.go", "category": "security", 
+         "description": "XSS в логине"},
+        {"severity": "P1", "file": "config.go", "category": "error_handling",
+         "description": "Нет проверки пустого secret"},
+        {"severity": "P2", "file": "main.go", "category": "style",
+         "description": "Длинная строка (120 > 100)"},
+    ]
+})
+# Returns:
+# {"decision": "continue", "reason": "2 P0/P1 findings remain — round 2/3",
+#  "round": 1, "p0_count": 1, "p1_count": 1, "p2_count": 1}
 ```
 
-**@security — if SECURITY_RELATED and AFTER reviewer**
+**4 возможных решения:**
 
-```python
-security_results = run_agent_pro("security", "Audit code for vulnerabilities", context)
-context["quality"]["security"] = security_results
-save_state()
+| decision | Что значит | Что делать |
+|----------|-----------|------------|
+| `continue` | Есть P0/P1, можно ещё round | Вернуть coder с замечаниями |
+| `converged` | P0/P1 = 0, можно финишировать | Идти к документер |
+| `stuck` | Те же P0/P1 второй раунд | Стоп, escalation к пользователю |
+| `maxed_out` | Достигнут max_rounds | Стоп, показать что недоделано |
 
-# If security FAILS with critical/high:
-# STOP pipeline, show user, do not continue until resolved
-if security_results.get("blocked"):
-    show_to_user("⚠️ Security found critical issues. Pipeline stopped.")
-    return
-```
+**Hard stops — в коде, не в промптах.** Max 3 раунда. Fingerprint-сравнение P0/P1. Детерминировано, без LLM.
 
-**@tester — always after code changes, AFTER reviewer/security**
+### Severity (P0/P1/P2)
 
-```python
-tester_results = run_agent("tester", "Write and run tests", context)
-context["quality"]["tester"] = tester_results
-save_state()
-
-# If tests fail:
-for attempt in range(3):
-    fixer_results = run_agent("fixer", f"Fix failing tests: {test_failures}")
-    tester_results = run_agent("tester", "Re-run tests", context)
-    if tester_results.status == "PASS":
-        break
-```
-
-**No checkpoint here** — quality gates are automated. Only interrupt on critical security failures.
-
-Show results:
-
-```
-✅ Quality gates:
-- @reviewer: PASS (2 nits)
-- @security: PASS (0 findings)
-- @tester: 12/12 tests passed, 85% coverage
-```
+| Severity | Что это | Действие |
+|----------|---------|----------|
+| **P0** | Correctness/security — блокирует merge | Обязательно исправить |
+| **P1** | Degraded behaviour | Исправить или remediation plan |
+| **P2** | Style/naming/minor | Advisory — не блокирует |
 
 #### Phase 5: Documentation
 
@@ -351,6 +342,13 @@ state = {
         "plan_approved": None,
         "implementation_approved": None,
     },
+    # ── Convergence fields (auto-managed by pipeline_convergence) ──
+    "round": 0,                       # Текущий convergence round
+    "max_rounds": 3,                   # Max раундов (hard stop, в коде)
+    "findings": [],                    # Список findings с severity/file/category
+    "findings_fingerprint": "",        # MD5 P0/P1 findings (последнего раунда)
+    "prev_findings_fingerprint": "",   # MD5 P0/P1 findings (предыдущего раунда)
+    "convergence": "running",          # running | converged | stuck | maxed_out
     "created_at": "2026-07-18T14:00:00",
     "updated_at": "2026-07-18T14:05:00",
     "status": "running",  # running | paused | done

@@ -1,8 +1,9 @@
 """
 Pipeline Plugin — multi-agent orchestration for Hermes Agent.
 
-Provides 6 tools:
+Provides 7 tools:
   - pipeline_classify: classify request → category + pipeline
+  - pipeline_convergence: evaluate convergence (deterministic, no LLM)
   - pipeline_save: persist pipeline state to disk
   - pipeline_load: load persisted pipeline state
   - pipeline_clear: remove persisted pipeline state
@@ -40,6 +41,31 @@ CLASSIFY_SCHEMA = {
     },
 }
 
+CONVERGENCE_SCHEMA = {
+    "name": "pipeline_convergence",
+    "description": "Evaluate pipeline convergence (deterministic, no LLM). Returns continue/converged/stuck/maxed_out based on round count, findings fingerprint, and severity counts.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "findings": {
+                "type": "array",
+                "description": "Current round findings (list of dicts with severity/file/category/description). Optional — if omitted, reads from saved state.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "severity": {"type": "string", "enum": ["P0", "P1", "P2"]},
+                        "file": {"type": "string"},
+                        "category": {"type": "string"},
+                        "description": {"type": "string"},
+                    },
+                    "required": ["severity", "file", "category"],
+                },
+            },
+        },
+        "required": [],
+    },
+}
+
 SAVE_SCHEMA = {
     "name": "pipeline_save",
     "description": "Save pipeline state to disk (overwrites previous state).",
@@ -57,6 +83,11 @@ SAVE_SCHEMA = {
                     "completed": {"type": "array", "items": {"type": "string"}},
                     "context": {"type": "object"},
                     "checkpoints": {"type": "object"},
+                    "round": {"type": "integer", "description": "Current convergence round (0-based)"},
+                    "max_rounds": {"type": "integer", "description": "Max convergence rounds before forced stop"},
+                    "findings": {"type": "array", "description": "List of findings for current round"},
+                    "findings_fingerprint": {"type": "string", "description": "MD5 fingerprint of P0/P1 findings for stuck detection"},
+                    "convergence": {"type": "string", "enum": ["running", "converged", "stuck", "maxed_out", "paused", "done"]},
                     "status": {"type": "string", "enum": ["running", "paused", "done"]},
                 },
                 "required": ["request", "category", "pipeline", "current_idx", "completed", "context", "checkpoints", "status"],
@@ -138,6 +169,50 @@ def handle_classify(args, **kwargs):
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e), "traceback": traceback.format_exc()})
+
+
+def handle_convergence(args, **kwargs):
+    """
+    Evaluate convergence for the current pipeline state.
+
+    Если findings переданы — сохраняем их в state и инкрементим round,
+    потом оцениваем. Если нет — просто оцениваем текущий state.
+    """
+    try:
+        findings = args.get("findings", None)
+        state = pstate.load()
+
+        if state is None:
+            return json.dumps({
+                "decision": "unknown",
+                "reason": "No active pipeline state",
+                "round": 0,
+            })
+
+        if findings is not None:
+            # Save findings, compute fingerprint, bump round
+            prev_fp = state.get("findings_fingerprint", "")
+            state["findings"] = findings
+            state["findings_fingerprint"] = pstate._compute_fingerprint(
+                [f for f in findings if f.get("severity") in ("P0", "P1")]
+            )
+            state["prev_findings_fingerprint"] = prev_fp
+            state["round"] = state.get("round", 0) + 1
+            pstate.save(state)
+
+        result = pstate.evaluate_convergence(state)
+
+        # Auto-save convergence status on terminal decisions
+        if result["decision"] in ("converged", "stuck", "maxed_out"):
+            state_copy = pstate.load()
+            if state_copy:
+                state_copy["status"] = "done"
+                state_copy["convergence"] = result["decision"]
+                pstate.save(state_copy)
+
+        return json.dumps(result, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": str(e), "traceback": traceback.format_exc()}, ensure_ascii=False)
 
 
 def handle_save(args, **kwargs):
@@ -256,6 +331,12 @@ def register(ctx):
         toolset="pipeline",
         schema=CLASSIFY_SCHEMA,
         handler=handle_classify,
+    )
+    ctx.register_tool(
+        name="pipeline_convergence",
+        toolset="pipeline",
+        schema=CONVERGENCE_SCHEMA,
+        handler=handle_convergence,
     )
     ctx.register_tool(
         name="pipeline_save",

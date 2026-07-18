@@ -81,3 +81,117 @@ class TestStateSaveLoad:
             json.dump(state_old, f)
         loaded = state.load()
         assert loaded is None
+
+
+class TestConvergence:
+    """Tests for converge logic — deterministic, no LLM."""
+
+    def test_converged_no_findings(self):
+        """Zero findings → converged."""
+        state_obj = {"round": 0, "findings": []}
+        result = state.evaluate_convergence(state_obj)
+        assert result["decision"] == "converged"
+        assert result["p0_count"] == 0
+        assert result["p1_count"] == 0
+
+    def test_converged_p2_only(self):
+        """Only P2 findings → converged (advisories only)."""
+        state_obj = {
+            "round": 0,
+            "findings": [
+                {"severity": "P2", "file": "x.py", "category": "style"},
+            ],
+        }
+        result = state.evaluate_convergence(state_obj)
+        assert result["decision"] == "converged"
+        assert result["p2_count"] == 1
+
+    def test_continue_with_p0(self):
+        """P0 findings within max rounds → continue."""
+        state_obj = {
+            "round": 0,
+            "findings": [
+                {"severity": "P0", "file": "x.py", "category": "security"},
+            ],
+        }
+        result = state.evaluate_convergence(state_obj)
+        assert result["decision"] == "continue"
+        assert result["p0_count"] == 1
+
+    def test_maxed_out(self):
+        """Round >= max_rounds → maxed_out regardless of findings."""
+        state_obj = {
+            "round": 3,
+            "max_rounds": 3,
+            "findings": [
+                {"severity": "P0", "file": "x.py", "category": "security"},
+            ],
+        }
+        result = state.evaluate_convergence(state_obj)
+        assert result["decision"] == "maxed_out"
+
+    def test_stuck_same_fingerprint(self):
+        """Same P0/P1 fingerprint as prev round → stuck."""
+        state_obj = {
+            "round": 2,
+            "findings": [
+                {"severity": "P0", "file": "x.py", "category": "security",
+                 "description": "XSS in login"},
+            ],
+            "prev_findings_fingerprint": state._compute_fingerprint([
+                {"severity": "P0", "file": "x.py", "category": "security",
+                 "description": "XSS in login"},
+            ]),
+        }
+        result = state.evaluate_convergence(state_obj)
+        assert result["decision"] == "stuck"
+
+    def test_not_stuck_different_fingerprint(self):
+        """Different findings than previous round → continue."""
+        # Round 1 findings
+        fp = state._compute_fingerprint([
+            {"severity": "P0", "file": "x.py", "category": "security", "description": "Old bug"},
+        ])
+        state_obj = {
+            "round": 2,
+            "findings": [
+                {"severity": "P0", "file": "y.py", "category": "security",
+                 "description": "New bug"},
+            ],
+            "findings_fingerprint": fp,
+        }
+        result = state.evaluate_convergence(state_obj)
+        assert result["decision"] == "continue"
+
+    def test_fingerprint_consistency(self):
+        """Same findings produce same fingerprint regardless of order."""
+        a = [
+            {"severity": "P0", "file": "b.py", "category": "sec", "description": "x"},
+            {"severity": "P0", "file": "a.py", "category": "sec", "description": "y"},
+        ]
+        b = [
+            {"severity": "P0", "file": "a.py", "category": "sec", "description": "y"},
+            {"severity": "P0", "file": "b.py", "category": "sec", "description": "x"},
+        ]
+        assert state._compute_fingerprint(a) == state._compute_fingerprint(b)
+
+    def test_fingerprint_different(self):
+        """Different findings produce different fingerprints."""
+        a = [{"severity": "P0", "file": "a.py", "category": "sec", "description": "x"}]
+        b = [{"severity": "P0", "file": "a.py", "category": "sec", "description": "y"}]
+        assert state._compute_fingerprint(a) != state._compute_fingerprint(b)
+
+    def test_save_preserves_convergence_fields(self):
+        """save() should auto-add convergence fields with defaults."""
+        data = {"request": "test", "status": "running"}
+        state.save(data)
+        loaded = state.load()
+        assert loaded is not None
+        assert "round" in loaded
+        assert loaded["round"] == 0
+        assert "max_rounds" in loaded
+        assert loaded["max_rounds"] == 3
+        assert "findings" in loaded
+        assert loaded["findings"] == []
+        assert "convergence" in loaded
+        assert loaded["convergence"] == "running"
