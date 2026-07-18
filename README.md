@@ -59,18 +59,19 @@ systemctl --user restart hermes-gateway
               │
               ▼
     Я запускаю пайплайн:
-    ┌─────────────────────────────────────────┐
-    │  @finder     — поиск по коду            │  ← делаю сам (моя модель)
-    │  @analyst    — глубокий анализ          │
-    │  @researcher — best practices           │  ← delegate_task (OpenRouter free)
-    │  @architect  — архитектура решения      │  ← delegate_task (выделенная модель)
-    │  @planner    — декомпозиция             │  ← делаю сам
-    │  @coder      — реализация               │
-    │  @reviewer   — code review              │  ← delegate_task (выделенная модель)
-    │  @security   — аудит безопасности       │  ← delegate_task (выделенная модель)
-    │  @tester     — тесты                    │
-    │  @documenter — документация             │
-    └─────────────────────────────────────────┘
+    ┌────────────────────────────────────────────────────┐
+    │  @finder      — поиск по коду                      │  ← моя модель
+    │  @analyst     — глубокий анализ                    │
+    │  @researcher  — best practices                     │  ← OpenRouter free
+    │  @architect   — архитектура решения                │  ← выделенная модель
+    │  @planner     — декомпозиция                       │  ← моя модель
+    │  @coder       — реализация                         │
+    │  @reviewer    — code review                        │  ← выделенная модель
+    │  @security    — аудит безопасности                 │  ← выделенная модель
+    │  @integration — проверка интеграции (cross-file)   │  ← выделенная модель
+    │  @tester      — тесты                              │  ← моя модель
+    │  @documenter  — документация                       │
+    └────────────────────────────────────────────────────┘
 ```
 
 Плагин только даёт мне инструменты (`pipeline_classify`, `pipeline_save` и т.д.).
@@ -99,17 +100,6 @@ refactor UserService — раздутый класс
 напиши документацию для API
 ```
 
-**Как я определяю, что запускать:**
-
-Я смотрю на ключевые слова в твоём сообщении. Например:
-- `auth`, `jwt`, `token`, `password`, `security` → **SECURITY_RELATED** (полный пайплайн с аудитом)
-- `refactor`, `рефакторинг` → **REFACTORING** (анализ + рефакторинг + ревью)
-- `bug`, `crash`, `баг`, `сломалось` → **BUG_UNKNOWN** (диагностика + фикс)
-- `fix`, `исправь` → **BUG_KNOWN** (точечный фикс)
-- `docs`, `документация`, `readme` → **DOCUMENTATION** (только документирование)
-- Если ничего не подошло → **FEATURE** (полный пайплайн с архитектором)
-- Если задача очевидно простая — пайплайн не запускается, делаю сразу
-
 Ты можешь и сам явно сказать:
 
 ```
@@ -118,32 +108,20 @@ refactor UserService — раздутый класс
 запусти рефакторинг через пайплайн
 ```
 
-Но в большинстве случаев я сам понимаю, что нужно.
-
-### Как останавливать и смотреть статус
-
-После каждого этапа я спрашиваю **продолжаем?** — это главный механизм контроля.
-
-Статус активного пайплайна я помню в памяти, могу показать в любой момент:
-- Спроси «что сейчас в пайплайне?» или «на каком этапе?»
-- Если хочешь отменить — скажи «стоп», «отмена», «хватит»
-
-Состояние сохраняется на диск (`state.json`) — если сессия прервётся, я могу продолжить при следующем запуске.
-
 ### Категории пайплайнов
 
 | Категория | Пайплайн | Триггеры |
 |-----------|----------|----------|
-| **SECURITY_RELATED** | finder → analyst → researcher → architect → planner → coder → reviewer → security → tester → documenter | auth, jwt, password, token, security |
+| **SECURITY_RELATED** | finder → analyst → researcher → architect → planner → coder → reviewer → security → **integration** → tester → documenter | auth, jwt, password, token, security |
 | **BUG_UNKNOWN** | finder → debugger → fixer → reviewer → tester | crash, exception, broken |
 | **BUG_KNOWN** | finder → fixer → reviewer → tester | fix, исправь |
-| **REFACTORING** | finder → analyst → refactorer → reviewer → tester | refactor, рефакторинг |
+| **REFACTORING** | finder → analyst → refactorer → reviewer → **integration** → tester | refactor, рефакторинг |
 | **PERFORMANCE** | finder → analyst → optimizer → reviewer → tester | optimize, slow, memory |
 | **INFRASTRUCTURE** | finder → devops → reviewer → tester | docker, deploy, config |
 | **DOCUMENTATION** | finder → documenter | docs, readme, документация |
-| **FEATURE** | finder → analyst → architect → planner → coder → reviewer → tester → documenter | всё остальное |
+| **FEATURE** | finder → analyst → architect → planner → coder → reviewer → **integration** → tester → documenter | всё остальное |
 
-### Конвергенция (новое)
+### Конвергенция
 
 Пайплайн — это **когерентный цикл**, а не одноразовый конвейер:
 
@@ -165,7 +143,7 @@ Severity:
 - `stuck` → escalation пользователю
 - `maxed_out` → показать что недоделано
 
-### Как менять модели агентов
+### Как менять модели
 
 Модели заданы в `MODEL_MAP` в [`__init__.py`](__init__.py):
 
@@ -176,50 +154,29 @@ Severity:
 | `delegate_free` | Спавнит под-агента через OpenRouter free |
 
 Открой файл и поменяй нужную модель:
+
 ```bash
 vim ~/.hermes/plugins/pipeline/__init__.py
 # Или просто скажи агенту:
 # "Смени @architect на claude-sonnet-4"
 ```
 
-### Структура проекта
+### Kanban Dashboard
 
+Пайплайн отслеживает статус через **Hermes-native Kanban**:
+
+```bash
+hermes kanban boards create pipeline "Pipeline tasks"
+hermes kanban boards switch pipeline
+hermes kanban create "Задача" --body "описание"
+hermes kanban complete <id>
 ```
-hermes-pipeline-plugin/
-├── __init__.py          # Ядро плагина — схемы, хендлеры, MODEL_MAP (7 tools)
-├── classify.py          # Классификация запросов (8 категорий)
-├── state.py             # Состояние + конвергенция (findings, fingerprint, max_rounds)
-├── plugin.yaml          # Манифест плагина
-├── AGENTS.md            # Шпаргалка для AI-ассистентов
-├── ARCHITECTURE.md      # Архитектура плагина
-├── pyproject.toml       # Ruff-линтер конфиг + build-system
-├── LICENSE              # MIT
-├── agents/
-│   ├── architect.prompt    # Промпт для @architect
-│   ├── researcher.prompt   # Промпт для @researcher
-│   ├── reviewer.prompt     # Промпт для @reviewer
-│   └── security.prompt     # Промпт для @security
-├── skill/
-│   └── pipeline-orchestrator/  # Скилл оркестратора
-├── .github/workflows/       # CI (ruff + bandit + pytest)
-└── tests/
-    ├── test_classify.py  # 16 тестов классификации
-    ├── test_state.py     # 8 тестов state persistence
-    └── test_init.py      # 12 тестов ядра плагина
-```
-
-### Безопасность
-
-- **Path traversal protection** — `handle_prompt()` проверяет, что файл агента внутри `agents/`
-- **Нет хардкоженных ключей** — все credentials через Hermes credential pool
-- **CI quality gates** — ruff (линтер) + bandit (SAST) + pytest перед каждым мержем
-- **state.json** — живёт локально, не в git
 
 ### Требования
 
 - Hermes Agent (с поддержкой `register_tool` и `delegate_task`)
 - Python ≥ 3.11
-- Для delegate-агентов (architect, reviewer, security) — настроенный delegation провайдер
+- Для delegate-агентов (architect, reviewer, security, integration) — настроенный delegation провайдер
 - Для delegate_free (researcher) — OpenRouter API ключ в `OPENROUTER_API_KEY`
 
 ---
@@ -258,6 +215,19 @@ hermes plugins enable pipeline
 systemctl --user restart hermes-gateway   # or restart CLI session
 ```
 
+### Pipeline Categories
+
+| Category | Pipeline | Triggers |
+|----------|----------|----------|
+| **SECURITY_RELATED** | finder → analyst → researcher → architect → planner → coder → reviewer → security → **integration** → tester → documenter | auth, jwt, password |
+| **BUG_UNKNOWN** | finder → debugger → fixer → reviewer → tester | crash, exception |
+| **BUG_KNOWN** | finder → fixer → reviewer → tester | fix |
+| **REFACTORING** | finder → analyst → refactorer → reviewer → **integration** → tester | refactor |
+| **PERFORMANCE** | finder → analyst → optimizer → reviewer → tester | slow, memory |
+| **INFRASTRUCTURE** | finder → devops → reviewer → tester | docker, deploy |
+| **DOCUMENTATION** | finder → documenter | docs |
+| **FEATURE** | finder → analyst → architect → planner → coder → reviewer → **integration** → tester → documenter | default |
+
 ### How to Change Models
 
 Edit `MODEL_MAP` in [`__init__.py`](__init__.py):
@@ -269,19 +239,6 @@ MODEL_MAP = {
     "researcher":   {"provider": "delegate_free", "model": "openrouter/free"},
 }
 ```
-
-### Pipeline Categories
-
-| Category | Pipeline | Triggers |
-|----------|----------|----------|
-| **SECURITY_RELATED** | finder → analyst → researcher → architect → planner → coder → reviewer → security → tester → documenter | auth, jwt, password |
-| **BUG_UNKNOWN** | finder → debugger → fixer → reviewer → tester | crash, exception |
-| **BUG_KNOWN** | finder → fixer → reviewer → tester | fix |
-| **REFACTORING** | finder → analyst → refactorer → reviewer → tester | refactor |
-| **PERFORMANCE** | finder → analyst → optimizer → reviewer → tester | slow, memory |
-| **INFRASTRUCTURE** | finder → devops → reviewer → tester | docker, deploy |
-| **DOCUMENTATION** | finder → documenter | docs |
-| **FEATURE** | finder → analyst → architect → planner → coder → reviewer → tester → documenter | default |
 
 ---
 
