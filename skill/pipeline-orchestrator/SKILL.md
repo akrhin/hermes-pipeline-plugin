@@ -66,7 +66,6 @@ Three provider types:
 | `"direct"` | Handle the agent's work yourself (your own model) |
 | `"delegate"` | Call `delegate_task(goal=..., context=...)` |
 | `"delegate_free"` | Pass `"openrouter/free"` in the delegation context |
-| `"delegate_specific"` | Call `delegate_task` with explicit model pinning |
 
 ## How to Build Agent Prompts
 
