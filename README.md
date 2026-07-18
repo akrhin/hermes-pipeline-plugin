@@ -47,58 +47,88 @@ systemctl --user restart hermes-gateway
 
 ### Как работает
 
+**Нет никаких `/pipeline`, `/review`, `/security` команд.** Плагин не принимает команды.
+Реальный сценарий:
+
 ```
-Ты:    "/pipeline добавь JWT аутентификацию"
+Ты:    "добавь JWT аутентификацию в проект"
+              │
+              ▼ (я анализирую твоё сообщение по ключевым словам)
+              │
+    Сработал триггер: auth, jwt, token → SECURITY_RELATED
               │
               ▼
-    pipeline_classify("добавь JWT аутентификацию")
-              │
-              ▼
-    { category: "SECURITY_RELATED",
-      pipeline: [finder, analyst, researcher, architect,
-                 planner, coder, reviewer, security, tester, documenter] }
-              │
-              ▼
+    Я запускаю пайплайн:
     ┌─────────────────────────────────────────┐
-    │  @finder     — поиск по коду            │  ← сам (Flash)
+    │  @finder     — поиск по коду            │  ← делаю сам (моя модель)
     │  @analyst    — глубокий анализ          │
-    │  @researcher — best practices           │  ← OpenRouter free
-    │  @architect  — архитектура решения      │  ← delegate (Pro)
-    │  @planner    — декомпозиция             │  ← сам (Flash)
+    │  @researcher — best practices           │  ← delegate_task (OpenRouter free)
+    │  @architect  — архитектура решения      │  ← delegate_task (выделенная модель)
+    │  @planner    — декомпозиция             │  ← делаю сам
     │  @coder      — реализация               │
-    │  @reviewer   — code review              │  ← delegate (Pro)
-    │  @security   — аудит безопасности        │  ← delegate (Pro)
+    │  @reviewer   — code review              │  ← delegate_task (выделенная модель)
+    │  @security   — аудит безопасности       │  ← delegate_task (выделенная модель)
     │  @tester     — тесты                    │
     │  @documenter — документация             │
     └─────────────────────────────────────────┘
 ```
 
-**Checkpoint'ы на каждом этапе:**
-1. ✅ Исследование готово → **продолжаем?**
-2. ✅ План готов → **начинаем реализацию?**
-3. ✅ Код написан → **запускаем quality gates?** (авто)
-4. ✅ Пайплайн завершён
+Плагин только даёт мне инструменты (`pipeline_classify`, `pipeline_save` и т.д.).
+Оркестрацию делаю я — через скилл `pipeline-orchestrator`, который загружается
+автоматически, когда я вижу в твоём сообщении ключевые слова.
 
-### Как пользоваться
-
-Просто напиши задачу на русском или английском:
+Checkpoint'ы — я спрашиваю тебя после каждого этапа:
 
 ```
-/pipeline добавь JWT аутентификацию в проект
-/pipeline refactor UserService — раздутый класс
-/pipeline оптимизируй запросы к БД
-/pipeline настрой CI/CD через GitHub Actions
+📋 Исследование готово:
+  Найдено 3 файла, стек: Go 1.22 + gin
+  Продолжаем?
+→ ты: "да"
 ```
 
-Плагин сам:
-1. **Классифицирует** запрос → выбирает категорию и список агентов
-2. **Проводит исследование** — находит файлы, анализирует код
-3. **Проектирует решение** — архитектор предлагает план
-4. **Реализует** — пишет код
-5. **Проверяет качество** — code review + security audit + тесты
-6. **Документирует** — обновляет README/архитектуру
+### Как задать задачу
 
-Каждый этап — с checkpoint'ом: ты подтверждаешь или корректируешь.
+Просто пиши на русском или английском — я сам определяю, нужен ли пайплайн:
+
+```
+добавь JWT аутентификацию в проект
+refactor UserService — раздутый класс
+оптимизируй запросы к БД
+настрой CI/CD через GitHub Actions
+проверь этот код на уязвимости
+напиши документацию для API
+```
+
+**Как я определяю, что запускать:**
+
+Я смотрю на ключевые слова в твоём сообщении. Например:
+- `auth`, `jwt`, `token`, `password`, `security` → **SECURITY_RELATED** (полный пайплайн с аудитом)
+- `refactor`, `рефакторинг` → **REFACTORING** (анализ + рефакторинг + ревью)
+- `bug`, `crash`, `баг`, `сломалось` → **BUG_UNKNOWN** (диагностика + фикс)
+- `fix`, `исправь` → **BUG_KNOWN** (точечный фикс)
+- `docs`, `документация`, `readme` → **DOCUMENTATION** (только документирование)
+- Если ничего не подошло → **FEATURE** (полный пайплайн с архитектором)
+- Если задача очевидно простая — пайплайн не запускается, делаю сразу
+
+Ты можешь и сам явно сказать:
+
+```
+запусти пайплайн на добавление JWT
+сделай security-аудит этого кода
+запусти рефакторинг через пайплайн
+```
+
+Но в большинстве случаев я сам понимаю, что нужно.
+
+### Как останавливать и смотреть статус
+
+После каждого этапа я спрашиваю **продолжаем?** — это главный механизм контроля.
+
+Статус активного пайплайна я помню в памяти, могу показать в любой момент:
+- Спроси «что сейчас в пайплайне?» или «на каком этапе?»
+- Если хочешь отменить — скажи «стоп», «отмена», «хватит»
+
+Состояние сохраняется на диск (`state.json`) — если сессия прервётся, я могу продолжить при следующем запуске.
 
 ### Категории пайплайнов
 
@@ -241,17 +271,6 @@ MODEL_MAP = {
 | **INFRASTRUCTURE** | finder → devops → reviewer → tester | docker, deploy |
 | **DOCUMENTATION** | finder → documenter | docs |
 | **FEATURE** | finder → analyst → architect → planner → coder → reviewer → tester → documenter | default |
-
-### Quick Commands
-
-| Command | What it does |
-|---------|--------------|
-| `/pipeline <task>` | Full pipeline: research → plan → code → review → security → test → docs |
-| `/review <file>` | Code review only |
-| `/test <file>` | Write/run tests only |
-| `/security <file>` | Security audit only |
-| `/status` | Show current pipeline state |
-| `/abort` | Cancel current pipeline |
 
 ---
 
