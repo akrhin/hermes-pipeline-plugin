@@ -143,6 +143,28 @@ refactor UserService — раздутый класс
 | **DOCUMENTATION** | finder → documenter | docs, readme, документация |
 | **FEATURE** | finder → analyst → architect → planner → coder → reviewer → tester → documenter | всё остальное |
 
+### Конвергенция (новое)
+
+Пайплайн — это **когерентный цикл**, а не одноразовый конвейер:
+
+1. `coder` пишет код
+2. `reviewer + security + tester` проверяют
+3. Если есть **P0/P1** баги → возврат к `coder` с замечаниями
+4. Максимум **3 раунда** (hard stop в коде)
+5. Если те же баги второй раз → **STUCK** (escalation)
+6. Если P0/P1 = 0 → **converged → documenter**
+
+Severity:
+- **P0** — correctness/security, блокирует merge (обязательно исправить)
+- **P1** — degraded behaviour (исправить или remediation plan)
+- **P2** — style/naming (advisory, не блокирует)
+
+Решения `pipeline_convergence`:
+- `continue` → вернуть `coder` с замечаниями
+- `converged` → идти к `documenter`
+- `stuck` → escalation пользователю
+- `maxed_out` → показать что недоделано
+
 ### Как менять модели агентов
 
 Модели заданы в `MODEL_MAP` в [`__init__.py`](__init__.py):
@@ -164,9 +186,9 @@ vim ~/.hermes/plugins/pipeline/__init__.py
 
 ```
 hermes-pipeline-plugin/
-├── __init__.py          # Ядро плагина — схемы, хендлеры, MODEL_MAP
+├── __init__.py          # Ядро плагина — схемы, хендлеры, MODEL_MAP (7 tools)
 ├── classify.py          # Классификация запросов (8 категорий)
-├── state.py             # Состояние пайплайна (JSON на диске, TTL 24h)
+├── state.py             # Состояние + конвергенция (findings, fingerprint, max_rounds)
 ├── plugin.yaml          # Манифест плагина
 ├── AGENTS.md            # Шпаргалка для AI-ассистентов
 ├── ARCHITECTURE.md      # Архитектура плагина
@@ -207,11 +229,12 @@ hermes-pipeline-plugin/
 
 ### Overview
 
-Pipeline Plugin adds 6 tools to Hermes Agent that orchestrate multi-agent pipelines:
+Pipeline Plugin adds 7 tools to Hermes Agent that orchestrate multi-agent pipelines:
 
 | Tool | Purpose |
 |------|---------|
 | `pipeline_classify` | Classify request → category + agent list |
+| **`pipeline_convergence`** | **Evaluate convergence (deterministic, no LLM)** |
 | `pipeline_save` | Save pipeline state (resumable) |
 | `pipeline_load` | Load saved state |
 | `pipeline_clear` | Clear state |

@@ -4,6 +4,7 @@ description: Multi-agent pipeline orchestrator. Classifies requests, builds pipe
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify
+  - pipeline_convergence
   - pipeline_save
   - pipeline_load
   - pipeline_clear
