@@ -52,16 +52,20 @@ hermes plugins list | grep pipeline
 - CI → Makefile (цели существуют)
 - Документация → реальные инструменты
 
-## Kanban Dashboard
+## Kanban Dashboard (автоматическая)
 
-Проект использует **Hermes-native Kanban** (не TickTick):
+Начиная с v1.2.0, пайплайн **автоматически** ведёт доску `pipeline` через модуль `kanban.py`:
 
-```bash
-hermes kanban boards create pipeline "Pipeline tasks"
-hermes kanban boards switch pipeline
-hermes kanban create "Задача" --body "описание"
-hermes kanban complete <id>
-```
+| Событие | Действие на доске |
+|---------|-------------------|
+| Старт пайплайна | `hermes kanban create` с idempotency-key |
+| Каждый раунд конвергенции | `hermes kanban comment` с findings |
+| Converged | `hermes kanban complete` с metadata |
+| Stuck | `hermes kanban block` (needs human) |
+| Maxed out | `hermes kanban complete` |
+| Очистка | `hermes kanban complete` (Cancelled) |
+
+Никаких ручных команд — хуки в `pipeline_save`, `pipeline_convergence`, `pipeline_clear` всё делают сами.
 
 ## Key Files
 

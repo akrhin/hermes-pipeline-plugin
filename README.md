@@ -161,15 +161,31 @@ vim ~/.hermes/plugins/pipeline/__init__.py
 # "Смени @architect на claude-sonnet-4"
 ```
 
-### Kanban Dashboard
+### Kanban Dashboard (автоматическая)
 
-Пайплайн отслеживает статус через **Hermes-native Kanban**:
+Начиная с v1.2.0, пайплайн **автоматически** ведёт доску `pipeline` через встроенный модуль `kanban.py`:
+
+| Событие | Действие на доске |
+|---------|-------------------|
+| Старт пайплайна | Создаётся task с idempotency-key |
+| Каждый раунд конвергенции | Комментарий с P0/P1/P2 счётом |
+| Converged | Task → complete |
+| Stuck | Task → blocked (нужен human review) |
+| Maxed out | Task → complete с пометкой |
+| Очистка/отмена | Task → complete (Cancelled) |
+
+Никаких ручных команд — всё делает плагин. Доска `pipeline` должна быть создана заранее:
 
 ```bash
 hermes kanban boards create pipeline "Pipeline tasks"
 hermes kanban boards switch pipeline
-hermes kanban create "Задача" --body "описание"
-hermes kanban complete <id>
+```
+
+Смотреть статус:
+```bash
+hermes kanban ls          # список задач
+hermes kanban show <id>   # детали задачи с комментариями
+hermes kanban stats       # статистика доски
 ```
 
 ### Требования
@@ -228,7 +244,32 @@ systemctl --user restart hermes-gateway   # or restart CLI session
 | **DOCUMENTATION** | finder → documenter | docs |
 | **FEATURE** | finder → analyst → architect → planner → coder → reviewer → **integration** → tester → documenter | default |
 
-### How to Change Models
+### Kanban Dashboard (automatic)
+
+Since v1.2.0, pipelines **automatically** track progress on the `pipeline` board via `kanban.py`:
+
+| Event | Board action |
+|-------|-------------|
+| Pipeline start | Task created with idempotency-key |
+| Convergence round | Comment with P0/P1/P2 counts |
+| Converged | Task → complete |
+| Stuck | Task → blocked (human review) |
+| Maxed out | Task → complete (flagged) |
+| Clear/cancel | Task → complete (Cancelled) |
+
+No manual `hermes kanban` commands needed — the plugin handles it. Create the board once:
+
+```bash
+hermes kanban boards create pipeline "Pipeline tasks"
+hermes kanban boards switch pipeline
+```
+
+Monitor:
+```bash
+hermes kanban ls          # list tasks
+hermes kanban show <id>   # task details + comments
+hermes kanban stats       # board statistics
+```
 
 Edit `MODEL_MAP` in [`__init__.py`](__init__.py):
 
