@@ -5,11 +5,18 @@ Returns category + full pipeline definition.
 """
 
 import re
+from functools import lru_cache
 
 # ── Category definitions ─────────────────────────────────────────────────────┘
 
 # Minimum length for plain substring matching
 _SHORT_KW_LEN = 3  # keywords <= this length use word-boundary matching
+
+
+@lru_cache(maxsize=256)
+def _make_word_pattern(kw: str) -> re.Pattern:
+    """Pre-compile word-boundary regex with cache."""
+    return re.compile(rf"\b{re.escape(kw)}\b", re.IGNORECASE)
 
 
 def _kw_matches(kw: str, text: str) -> bool:
@@ -20,8 +27,7 @@ def _kw_matches(kw: str, text: str) -> bool:
     Longer keywords use fast substring matching.
     """
     if len(kw) <= _SHORT_KW_LEN:
-        pattern = re.compile(rf"\b{re.escape(kw)}\b", re.IGNORECASE)
-        return bool(pattern.search(text))
+        return bool(_make_word_pattern(kw).search(text))
     return kw in text
 
 

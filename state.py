@@ -6,10 +6,10 @@ Supports lifecycle: running → paused → done.
 Auto-expiry: state older than 24h is considered stale.
 """
 
-import calendar
 import json
 import os
 import time
+from calendar import timegm
 
 PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 STATE_PATH = os.path.join(PLUGIN_DIR, "state.json")
@@ -65,4 +65,4 @@ def _now_iso() -> str:
 
 def _iso_to_ts(iso_str: str) -> float:
     """Parse UTC ISO string to Unix timestamp (seconds since epoch)."""
-    return calendar.timegm(time.strptime(iso_str, "%Y-%m-%dT%H:%M:%S"))
+    return timegm(time.strptime(iso_str, "%Y-%m-%dT%H:%M:%S"))
