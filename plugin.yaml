@@ -1,0 +1,11 @@
+name: pipeline
+version: 1.0.0
+description: Multi-agent pipeline orchestrator. Classifies requests, builds pipelines, manages state, and delegates to specialized agents with model routing.
+author: Hermes + Vladimir
+provides_tools:
+  - pipeline_classify
+  - pipeline_save
+  - pipeline_load
+  - pipeline_clear
+  - agent_prompt
+  - agent_model

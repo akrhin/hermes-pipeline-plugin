@@ -1,0 +1,23 @@
+# This file is managed by the agent — do not edit by hand.
+# Summary of significant architectural changes, updated at task completion.
+
+```json
+{
+  "version": "1.0.0",
+  "summary": "Initial implementation of Pipeline Plugin",
+  "key_decisions": [
+    "Plugin (not MCP) — in-process, direct access to Hermes internals",
+    "Plugin stateless — only provides tools, orchestration logic in agent",
+    "3-tier model routing: Flash (direct) / Pro (delegation) / Free (OpenRouter)",
+    "JSON state on disk for resume capability",
+    "Keyword-based categorization (8 categories with fixed pipelines)",
+    "Quality gates mandatory after every code change"
+  ],
+  "architecture_changes": [],
+  "open_questions": [
+    "Researcher and Commenter — действительно ли нужен OpenRouter free или тоже delegate на Polza?",
+    "Проверить при первом реальном запуске, корректно ли парсятся .prompt файлы с format()",
+    "symlink vs копия — через symlink работает, но при git pull может отвалиться"
+  ]
+}
+```
