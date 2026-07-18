@@ -176,8 +176,14 @@ def handle_prompt(args, **kwargs):
         request = args.get("request", "")
         category = args.get("category", "")
 
+        # Safe path resolution: prevent path traversal
+        agent_id = os.path.basename(agent_id)  # strip any dir components
         prompt_path = os.path.join(PLUGIN_DIR, "agents", f"{agent_id}.prompt")
-        if not os.path.exists(prompt_path):
+
+        # Verify the resolved path is actually under agents/
+        if not os.path.exists(prompt_path) or not os.path.realpath(prompt_path).startswith(
+            os.path.realpath(os.path.join(PLUGIN_DIR, "agents"))
+        ):
             return json.dumps({"error": f"Unknown agent: {agent_id}"})
 
         with open(prompt_path, "r", encoding="utf-8") as f:
@@ -196,6 +202,8 @@ def handle_prompt(args, **kwargs):
         )
 
         return json.dumps({"prompt": formatted}, ensure_ascii=False)
+    except KeyError as e:
+        return json.dumps({"error": f"Missing placeholder in prompt template: {e}"})
     except Exception as e:
         return json.dumps({"error": str(e), "traceback": traceback.format_exc()})
 
