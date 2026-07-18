@@ -57,6 +57,23 @@ Each pipeline has **checkpoints** where the user confirms before proceeding:
 3. ✅ Code written → **run quality gates?** (auto)
 4. ✅ Pipeline complete
 
+### Installation
+
+Two components are required — plugin (tools) + skill (orchestration):
+
+```bash
+# 1. Plugin — Python tools (classify, state, model routing)
+git clone https://github.com/akrhin/hermes-pipeline-plugin.git ~/git/hermes-pipeline-plugin
+ln -sf ~/git/hermes-pipeline-plugin ~/.hermes/plugins/pipeline
+
+# 2. Skill — agent instructions (checkpoints, revision loops, resume)
+ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator ~/.hermes/skills/hermes/pipeline-orchestrator
+
+# 3. Enable & restart
+hermes plugins enable pipeline
+systemctl --user restart hermes-gateway   # or restart CLI session
+```
+
 ### How to Change Models
 
 Models are defined in [`__init__.py`](__init__.py) — the `MODEL_MAP` dict:
