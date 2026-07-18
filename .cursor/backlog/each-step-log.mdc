@@ -16,12 +16,18 @@
     "Symlinked to ~/.hermes/plugins/pipeline",
     "Enabled via hermes plugins enable pipeline — status: enabled",
     "All 7 tests passed (classification, state, prompts, model routing)",
-    "Created pipeline-orchestrator skill — full orchestration logic (checkpoints, revision loops, resume)"
+    "Created pipeline-orchestrator skill — full orchestration logic",
+    "Security audit: fixed path traversal in handle_prompt, KeyError guard",
+    "Refactoring: PermissionError guard in state.py, prompt template contradiction fix",
+    "Documentation: README, ARCHITECTURE.md, AGENTS.md — full rewrite",
+    "Created MIT LICENSE file",
+    "Expanded classify.py keywords (autentifitsir)",
+    "CI: ruff + bandit + pytest — all green",
+    "Created skill/pipeline-orchestrator/ — skill ships with repo",
+    "Repo: akrhin/hermes-pipeline-plugin — private, ready for public"
   ],
   "next_steps": [
-    "Test first pipeline run in new session",
-    "First real run will verify skill auto-loads and plugin tools are accessible",
-    "Maybe: researcher.prompt → use web_search capability via delegate"
+    "Make repo public when ready"
   ]
 }
 ```

@@ -14,7 +14,7 @@ CATEGORIES = {
             "salt", "credential", "permission", "role", "admin", "access control",
             "user data", "private key", "sensitive", "authentic",
             "аутентификац", "авторизац", "парол", "токен", "секрет",
-            "шифрова", "безопасност", "доступ",
+            "шифрова", "безопасност", "доступ", "авториз", "аутентифицир",
         ],
         "pipeline": [
             "finder", "analyst", "researcher", "architect",

@@ -150,10 +150,21 @@ hermes-pipeline-plugin/
 │   ├── reviewer.prompt
 │   ├── security.prompt
 │   └── researcher.prompt
+├── skill/
+│   └── pipeline-orchestrator/
+│       ├── SKILL.md                    ← оркестратор (checkpoints, revision loops)
+│       ├── references/
+│       │   ├── go-security-tools.md    ← установка gosec/gitleaks
+│       │   └── pipeline_lessons.md     ← реальные gotcha
+│       └── scripts/
+│           └── go-quality-gates.sh     ← скрипт проверки качества
 ├── references/                ← резервировано
-└── .cursor/backlog/
-    ├── each-step-log.mdc      ← per-turn лог
-    └── significant-changes-summary.mdc  ← сводка
+├── .cursor/backlog/
+│   ├── each-step-log.mdc      ← per-turn лог
+│   └── significant-changes-summary.mdc  ← сводка
+├── pyproject.toml             ← ruff config + build system
+├── LICENSE                    ← MIT
+└── state.json                 ← runtime state (gitignored)
 ```
 
 ## Изменения
@@ -161,3 +172,5 @@ hermes-pipeline-plugin/
 | Дата | Что |
 |------|-----|
 | 2026-07-18 | Начальная архитектура |
+| 2026-07-18 | Security audit: path traversal fix, state error handling |
+| 2026-07-18 | Full refactoring + documentation + public release |

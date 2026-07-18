@@ -31,7 +31,6 @@
 
 ВЕРНИ СТРОГО JSON (без markdown-обёртки):
 
-```json
 {{
   "status": "PASS",
   "findings": [

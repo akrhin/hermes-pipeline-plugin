@@ -21,8 +21,11 @@ def save(state: dict) -> None:
     state["updated_at"] = _now_iso()
     if "created_at" not in state:
         state["created_at"] = _now_iso()
-    with open(STATE_PATH, "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=2)
+    try:
+        with open(STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+    except (OSError, PermissionError) as e:
+        raise RuntimeError(f"Cannot save state to {STATE_PATH}: {e}") from e
 
 
 def load() -> dict | None:

@@ -40,7 +40,6 @@
 
 ВЕРНИ СТРОГО JSON (без markdown-обёртки):
 
-```json
 {{
   "components": [
     {{"name": "ComponentName", "responsibility": "что делает", "file": "path/to/file", "deps": ["dep1"]}}
