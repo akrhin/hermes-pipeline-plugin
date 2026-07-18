@@ -154,7 +154,6 @@ hermes-pipeline-plugin/
 │       │   └── pipeline_lessons.md     ← реальные gotcha
 │       └── scripts/
 │           └── go-quality-gates.sh     ← скрипт проверки качества
-├── references/                ← резервировано
 ├── .cursor/backlog/
 │   ├── each-step-log.mdc      ← per-turn лог
 │   └── significant-changes-summary.mdc  ← сводка
