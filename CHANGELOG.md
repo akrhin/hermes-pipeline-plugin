@@ -1,46 +1,40 @@
 # Changelog
 
-## [1.1.0] — 2026-07-18
+## v1.2.0 (2026-07-18)
 
-### Added
+### Features
+- **@integration** agent: cross-file integration checks (install.sh URLs, README→files, CI→Makefile)
+- **Kanban Dashboard**: migrated from TickTick prototype to Hermes-native Kanban
 
-- **Hermes Kanban Dashboard** — прогресс пайплайна публикуется на встроенную Kanban-доску Hermes (`~/.hermes/kanban.db`, доска `home`). Каждая стадия — task, статусы: ready → running → done. Связи через `link`, комментарии через `comment`.
-- **Convergence guard** — `pipeline_convergence()` без findings и пустом state возвращает `unknown`, а не ложный `converged`. Исправлен AUDIT-001.
-- **CHANGELOG.md** — потому что пора.
+### Changes
+- **classify.py**: `integration` added to SECURITY, FEATURE, REFACTORING pipelines
+- **__init__.py**: `integration` in MODEL_MAP (delegate, DeepSeek V4 Pro)
+- **agents/integration.prompt**: new prompt template
+- **AGENTS.md**: updated model routing + pipeline sequence + Kanban guide
+- **pipeline-orchestrator** skill: TickTick → Hermes Kanban
+- **pipeline-convergence-engine** skill: Integration Agent documentation
+- **references/integration-gap-findings.md**: install.sh 404 postmortem
 
-### Changed
+### Pipeline (full audit sequence)
 
-- **SKILL.md** — версия 1.0.0 → 1.1.0. Удалена секция TickTick Kanban (~60 строк). Добавлена секция Hermes Kanban (~90 строк) c bash-шаблонами: `create --body` (статус `ready`), `complete`, `block`, `comment`, `link`, `list`.
-- **ARCHITECTURE.md** — файловый tree приведён к реальности: удалён stale `.cursor/backlog/`, добавлены `tests/`, `LICENSE`, `pyproject.toml`, `.github/workflows/`.
-- **README.md** — удалён stale `.cursor/backlog/` и дубликат `.github/workflows/` из файлового tree. Оба языка (ru + en) синхронизированы.
+```
+@finder → @analyst → @researcher → @architect → @planner → @coder
+→ @reviewer → @security → @integration → @tester → @documenter
+```
 
-### Removed
+## v1.1.0 (2026-07-18)
 
-- **TickTick MCP** — интеграция удалена. Больше никаких внешних kanban-сервисов.
-- **`research/`** — stale JSON (19KB) от предыдущих сессий.
-- **`.cursor/backlog/`** — stale логи (перенесены в Git history).
+- Remove stale `.cursor/backlog` files
+- Refactor: cleanup stale references, add convergence guard
+- Replace TickTick Kanban with built-in Hermes Kanban
+- Fix path traversal vulnerability in `handle_prompt`
+- Documentation: add CHANGELOG.md, bump plugin.yaml to 1.1.0
 
-### Fixed
+## v1.0.0 (2026-07-18)
 
-- **AUDIT-001** — ложный `converged` на пустом пайплайне. Теперь `unknown`.
-- **AUDIT-003** — dead code в `evaluate_convergence()` (недостижимый второй converged-блок). Удалён.
-- **AUDIT-005** — `fsync()` уже был, подтверждён.
-- **AUDIT-006** — `allow_nan=False` уже был, подтверждён.
-- **Path traversal** — `handle_prompt()` проверяет resolved path через `os.path.realpath()`. Исправлено ранее.
-- **Braces escaping** — `{` → `{{` в user-controlled строках `handle_prompt()`. Исправлено ранее.
-- **None-безопасный fingerprint** — `f.get('description') or ''` вместо `f.get('description', '')`. Исправлено ранее.
-
-## [1.0.0] — 2026-07-18
-
-### Added
-
-- Плагин-оркестратор multi-agent пайплайнов для Hermes Agent.
-- 7 инструментов: `pipeline_classify`, `pipeline_convergence`, `pipeline_save`, `pipeline_load`, `pipeline_clear`, `agent_prompt`, `agent_model`.
-- 8 категорий классификации: FEATURE, SECURITY_RELATED, BUG_UNKNOWN, BUG_KNOWN, REFACTORING, PERFORMANCE, INFRASTRUCTURE, DOCUMENTATION.
-- Keyword-based классификация (без LLM).
-- Детерминированный convergence cycle (без LLM): max 3 раунда, fingerprint-сравнение P0/P1.
-- Модельный роутинг: Flash (direct), Pro (delegate), OpenRouter free (delegate_free).
-- 4 prompt-шаблона: architect, reviewer, security, researcher.
-- TickTick Kanban dashboard (v1 — удалён в 1.1.0).
-- 58 unit-тестов, ruff-линтер, bandit SAST, CI через GitHub Actions.
-- Документация: README (ru + en), ARCHITECTURE.md, AGENTS.md, LICENSE (MIT).
+- Initial release
+- 7 tools: classify, convergence, save, load, clear, prompt, model
+- 8 categories: SECURITY, BUG_UNKNOWN, BUG_KNOWN, REFACTORING, PERFORMANCE, INFRASTRUCTURE, DOCUMENTATION, FEATURE
+- 12 agents: finder, analyst, researcher, architect, planner, coder, editor, fixer, refactorer, tester, debugger, documenter, devops, optimizer, commenter
+- Model routing: Flash (direct) / Pro (delegate) / Free (OpenRouter)
+- State persistence with convergence (max 3 rounds, fingerprint-based stuck detection)
