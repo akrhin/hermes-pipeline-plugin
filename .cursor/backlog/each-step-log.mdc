@@ -1,0 +1,27 @@
+# This file is managed by the agent — do not edit by hand.
+# Per-turn log, updated after each meaningful change.
+
+```json
+{
+  "date": "2026-07-18",
+  "changes": [
+    "Initial architecture design",
+    "Created project structure: ARCHITECTURE.md, AGENTS.md, README.md",
+    "plugin.yaml manifest created",
+    "classify.py — keyword-based categorization (8 categories), all test cases passed",
+    "state.py — JSON state persistence with 24h expiry, save/load/clear tested",
+    "__init__.py — plugin core with 6 tools, all handlers tested",
+    "agents/*.prompt — 4 prompt templates (architect, reviewer, security, researcher)",
+    "Fixed relative import → absolute import for sandbox compatibility",
+    "Symlinked to ~/.hermes/plugins/pipeline",
+    "Enabled via hermes plugins enable pipeline — status: enabled",
+    "All 7 tests passed (classification, state, prompts, model routing)",
+    "Created pipeline-orchestrator skill — full orchestration logic (checkpoints, revision loops, resume)"
+  ],
+  "next_steps": [
+    "Test first pipeline run in new session",
+    "First real run will verify skill auto-loads and plugin tools are accessible",
+    "Maybe: researcher.prompt → use web_search capability via delegate"
+  ]
+}
+```
