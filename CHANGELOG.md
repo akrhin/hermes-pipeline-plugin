@@ -1,19 +1,24 @@
 # Changelog
 
-## v1.2.0 (2026-07-18)
+## v1.2.0 (2026-07-19)
 
 ### Features
 - **@integration** agent: cross-file integration checks (install.sh URLs, README→files, CI→Makefile)
-- **Kanban Dashboard**: migrated from TickTick prototype to Hermes-native Kanban
+- **Kanban Dashboard (automated)**: `kanban.py` module with hooks in `pipeline_save`, `pipeline_convergence`, `pipeline_clear`
+  - `ensure_task()` — auto-creates task with idempotency-key on first save
+  - `on_convergence()` — comments with findings, completes/blocks on terminal decisions
+  - `on_clear()` — closes task on abort
+  - No manual `hermes kanban` commands needed in orchestrator
+- **__init__.py**: new tools count (8 with `kanban.py`), `kanban_task_id` in state schema
 
 ### Changes
+- `kanban.py` added: 3 public API functions (`create_task`, `comment`, `complete`, `block_task`) + lifecycle hooks
 - **classify.py**: `integration` added to SECURITY, FEATURE, REFACTORING pipelines
-- **__init__.py**: `integration` in MODEL_MAP (delegate, DeepSeek V4 Pro)
-- **agents/integration.prompt**: new prompt template
-- **AGENTS.md**: updated model routing + pipeline sequence + Kanban guide
-- **pipeline-orchestrator** skill: TickTick → Hermes Kanban
-- **pipeline-convergence-engine** skill: Integration Agent documentation
-- **references/integration-gap-findings.md**: install.sh 404 postmortem
+- **__init__.py**: `integration` in MODEL_MAP (delegate, DeepSeek V4 Pro); kanban hooks in handler functions
+- **AGENTS.md**: updated Kanban section — automatic хуки, без ручных команд
+- **ARCHITECTURE.md**: added Kanban Integration section + kanban.py in files tree
+- **README.md**: English + Russian Kanban sections updated to reflect automation
+- **pipeline-orchestrator** skill: v1.2.0 — Kanban automation section moved to plugin, orchestrator simplified
 
 ### Pipeline (full audit sequence)
 

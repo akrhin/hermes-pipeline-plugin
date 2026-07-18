@@ -58,6 +58,11 @@
 │  │  lifecycle: running / paused / done │                │
 │  │  expiry: 24h                       │                │
 │  └────────────────────────────────────┘                │
+│  ┌─── kanban.py ──────────────────────┐                │
+│  │  Автоматические хуки в Kanban      │                │
+│  │  ensure_task / on_convergence      │                │
+│  │  on_clear                          │                │
+│  └────────────────────────────────────┘                │
 │  ┌─── agents/ ────────────────────────┐                │
 │  │  architect.prompt                  │                │
 │  │  reviewer.prompt                   │                │
@@ -123,6 +128,22 @@
 }
 ```
 
+## Kanban Integration (v1.2.0)
+
+Автоматическая публикация прогресса пайплайна на Hermes Kanban-доску `pipeline`:
+
+| Хук | Функция kanban.py | Действие |
+|-----|------------------|----------|
+| `pipeline_save` (первый вызов) | `ensure_task()` | `hermes kanban create` с idempotency-key |
+| `pipeline_convergence` (с findings) | `on_convergence(continue)` | `hermes kanban comment` с P0/P1/P2 |
+| `pipeline_convergence` (converged) | `on_convergence(converged)` | `hermes kanban complete` |
+| `pipeline_convergence` (stuck) | `on_convergence(stuck)` | `hermes kanban block` |
+| `pipeline_convergence` (maxed_out) | `on_convergence(maxed_out)` | `hermes kanban complete` |
+| `pipeline_clear` | `on_clear()` | `hermes kanban complete` (Cancelled) |
+
+Состояние: `state.json` хранит `kanban_task_id`. Idempotency-key = `pipe:{created_at}`.
+Никаких внешних сервисов — всё внутри Hermes, через subprocess к `hermes kanban --board pipeline`.
+
 ## Quality Gates
 
 - **@reviewer** — после любого изменения кода. Если FAIL → revision loop до 3
@@ -140,6 +161,7 @@ hermes-pipeline-plugin/
 ├── plugin.yaml                ← манифест плагина Hermes
 ├── __init__.py                ← ядро плагина
 ├── classify.py                ← классификация запросов
+├── kanban.py                  ← автоматическая Kanban-интеграция (v1.2.0)
 ├── state.py                   ← управление состоянием
 ├── LICENSE                    ← MIT
 ├── pyproject.toml             ← ruff config + build system

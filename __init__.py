@@ -22,6 +22,7 @@ if PLUGIN_DIR not in sys.path:
     sys.path.insert(0, PLUGIN_DIR)
 
 import classify
+import kanban
 import state as pstate
 
 # ── Tool schemas ─────────────────────────────────────────────────────────────┐
@@ -89,6 +90,7 @@ SAVE_SCHEMA = {
                     "findings_fingerprint": {"type": "string", "description": "MD5 fingerprint of P0/P1 findings for stuck detection"},
                     "convergence": {"type": "string", "enum": ["running", "converged", "stuck", "maxed_out", "paused", "done"]},
                     "status": {"type": "string", "enum": ["running", "paused", "done"]},
+                    "kanban_task_id": {"type": "string", "description": "Hermes Kanban task ID for this pipeline run"},
                 },
                 "required": ["request", "category", "pipeline", "current_idx", "completed", "context", "checkpoints", "status"],
             },
@@ -206,9 +208,14 @@ def handle_convergence(args, **kwargs):
             )
             state["prev_findings_fingerprint"] = prev_fp
             state["round"] = state.get("round", 0) + 1
+            # Ensure kanban task exists
+            state = kanban.ensure_task(state)
             pstate.save(state)
 
         result = pstate.evaluate_convergence(state)
+
+        # Update kanban for every convergence evaluation
+        kanban.on_convergence(state, result)
 
         # Auto-save convergence status on terminal decisions
         if result["decision"] in ("converged", "stuck", "maxed_out"):
@@ -224,8 +231,10 @@ def handle_convergence(args, **kwargs):
 def handle_save(args, **kwargs):
     try:
         state = args["state"]
+        # Auto-create kanban task on first save
+        state = kanban.ensure_task(state)
         pstate.save(state)
-        return json.dumps({"status": "ok"})
+        return json.dumps({"status": "ok", "kanban_task_id": state.get("kanban_task_id")})
     except Exception as e:
         return json.dumps({"error": str(e)})
 
@@ -242,6 +251,10 @@ def handle_load(args, **kwargs):
 
 def handle_clear(args, **kwargs):
     try:
+        # Close kanban task before clearing state
+        state = pstate.load()
+        if state and state.get("status") in ("running", "paused"):
+            kanban.on_clear(state)
         pstate.clear()
         return json.dumps({"status": "ok"})
     except Exception as e:
