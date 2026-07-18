@@ -44,7 +44,6 @@
   ],
   "improvements": ["optional suggestions not blocking"]
 }}
-```
 
 Статусы:
 - PASS — код приемлем, можно мержить

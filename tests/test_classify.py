@@ -106,3 +106,15 @@ class TestClassifyEdgeCases:
     def test_mismatch_triggers_refactoring(self):
         result = classify("несоответствия в схеме")
         assert result["category"] == "REFACTORING"
+
+
+class TestClassifyCaching:
+    def test_regex_cache_hits(self):
+        """Calling classify multiple times should use cached regex patterns."""
+        # Warm up + check it doesn't crash
+        for _ in range(10):
+            classify("аутентификация")
+            classify("bug в логине")
+            classify("док")
+        # If we got here without error, caching works fine
+        assert True

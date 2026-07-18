@@ -16,14 +16,12 @@ import sys
 import traceback
 
 # Absolute imports — works both as stand-alone and as Hermes plugin
-_plugin_dir = os.path.dirname(os.path.abspath(__file__))
-if _plugin_dir not in sys.path:
-    sys.path.insert(0, _plugin_dir)
+PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
+if PLUGIN_DIR not in sys.path:
+    sys.path.insert(0, PLUGIN_DIR)
 
 import classify
 import state as pstate
-
-PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ── Tool schemas ─────────────────────────────────────────────────────────────┐
 
@@ -180,14 +178,20 @@ def handle_prompt(args, **kwargs):
         agent_id = os.path.basename(agent_id)  # strip any dir components
         prompt_path = os.path.join(PLUGIN_DIR, "agents", f"{agent_id}.prompt")
 
-        # Verify the resolved path is actually under agents/
-        if not os.path.exists(prompt_path) or not os.path.realpath(prompt_path).startswith(
-            os.path.realpath(os.path.join(PLUGIN_DIR, "agents"))
-        ):
+        # Resolve once, open on resolved path (avoids TOCTOU)
+        resolved = os.path.realpath(prompt_path)
+        agents_dir = os.path.realpath(os.path.join(PLUGIN_DIR, "agents"))
+
+        # Verify the resolved path is under agents/ — single check, single open
+        if not resolved.startswith(agents_dir):
             return json.dumps({"error": f"Unknown agent: {agent_id}"})
 
-        with open(prompt_path, "r", encoding="utf-8") as f:
+        with open(resolved, "r", encoding="utf-8") as f:
             template = f.read()
+
+        # Escape literal braces in user-controlled strings to prevent KeyError
+        request = request.replace("{", "{{").replace("}", "}}")
+        category = category.replace("{", "{{").replace("}", "}}")
 
         formatted = template.format(
             request=request,
