@@ -51,8 +51,8 @@ hermes plugins list | grep pipeline
 
 ## Related
 
-- Hermes plugins: `~/.hermes/plugins/`
-- Plugin reference: `~/.hermes/skills/hermes-development/references/plugin-creation-example.md`
+- Hermes Agent plugin docs: https://hermes-agent.nousresearch.com/docs
+- Hermes plugins dir: `~/.hermes/plugins/`
 
 ## Common Pitfalls
 
