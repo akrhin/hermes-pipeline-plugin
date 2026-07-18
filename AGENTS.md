@@ -31,8 +31,37 @@ hermes plugins list | grep pipeline
 6. `agent_prompt(agent_id, context)` — сгенерировать промпт агента
 7. `agent_model(agent_id)` — получить модель для агента
 
-Логика пайплайна (checkpoint'ы, revision loops, оркестрация) — в голове агента,
-не в плагине. Плагин — только данные и шаблоны.
+## Model Routing
+
+- Flash → делает агент напрямую (Finder, Analyst, Planner, Coder, Editor, Fixer, Refactorer, Tester, Debugger, Documenter, DevOps, Optimizer)
+- Pro → delegate_task (Architect, Reviewer, Security, **Integration**)
+- Free → delegate_task с OpenRouter free (Researcher, Commenter)
+
+## Pipeline Agents (v1.2.0)
+
+Полная последовательность для полного аудита:
+
+```
+@finder → @analyst → @researcher → @architect → @planner → @coder
+→ @reviewer → @security → @integration → @tester → @documenter
+```
+
+`@integration` (новый, v1.2.0) проверяет кросс-файловые точки:
+- install.sh → release assets
+- README → существующие файлы
+- CI → Makefile (цели существуют)
+- Документация → реальные инструменты
+
+## Kanban Dashboard
+
+Проект использует **Hermes-native Kanban** (не TickTick):
+
+```bash
+hermes kanban boards create pipeline "Pipeline tasks"
+hermes kanban boards switch pipeline
+hermes kanban create "Задача" --body "описание"
+hermes kanban complete <id>
+```
 
 ## Model Routing
 

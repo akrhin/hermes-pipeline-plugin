@@ -311,6 +311,7 @@ MODEL_MAP = {
     "architect":   {"provider": "delegate", "model": "deepseek-v4-pro"},
     "reviewer":    {"provider": "delegate", "model": "deepseek-v4-pro"},
     "security":    {"provider": "delegate", "model": "deepseek-v4-pro"},
+    "integration": {"provider": "delegate", "model": "deepseek-v4-pro"},
     # delegate_task with OpenRouter free
     "researcher":  {"provider": "delegate_free", "model": "openrouter/free"},
     "commenter":   {"provider": "delegate_free", "model": "openrouter/free"},

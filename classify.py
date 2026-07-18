@@ -44,7 +44,7 @@ CATEGORIES = {
         ],
         "pipeline": [
             "finder", "analyst", "researcher", "architect",
-            "planner", "coder", "reviewer", "security", "tester", "documenter",
+            "planner", "coder", "reviewer", "security", "integration", "tester", "documenter",
         ],
     },
     "BUG_UNKNOWN": {
@@ -67,7 +67,7 @@ CATEGORIES = {
             "почисти", "упрости", "reorganize", "clean",
             "коллизи", "collision", "несоответств", "mismatch",
         ],
-        "pipeline": ["finder", "analyst", "refactorer", "reviewer", "tester"],
+        "pipeline": ["finder", "analyst", "refactorer", "reviewer", "integration", "tester"],
     },
     "PERFORMANCE": {
         "keywords": [
@@ -99,7 +99,7 @@ CATEGORIES = {
         ],
         "pipeline": [
             "finder", "analyst", "architect", "planner",
-            "coder", "reviewer", "tester", "documenter",
+            "coder", "reviewer", "integration", "tester", "documenter",
         ],
     },
 }
