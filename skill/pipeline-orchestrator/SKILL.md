@@ -408,88 +408,119 @@ print(f"⚠️ Статус: {state['status']}")
 
 ---
 
-## Kanban Dashboard (TickTick)
+## Kanban Dashboard (Hermes Kanban)
 
-Публикует прогресс пайплайна на TickTick Kanban-доску для наглядности.
+Публикует прогресс пайплайна на встроенную Hermes Kanban-доску. База данных — `~/.hermes/kanban.db`, доска `home` по умолчанию.
 
-### Setup
+Никаких внешних сервисов — всё внутри Hermes.
 
-Один раз:
-1. TickTick MCP включён (`~/.hermes/mcp.json` или `config.yaml`)
-2. Проект **«🧪 Пайплайны»** (ID: `6a5bc9488f0846c75c8cdbb8`, kanban view)
+### Архитектура
+
+Hermes Kanban — SQLite-backed доска, встроенная в ядро. Доступна через:
+
+| Интерфейс | Команда |
+|-----------|---------|
+| **CLI** | `hermes kanban <cmd>` (через `terminal()`) |
+| **agent tools** | `kanban_*` (когда toolset `kanban` включён для профиля) |
+| **WebUI** | `hermes dashboard` |
+
+**Важно:** `kanban_*` tools в агенте активируются через `toolsets: [kanban]` в профиле. В on-платформенных конфигах (Telegram → `platform_toolsets.telegram`) kanban уже включён. Для CLI-сессии — нет. Поэтому оркестратор использует CLI-команды через `terminal()` — это надёжнее для скриптов.
+
+### Терминология
+
+| Понятие | Описание |
+|---------|----------|
+| **Board** | Доска (проект / workstream). По умолчанию `home`. |
+| **Task** | Единица работы. Статусы: `todo` → `ready` → `running` → `done` / `blocked`. |
+| **Status lifecycle** | `todo` (черновик) → `ready` (готов к работе) → `running` (в процессе) → `done`. `blocked` для остановки. `scheduled` для отложенных. `archived` для завершённых. |
+| **link** | parent→child зависимость. Ребёнок нельзя промоутить/завершить, пока родитель открыт. |
+| **comment** | Запись к таску с деталями прогресса. |
+| **workspace** | `scratch` (по умолч.) или `worktree` (клон репо). |
 
 ### Как использовать
 
 #### При старте пайплайна
 
-```python
-from hermes_tools import tool_call
+```bash
+# Убедиться что доска home активна
+hermes kanban boards switch home
 
-# Создать таску на прогон
-task = tool_call("mcp__ticktick__create_task", {
-    "project_id": "6a5bc9488f0846c75c8cdbb8",
-    "title": f"🔷 Пайплайн: {request[:40]}",
-    "content": f"Категория: {category}\nЗапрос: {request}",
-    "priority": 3,
-    "due_date": "2026-07-18T23:00:00+0000",
-})
-pipeline_task_id = task["ID"]
+# Создать таску на прогон — ready сразу (с --body)
+PARENT=$(hermes kanban create --body "Запрос: $REQUEST" --priority 3 --json "🔷 Пайплайн: $REQUEST" | jq -r '.id')
 ```
 
-Потом создаёшь сабтаски для каждой стадии (сразу все):
+#### Создать стадии (все сразу)
 
-```python
-stages = [
-    ("🔍", "finder", "аудит кода"),
-    ("📋", "analyst", "анализ"),
-    ("🔬", "researcher", "исследование"),
-    ("🏗️", "architect", "архитектура"),
-    ("📐", "planner", "план"),
-    ("💻", "coder", "реализация"),
-    ("👁️", "reviewer", "ревью"),
-    ("🛡️", "security", "безопасность"),
-    ("🧪", "tester", "тесты"),
-    ("📝", "documenter", "документация"),
-]
-subtask_ids = {}
-for emoji, agent, desc in stages:
-    st = tool_call("mcp__ticktick__create_subtask", {
-        "parent_task_id": pipeline_task_id,
-        "project_id": "6a5bc9488f0846c75c8cdbb8",
-        "subtask_title": f"{emoji} {agent} — {desc}",
-        "priority": 3 if agent in ("architect", "reviewer", "security") else 1,
-    })
-    subtask_ids[agent] = st["ID"]
+```bash
+# Каждая стадия — отдельная task. Без --parent чтобы не блокировать
+stages=(
+  "🔍  finder  аудит кода"
+  "📋  analyst  анализ"
+  "🔬  researcher  исследование"
+  "🏗️  architect  архитектура"
+  "📐  planner  план"
+  "💻  coder  реализация"
+  "👁️  reviewer  ревью"
+  "🛡️  security  безопасность"
+  "🧪  tester  тесты"
+  "📝  documenter  документация"
+)
+
+declare -A TASK_IDS
+for stage in "${stages[@]}"; do
+  read -r emoji agent desc <<< "$stage"
+  id=$(hermes kanban create --body "$desc" --priority 1 --json "$emoji @$agent — $desc" | jq -r '.id')
+  TASK_IDS[$agent]=$id
+done
+
+# Связать последовательно
+prev=""
+for agent in finder analyst researcher architect planner coder reviewer security tester documenter; do
+  if [ -n "$prev" ]; then
+    hermes kanban link "${TASK_IDS[$prev]}" "${TASK_IDS[$agent]}"
+  fi
+  prev=$agent
+done
 ```
 
 #### При завершении стадии
 
-```python
-# Обновить сабтаску (не complete — просто data)
-# TickTick API не имеет update_subtask, но можно:
-tool_call("mcp__ticktick__update_task", {
-    "task_id": subtask_ids["coder"],
-    "project_id": "6a5bc9488f0846c75c8cdbb8",
-    "title": f"✅ @coder — реализация (done, 3 findings)",
-    "priority": 0,
-})
+```bash
+hermes kanban complete --result "3 findings, converged" "${TASK_IDS[coder]}"
+```
+
+#### При блокировке стадии
+
+```bash
+hermes kanban block --kind dependency "${TASK_IDS[architect]}" "Missing: API spec from upstream"
+```
+
+#### Комментарий с деталями
+
+```bash
+hermes kanban comment "${TASK_IDS[analyst]}" "**@analyst** анализ завершён: выявлено 5 классов, 3 security issues"
 ```
 
 #### При завершении пайплайна
 
-```python
-# Обновить заголовок родительской таски
-tool_call("mcp__ticktick__update_task", {
-    "task_id": pipeline_task_id,
-    "project_id": "6a5bc9488f0846c75c8cdbb8",
-    "title": f"✅ Пайплайн: {request[:40]} (converged, round 2/3)",
-    "priority": 0,
-})
+```bash
+hermes kanban complete --result "P2 only, converged round 2/3" --summary "Пайплайн выполнен, 12 findings (0 P0, 0 P1, 12 P2)" "$PARENT"
+```
+
+#### Просмотр доски
+
+```bash
+hermes kanban list
+hermes kanban list --status ready
+hermes kanban show --json t_XXXXXXXX
+hermes kanban stats
 ```
 
 ### Принцип
 
 - Логика дашборда — **в SKILL.md**, не в плагине
-- Плагин (`__init__.py`) ничего не знает про TickTick
-- Оркестратор (я) сам вызывает TickTick MCP на каждом чекпойнте
-- Kanban — read-only для пользователя: смотреть прогресс, не управлять
+- Плагин (`__init__.py`) ничего не знает про Kanban
+- Оркестратор (я) сам вызывает `hermes kanban` через `terminal()`
+- Kanban — read-only для пользователя: смотреть прогресс, не управлять без причины
+- Используя `--body` на create, таск создаётся в статусе `ready` (пропускается `todo`)
+- `link` создаёт parent→child: ребёнок не завершится, пока родитель открыт — **не использовать для пайплайна**, только для реальных зависимостей
