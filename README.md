@@ -194,7 +194,6 @@ hermes-pipeline-plugin/
 ├── ARCHITECTURE.md      # Архитектура плагина
 ├── pyproject.toml       # Ruff-линтер конфиг + build-system
 ├── LICENSE              # MIT
-├── .github/workflows/   # CI (ruff + bandit + pytest)
 ├── agents/
 │   ├── architect.prompt    # Промпт для @architect
 │   ├── researcher.prompt   # Промпт для @researcher
@@ -202,7 +201,7 @@ hermes-pipeline-plugin/
 │   └── security.prompt     # Промпт для @security
 ├── skill/
 │   └── pipeline-orchestrator/  # Скилл оркестратора
-├── .cursor/backlog/       # История изменений
+├── .github/workflows/       # CI (ruff + bandit + pytest)
 └── tests/
     ├── test_classify.py  # 16 тестов классификации
     ├── test_state.py     # 8 тестов state persistence
