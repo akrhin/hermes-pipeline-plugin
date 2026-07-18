@@ -4,7 +4,26 @@
 Returns category + full pipeline definition.
 """
 
+import re
+
 # ── Category definitions ─────────────────────────────────────────────────────┘
+
+# Minimum length for plain substring matching
+_SHORT_KW_LEN = 3  # keywords <= this length use word-boundary matching
+
+
+def _kw_matches(kw: str, text: str) -> bool:
+    """Check if a keyword matches text.
+
+    Keywords <= 3 chars use word-boundary regex to avoid false positives
+    like "док" matching inside "документация".
+    Longer keywords use fast substring matching.
+    """
+    if len(kw) <= _SHORT_KW_LEN:
+        pattern = re.compile(rf"\b{re.escape(kw)}\b", re.IGNORECASE)
+        return bool(pattern.search(text))
+    return kw in text
+
 
 CATEGORIES = {
     "SECURITY_RELATED": {
@@ -15,6 +34,7 @@ CATEGORIES = {
             "user data", "private key", "sensitive", "authentic",
             "аутентификац", "авторизац", "парол", "токен", "секрет",
             "шифрова", "безопасност", "доступ", "авториз", "аутентифицир",
+            "аудит", "audit",
         ],
         "pipeline": [
             "finder", "analyst", "researcher", "architect",
@@ -39,6 +59,7 @@ CATEGORIES = {
         "keywords": [
             "рефактор", "refactor", "перепиш", "передела", "улучш",
             "почисти", "упрости", "reorganize", "clean",
+            "коллизи", "collision", "несоответств", "mismatch",
         ],
         "pipeline": ["finder", "analyst", "refactorer", "reviewer", "tester"],
     },
@@ -82,6 +103,13 @@ def classify(request: str) -> dict:
     """
     Classify a user request into a pipeline category.
 
+    Scoring:
+    - Keywords <= 3 chars use word-boundary matching
+    - Longer keywords use substring matching
+    - Ties broken by category priority tiers
+      (BUG_UNKNOWN > BUG_KNOWN > SECURITY > REFACTORING > PERFORMANCE >
+       INFRASTRUCTURE > FEATURE > DOCUMENTATION)
+
     Returns:
     {
         "category": "FEATURE",
@@ -99,7 +127,7 @@ def classify(request: str) -> dict:
         score = 0
         matched_kw = []
         for kw in cat_def["keywords"]:
-            if kw in request_lower:
+            if _kw_matches(kw, request_lower):
                 score += 1
                 matched_kw.append(kw)
         if score > 0:
@@ -115,8 +143,25 @@ def classify(request: str) -> dict:
             "description": "Default feature pipeline (no category matched)",
         }
 
-    # Pick best category (highest score, ties → first defined wins)
-    best = max(scores, key=lambda c: (scores[c], -list(CATEGORIES.keys()).index(c)))
+    # Tiebreaker priority: prefer more specific categories
+    # Weight: type of category matters more than raw keyword count
+    tier1 = {"BUG_UNKNOWN", "BUG_KNOWN", "SECURITY_RELATED"}  # safety-critical
+    tier2 = {"REFACTORING", "PERFORMANCE"}                     # structural
+    tier3 = {"INFRASTRUCTURE", "FEATURE"}                      # general
+
+    def priority(cat):
+        """Higher priority = more urgent category."""
+        raw_score = scores[cat]
+        if cat in tier1:
+            return (raw_score * 10, raw_score)
+        elif cat in tier2:
+            return (raw_score * 5, raw_score)
+        elif cat in tier3:
+            return (raw_score * 2, raw_score)
+        else:  # DOCUMENTATION
+            return (raw_score, 0)
+
+    best = max(scores, key=priority)
 
     return {
         "category": best,

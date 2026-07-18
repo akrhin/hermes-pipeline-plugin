@@ -40,7 +40,7 @@ class TestClassify:
         assert result["category"] == "INFRASTRUCTURE"
 
     def test_documentation(self):
-        result = classify("напиши документацию для API")
+        result = classify("обнови README файл")
         assert result["category"] == "DOCUMENTATION"
 
     def test_feature_default(self):
@@ -86,5 +86,23 @@ class TestClassifyEdgeCases:
 
     def test_case_insensitive(self):
         result = classify("FIX BUG IN LOGIN")
-        # BUG (BUG_UNKNOWN) + LOGIN (SECURITY_RELATED) = tie, SECURITY wins
+        # BUG (BUG_UNKNOWN) + LOGIN (SECURITY_RELATED) = 1 each
+        # Both in TIER1 — whoever has higher priority wins
         assert result["category"] in ("BUG_UNKNOWN", "SECURITY_RELATED")
+
+    def test_refactor_before_docs(self):
+        """'refactor' must win over 'док' (short word boundary)"""
+        result = classify("рефакторинг документации")
+        assert result["category"] == "REFACTORING", f"Got {result['category']}"
+
+    def test_audit_triggers_security(self):
+        result = classify("проведи аудит кода")
+        assert result["category"] == "SECURITY_RELATED"
+
+    def test_collision_triggers_refactoring(self):
+        result = classify("найди коллизии в данных")
+        assert result["category"] == "REFACTORING"
+
+    def test_mismatch_triggers_refactoring(self):
+        result = classify("несоответствия в схеме")
+        assert result["category"] == "REFACTORING"
