@@ -63,12 +63,6 @@ hermes kanban create "Задача" --body "описание"
 hermes kanban complete <id>
 ```
 
-## Model Routing
-
-- Flash → делает агент напрямую (Finder, Analyst, Planner, Coder, Editor, Fixer, Refactorer, Tester, Debugger, Documenter, DevOps, Optimizer)
-- Pro → delegate_task (Architect, Reviewer, Security)
-- Free → delegate_task с OpenRouter free (Researcher, Commenter)
-
 ## Key Files
 
 | File | Purpose |
