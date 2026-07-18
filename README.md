@@ -143,17 +143,6 @@ refactor UserService — раздутый класс
 | **DOCUMENTATION** | finder → documenter | docs, readme, документация |
 | **FEATURE** | finder → analyst → architect → planner → coder → reviewer → tester → documenter | всё остальное |
 
-### Быстрые команды
-
-| Команда | Что делает |
-|---------|------------|
-| `/pipeline <задача>` | Полный пайплайн: research → plan → code → review → security → test → docs |
-| `/review <файл>` | Только code review |
-| `/test <файл>` | Только тесты |
-| `/security <файл>` | Только security audit |
-| `/status` | Статус текущего пайплайна |
-| `/abort` | Отменить пайплайн |
-
 ### Как менять модели агентов
 
 Модели заданы в `MODEL_MAP` в [`__init__.py`](__init__.py):
