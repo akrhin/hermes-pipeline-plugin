@@ -11,26 +11,28 @@ tags: [pipeline, orchestration, multi-agent, quality-gates]
 
 ## When to Load
 
-1. User sends a message starting with `/pipeline`, `/review`, `/test`, `/security`, `/status`, `/abort`
-2. User sends a complex request that involves auth/security, a new feature, or a bug fix that could benefit from quality gates
-3. A `state.json` exists in `~/.hermes/plugins/pipeline/state.json` — resume context
+1. User sends a complex task that involves auth/security, a new feature, a bug fix, refactoring, or performance — anything that could benefit from quality gates
+2. A `state.json` exists in `~/.hermes/plugins/pipeline/state.json` — resume context
 
 ## Trigger Detection
 
-Parse the user's message to detect pipeline commands:
+Analyze the user's message for keywords. No special commands needed — the agent decides:
 
-| Message pattern | Action |
+| Keyword / phrase | Action |
 |----------------|--------|
-| `/pipeline <описание задачи>` | Classify + run full pipeline |
-| `/review <file>` | Run only reviewer agent on file |
-| `/test <file>` | Run only tester agent on file |
-| `/security <file>` | Run only security agent on file |
-| `/status` | Show current pipeline state |
-| `/abort` | Cancel and clear pipeline state |
+| `auth`, `jwt`, `token`, `password`, `secret`, `security`, `безопасност` | Classify as SECURITY_RELATED |
+| `bug`, `crash`, `баг`, `пада`, `сломал`, `ошибк` | Classify as BUG_UNKNOWN |
+| `fix`, `исправ`, `почини` | Classify as BUG_KNOWN |
+| `refactor`, `рефакторинг`, `перепиш`, `передела` | Classify as REFACTORING |
+| `optimize`, `slow`, `memory`, `оптимизир`, `тормоз` | Classify as PERFORMANCE |
+| `docker`, `deploy`, `config`, `devops`, `инфраструктур` | Classify as INFRASTRUCTURE |
+| `docs`, `readme`, `документац`, `описани` | Classify as DOCUMENTATION |
+| Everything else with complexity | Classify as FEATURE |
 | `да`, `yes`, `продолжаем` after checkpoint | Proceed to next phase |
-| `стоп`, `нет`, `покажи план` after checkpoint | Show details or abort |
+| `стоп`, `нет`, `хватит`, `отмена` after checkpoint | Abort or show details |
+| "статус", "что в пайплайне", "на каком этапе" | Show pipeline status |
 
-If the message doesn't match any trigger — handle normally without pipeline.
+If the message is a simple request — handle normally without pipeline.
 
 ## How to Classify a Request
 
@@ -358,7 +360,7 @@ state = {
 
 ## Resume Logic
 
-When `/resume` or `state.json` exists at session start:
+When `state.json` exists at session start (e.g. after a crash or restart):
 
 ```python
 state = tool_call("pipeline_load", {})
@@ -366,59 +368,13 @@ if not state:
     return  # Nothing to resume
 
 # Show state
-print(f"📋 Пайплайн от {state['created_at']}")
+print(f"📋 Найден незавершённый пайплайн от {state['created_at']}")
 print(f"✅ Завершено: {', '.join(state['completed'])}")
 print(f"⏳ Следующий: {state['pipeline'][state['current_idx']]}")
 print(f"⚠️ Статус: {state['status']}")
 
 # Ask user
 # "Продолжить / сбросить / показать детали?"
-```
-
-## Shortcut Commands
-
-### /review <file>
-
-```python
-# Classify the file — is it code?
-# Run reviewer on it
-reviewer_results = delegate_task(
-    goal=tool_call("agent_prompt", {"agent_id": "reviewer", "context": {}})["prompt"],
-    context=f"Review this file: {file_path}\nFile contents: {file_content}",
-)
-# Present results
-```
-
-### /test <file>
-
-```python
-tester_results = run_agent("tester", f"Write and run tests for {file_path}")
-```
-
-### /security <file>
-
-```python
-security_results = delegate_task(
-    goal=tool_call("agent_prompt", {"agent_id": "security", "context": {}})["prompt"],
-    context=f"Audit this file: {file_path}\n{file_content}",
-)
-```
-
-### /status
-
-```python
-state = tool_call("pipeline_load", {})
-if state:
-    show_status(state)
-else:
-    print("Нет активных пайплайнов.")
-```
-
-### /abort
-
-```python
-tool_call("pipeline_clear", {})
-print("❌ Пайплайн отменён.")
 ```
 
 ## Pipeline Phase Summary Table
