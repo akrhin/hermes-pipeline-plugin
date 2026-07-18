@@ -383,7 +383,7 @@ print(f"⚠️ Статус: {state['status']}")
 # Classify the file — is it code?
 # Run reviewer on it
 reviewer_results = delegate_task(
-    goal=tool_call("agent_prompt", {"agent_id": "reviewer", "context": {}})[["prompt"]],
+    goal=tool_call("agent_prompt", {"agent_id": "reviewer", "context": {}})["prompt"],
     context=f"Review this file: {file_path}\nFile contents: {file_content}",
 )
 # Present results
@@ -399,7 +399,7 @@ tester_results = run_agent("tester", f"Write and run tests for {file_path}")
 
 ```python
 security_results = delegate_task(
-    goal=tool_call("agent_prompt", {"agent_id": "security", "context": {}})[["prompt"]],
+    goal=tool_call("agent_prompt", {"agent_id": "security", "context": {}})["prompt"],
     context=f"Audit this file: {file_path}\n{file_content}",
 )
 ```

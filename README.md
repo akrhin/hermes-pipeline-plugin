@@ -216,13 +216,17 @@ hermes-pipeline-plugin/
 ├── AGENTS.md            # Шпаргалка для AI-ассистентов
 ├── ARCHITECTURE.md      # Архитектура плагина
 ├── README.md            ← этот файл
-├── pyproject.toml       # Ruff-линтер конфиг
+├── pyproject.toml       # Ruff-линтер конфиг + build-system
+├── LICENSE              # MIT
 ├── .github/workflows/   # CI (ruff + bandit + pytest)
 ├── agents/
 │   ├── architect.prompt    # Промпт для @architect
 │   ├── researcher.prompt   # Промпт для @researcher
 │   ├── reviewer.prompt     # Промпт для @reviewer
 │   └── security.prompt     # Промпт для @security
+├── skill/
+│   └── pipeline-orchestrator/  # Скилл оркестратора
+├── .cursor/backlog/       # История изменений
 └── tests/
     ├── test_classify.py  # 16 тестов для классификации
     └── test_state.py     # 8 тестов для state persistence

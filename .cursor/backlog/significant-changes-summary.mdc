@@ -3,21 +3,27 @@
 
 ```json
 {
-  "version": "1.0.0",
-  "summary": "Initial implementation of Pipeline Plugin",
+  "version": "1.1.0",
+  "summary": "Production-ready after security audit + full refactoring + documentation",
   "key_decisions": [
     "Plugin (not MCP) — in-process, direct access to Hermes internals",
     "Plugin stateless — only provides tools, orchestration logic in agent",
     "3-tier model routing: Flash (direct) / Pro (delegation) / Free (OpenRouter)",
     "JSON state on disk for resume capability",
     "Keyword-based categorization (8 categories with fixed pipelines)",
-    "Quality gates mandatory after every code change"
+    "Quality gates mandatory after every code change",
+    "Prompt templates: strict JSON without markdown wrappers",
+    "Skill ships in repo under skill/ — one-command install"
   ],
-  "architecture_changes": [],
-  "open_questions": [
-    "Researcher and Commenter — действительно ли нужен OpenRouter free или тоже delegate на Polza?",
-    "Проверить при первом реальном запуске, корректно ли парсятся .prompt файлы с format()",
-    "symlink vs копия — через symlink работает, но при git pull может отвалиться"
-  ]
+  "architecture_changes": [
+    "handle_prompt: path traversal protection via os.path.basename + realpath check",
+    "state.py: PermissionError guard on save",
+    "classify.py: extended keyword coverage",
+    "Prompt templates: removed conflicting ```json wrapper",
+    "Added test_state.py expiry test",
+    "Added MIT LICENSE",
+    "Added [build-system] to pyproject.toml"
+  ],
+  "open_questions": []
 }
 ```

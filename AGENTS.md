@@ -48,6 +48,7 @@ hermes plugins list | grep pipeline
 | `state.py` | JSON state persistence on disk |
 | `agents/*.prompt` | Prompt templates for each delegate agent |
 | `ARCHITECTURE.md` | Full architecture doc |
+| `skill/pipeline-orchestrator/` | Orchestrator skill (instructions for the agent) |
 
 ## Related
 
