@@ -8,13 +8,14 @@
 ## Quick Start
 
 ```bash
-# установка
+# 1. установка плагина
 ln -sf ~/git/hermes-pipeline-plugin ~/.hermes/plugins/pipeline
-
-# включение
 hermes plugins enable pipeline
 
-# проверка
+# 2. установка скила-оркестратора (обязательно!)
+ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator ~/.hermes/skills/hermes/pipeline-orchestrator
+
+# 3. проверка
 hermes plugins list | grep pipeline
 ```
 
