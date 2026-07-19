@@ -1,4 +1,6 @@
-"""Unit tests for pipeline plugin core (__init__.py)."""
+"""
+Unit tests for pipeline plugin core (__init__.py) — Kanban-native variant.
+"""
 
 from __future__ import annotations
 
@@ -9,8 +11,6 @@ import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# We import the handler functions directly (not via register)
-# and set PLUGIN_DIR to a temp dir with mock prompt files
 import __init__ as plugin
 
 
@@ -80,7 +80,6 @@ class TestHandlePrompt:
         assert "hello" in result["prompt"]
 
     def test_prompt_missing_context_placeholder(self):
-        """If the template expects 'research_context' but it's missing, format handles it."""
         self._write_prompt("testagent", "{request}: {research_context}")
         result = json.loads(plugin.handle_prompt({
             "agent_id": "testagent",
@@ -89,7 +88,7 @@ class TestHandlePrompt:
         }))
         assert "prompt" in result
         assert "test:" in result["prompt"]
-        assert "{}" in result["prompt"]  # research_context defaults to {}
+        assert "{}" in result["prompt"]
 
     def test_prompt_category_injection(self):
         self._write_prompt("testagent", "Category: {category}")
@@ -113,23 +112,10 @@ class TestHandlePrompt:
 
 
 class TestHandleConvergence:
-    """Tests for pipeline_convergence handler."""
+    """Tests for pipeline_convergence handler — no disk state, works with in-memory dict."""
 
-    def setup_method(self):
-        import state as _state
-        self.orig_path = _state.STATE_PATH
-        self.tmpdir = tempfile.mkdtemp()
-        _state.STATE_PATH = os.path.join(self.tmpdir, "converge_test.json")
-
-    def teardown_method(self):
-        import state as _state
-        _state.STATE_PATH = self.orig_path
-        import shutil
-        shutil.rmtree(self.tmpdir, ignore_errors=True)
-
-    def _init_state(self):
-        """Create an initial pipeline state."""
-        plugin.pstate.save({
+    def _make_state(self):
+        return {
             "request": "test",
             "category": "FEATURE",
             "pipeline": ["finder", "coder", "reviewer"],
@@ -138,22 +124,28 @@ class TestHandleConvergence:
             "context": {},
             "checkpoints": {},
             "status": "running",
-        })
+            "round": 0,
+            "findings": [],
+        }
 
     def test_convergence_no_state(self):
-        result = json.loads(plugin.handle_convergence({}))
+        result = json.loads(plugin.handle_convergence({
+            "state": {},
+        }))
         assert result["decision"] == "unknown"
 
     def test_convergence_converged(self):
-        self._init_state()
+        state = self._make_state()
         result = json.loads(plugin.handle_convergence({
+            "state": state,
             "findings": [{"severity": "P2", "file": "x.py", "category": "style"}],
         }))
         assert result["decision"] == "converged"
 
     def test_convergence_continue(self):
-        self._init_state()
+        state = self._make_state()
         result = json.loads(plugin.handle_convergence({
+            "state": state,
             "findings": [{"severity": "P0", "file": "x.py", "category": "security",
                           "description": "XSS"}],
         }))
@@ -162,23 +154,26 @@ class TestHandleConvergence:
 
     def test_convergence_stuck(self):
         """Same findings 2 rounds → stuck."""
-        self._init_state()
-        result1 = json.loads(plugin.handle_convergence({
+        state = self._make_state()
+        r1 = json.loads(plugin.handle_convergence({
+            "state": state,
             "findings": [{"severity": "P0", "file": "x.py", "category": "security",
                           "description": "XSS"}],
         }))
-        assert result1["decision"] == "continue"
-        result2 = json.loads(plugin.handle_convergence({
+        assert r1["decision"] == "continue"
+        r2 = json.loads(plugin.handle_convergence({
+            "state": state,
             "findings": [{"severity": "P0", "file": "x.py", "category": "security",
                           "description": "XSS"}],
         }))
-        assert result2["decision"] == "stuck"
+        assert r2["decision"] == "stuck"
 
     def test_convergence_maxed_out(self):
         """3 rounds → maxed_out."""
-        self._init_state()
+        state = self._make_state()
         for _ in range(3):
             result = json.loads(plugin.handle_convergence({
+                "state": state,
                 "findings": [{"severity": "P0", "file": "x.py", "category": "security",
                               "description": "XSS"}],
             }))

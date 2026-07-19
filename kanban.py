@@ -1,12 +1,22 @@
 """
-Kanban integration for Pipeline Plugin.
+Kanban-native pipeline state & convergence for Pipeline Plugin.
 
-Automatically creates/updates Hermes Kanban tasks for pipeline runs.
-Uses `hermes kanban` CLI via subprocess.
+Variant C: state.json removed — kanban.db is the single source of truth.
 
-Board: pipeline (created once via `hermes kanban boards create pipeline`)
+Board: pipeline (created once). Each pipeline run creates a task tree:
+  Parent: "🔷 Pipeline: <request>"
+  Children: @finder → @analyst → @researcher → @architect → @planner → @coder
+            → @reviewer → @security → @integration → @tester → @documenter
+
+Each child has a --parent link. Only one is in `ready` status at a time
+(via `promote` when prior sibling completes).
+
+Convergence: findings live in kanban comments on the parent task.
+`evaluate_convergence()` reads findings from the parent comment,
+computes deterministically (same algorithm as old state.py).
 """
 
+import hashlib
 import json
 import logging
 import subprocess
@@ -15,173 +25,331 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 BOARD = "pipeline"
-KANBAN_TIMEOUT = 15  # seconds for each subprocess call
+KANBAN_TIMEOUT = 15
+MAX_CONVERGENCE_ROUNDS = 3
+NEXT_ACTION_STATUSES = {"ready", "todo"}
 
-# ── Helpers ──────────────────────────────────────────────────────────────────┘
+
+# ── Kanban CLI helpers ──────────────────────────────────────────────────────┘
 
 
-def _run_kanban(*args: str) -> dict[str, Any]:
-    """Run ``hermes kanban --board <BOARD> <args>`` and return output.
-
-    Tries JSON parse first, falls back to text dict.
-    Returns {} on any error (never raises).
-    """
-    cmd = ["hermes", "kanban", "--board", BOARD]
+def _kanban(*args: str) -> dict[str, Any]:
+    """Run ``hermes kanban --board <BOARD> <args>``. Returns parsed JSON or {}."""
+    cmd = ["hermes", "kanban", "--board", BOARD, "--json"]
     cmd.extend(args)
     try:
         result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=KANBAN_TIMEOUT,
+            cmd, capture_output=True, text=True, timeout=KANBAN_TIMEOUT
         )
         if result.returncode != 0:
-            stderr = result.stderr.strip()[:200]
-            logger.warning(
-                "kanban error (exit %d): %s", result.returncode, stderr
-            )
+            logger.warning("kanban error (exit %d): %s", result.returncode,
+                           result.stderr.strip()[:200])
             return {}
         out = result.stdout.strip()
         if not out:
             return {}
-        # Try JSON first
         try:
             return json.loads(out)
         except json.JSONDecodeError:
-            pass
-        return {"_text": out}
+            return {"_text": out}
     except subprocess.TimeoutExpired:
-        logger.warning("kanban command timed out (>{KANBAN_TIMEOUT}s)")
+        logger.warning("kanban command timed out")
         return {}
     except FileNotFoundError:
-        logger.warning(
-            "hermes binary not found in PATH — kanban integration disabled"
-        )
+        logger.warning("hermes binary not found — kanban disabled")
         return {}
     except OSError as exc:
         logger.warning("kanban subprocess error: %s", exc)
         return {}
 
 
-# ── Public API ───────────────────────────────────────────────────────────────┘
+# ── Public API ──────────────────────────────────────────────────────────────┘
 
 
-def create_task(
-    title: str,
-    body: str = "",
-    idempotency_key: str = "",
-) -> str | None:
-    """Create a task on the pipeline board.
+def create_parent(title: str, body: str = "",
+                  idempotency_key: str = "") -> str | None:
+    """Create the parent pipeline task. Returns task_id or None."""
+    cmd = ["create", "--body", body, "--priority", "1", title]
+    if idempotency_key:
+        cmd.extend(["--idempotency-key", idempotency_key])
+    result = _kanban(*cmd)
+    return result.get("id") or None
 
-    Uses ``--idempotency-key`` when provided so restart doesn't duplicate.
-    Returns the task ID (string) or None on failure.
-    """
-    cmd: list[str] = [
-        "create",
-        "--body",
-        body,
-        "--priority",
-        "1",
-        "--json",
-    ]
+
+def create_child(title: str, parent_id: str, body: str = "",
+                 idempotency_key: str = "") -> str | None:
+    """Create a child task linked to parent. Returns task_id or None."""
+    cmd = ["create", "--body", body, "--parent", parent_id, "--priority", "2"]
     if idempotency_key:
         cmd.extend(["--idempotency-key", idempotency_key])
     cmd.append(title)
+    result = _kanban(*cmd)
+    return result.get("id") or None
 
-    result = _run_kanban(*cmd)
-    if "id" in result:
-        return result["id"]
-    if "_text" in result:
-        # Fallback: parse "t_abc123" from text output
-        text = result["_text"]
-        for token in text.split():
-            if token.startswith("t_") and len(token) > 3:
-                return token
-    return None
+
+def promote(task_id: str) -> bool:
+    """Promote task to `ready` so it can be worked on."""
+    return bool(_kanban("promote", task_id))
 
 
 def comment(task_id: str, text: str) -> bool:
-    """Append a comment to a task. Returns success."""
-    result = _run_kanban("comment", task_id, text)
-    return bool(result)
+    """Append a comment."""
+    return bool(_kanban("comment", task_id, text))
 
 
-def complete(
-    task_id: str,
-    result_summary: str = "",
-    metadata: dict[str, Any] | None = None,
-) -> bool:
-    """Mark a task as done. Returns success."""
-    cmd: list[str] = ["complete"]
+def complete(task_id: str, result_summary: str = "",
+             metadata: dict | None = None) -> bool:
+    """Mark task done. Returns success."""
+    cmd = ["complete"]
     if result_summary:
         cmd.extend(["--result", result_summary])
     if metadata:
         cmd.extend(["--metadata", json.dumps(metadata, ensure_ascii=False)])
     cmd.append(task_id)
-    result = _run_kanban(*cmd)
-    return bool(result)
+    return bool(_kanban(*cmd))
 
 
-def block_task(
-    task_id: str, reason: str = "", kind: str = "needs_input"
-) -> bool:
-    """Block a task. Returns success."""
+def block_task(task_id: str, reason: str = "",
+               kind: str = "needs_input") -> bool:
+    """Block a task for human review."""
     cmd = ["block", "--kind", kind, task_id]
     if reason:
         cmd.append(reason)
-    result = _run_kanban(*cmd)
-    return bool(result)
+    return bool(_kanban(*cmd))
 
 
-# ── State helpers ────────────────────────────────────────────────────────────┘
+def unblock(task_id: str) -> bool:
+    """Unblock a task (for next convergence round)."""
+    return bool(_kanban("promote", task_id))
 
 
-def idempotency_key(state: dict) -> str:
-    """Deterministic idempotency key scoped to this pipeline run."""
-    created_at = state.get("created_at", "")
-    return f"pipe:{created_at}"
+def list_tasks(status: str = "") -> list[dict]:
+    """List tasks, optionally filtered by status. Returns list of dicts."""
+    cmd = ["ls", "--all"]
+    if status:
+        cmd.extend(["--status", status])
+    result = _kanban(*cmd)
+    if isinstance(result, list):
+        return result
+    if "tasks" in result:
+        return result["tasks"]
+    return []
 
 
-def ensure_task(state: dict) -> dict:
-    """Create a kanban task if one doesn't exist yet.
+def show_task(task_id: str) -> dict:
+    """Get full task detail (comments, children, etc.)."""
+    result = _kanban("show", task_id)
+    return result if isinstance(result, dict) else {}
 
-    Mutates and returns *state* with ``kanban_task_id`` set.
-    Returns state unchanged if task already exists.
+
+def parent_task_id(pipeline: list[str]) -> str:
+    """Compute deterministic idempotency key from pipeline agent list."""
+    agents_str = "_".join(pipeline)
+    return f"pipe:{hashlib.md5(agents_str.encode(), usedforsecurity=False).hexdigest()[:12]}"
+
+
+def child_id(parent_ikey: str, agent: str, round_num: int = 0) -> str:
+    """Deterministic idempotency key for a child task."""
+    return f"{parent_ikey}:{agent}:r{round_num}"
+
+
+# ── Tree management ─────────────────────────────────────────────────────────┘
+
+
+def create_task_tree(state: dict) -> dict:
+    """Create the full task tree for a pipeline run.
+
+    Idempotent: if the parent already exists (via idempotency_key),
+    subsequent calls return the existing tree structure without duplication.
+
+    Returns state dict with kanban_task_ids populated.
     """
-    if state.get("kanban_task_id"):
-        return state  # Already created on a previous save
+    if state.get("kanban_parent_id"):
+        return state  # Already created
 
     request = state.get("request", "")
     category = state.get("category", "")
     pipeline = state.get("pipeline", [])
-    agents = " → ".join(f"@{a}" for a in pipeline)
+    agents_str = " → ".join(f"@{a}" for a in pipeline)
+    parent_ikey = parent_task_id(pipeline)
 
+    # ── Create parent ────────────────────────────────────────────────────
     title = f"🔷  Пайплайн: {request[:80]}"
     body = (
         f"Категория: {category}\n"
-        f"Агенты: {agents}\n"
+        f"Агенты: {agents_str}\n"
         f"Запрос: {request}"
     )
-    ikey = idempotency_key(state)
+    parent_id = create_parent(title, body=body, idempotency_key=parent_ikey)
+    if not parent_id:
+        logger.warning("failed to create parent kanban task")
+        return state
 
-    task_id = create_task(title, body=body, idempotency_key=ikey)
-    if task_id:
-        state["kanban_task_id"] = task_id
-        logger.info("kanban task created: %s", task_id)
-    else:
-        logger.warning("failed to create kanban task — continuing without")
+    state["kanban_parent_id"] = parent_id
+    state["kanban_task_ids"] = {}  # agent → task_id
+
+    # ── Create children ──────────────────────────────────────────────────
+    for agent in pipeline:
+        c_ikey = child_id(parent_ikey, agent)
+        c_title = f"@{agent}: {request[:60]}"
+        c_body = f"Этап: {agent}\nЗапрос: {request}"
+        child_id_val = create_child(c_title, parent_id,
+                                    body=c_body, idempotency_key=c_ikey)
+        if child_id_val:
+            state["kanban_task_ids"][agent] = child_id_val
+            logger.info("created child task %s → %s", agent, child_id_val)
+
+    # ── Promote first agent to ready ─────────────────────────────────────
+    if pipeline:
+        first_agent = pipeline[0]
+        first_id = state["kanban_task_ids"].get(first_agent)
+        if first_id:
+            promote(first_id)
+            logger.info("promoted first agent %s → ready", first_agent)
+
+    # ══ Log the pipeline start on the parent task ════════════════════════
+    comment(parent_id,
+            f"🚀 Пайплайн запущен\n"
+            f"Категория: {category}\n"
+            f"Агенты: {agents_str}\n"
+            f"Первый этап: @{pipeline[0]}")
+
     return state
 
 
-def on_convergence(state: dict, convergence_result: dict) -> None:
-    """Update kanban task after convergence evaluation.
+def advance(state: dict, completed_agent: str) -> dict:
+    """Mark an agent task as done and promote the next one.
 
-    - Comments with findings summary
-    - Completes the task on converged/maxed_out/stuck
-    - Blocks on stuck for human review
+    Returns state dict with updated current_idx.
     """
-    task_id = state.get("kanban_task_id")
-    if not task_id:
+    pipeline = state.get("pipeline", [])
+    task_ids = state.get("kanban_task_ids", {})
+    parent_id = state.get("kanban_parent_id")
+    current_idx = state.get("current_idx", 0)
+
+    # Complete current task
+    agent_id = task_ids.get(completed_agent)
+    if agent_id:
+        complete(agent_id, result_summary=f"✅ @{completed_agent} завершён")
+
+    # Promote next
+    next_idx = current_idx + 1
+    if next_idx < len(pipeline):
+        next_agent = pipeline[next_idx]
+        next_id = task_ids.get(next_agent)
+        if next_id:
+            promote(next_id)
+            comment(parent_id or "", f"👉 Начинается этап @{next_agent}")
+            logger.info("promoted %s → ready", next_agent)
+        state["current_idx"] = next_idx
+
+    return state
+
+
+# ── Convergence (moved from state.py) ───────────────────────────────────────┘
+
+
+def _compute_fingerprint(findings: list) -> str:
+    """Hash P0/P1 findings for stuck detection. Same findings = same hash."""
+    if not findings:
+        return ""
+    items = sorted(
+        f"{f.get('severity', '')}:{f.get('file', '')}:"
+        f"{f.get('category', '')}:{(f.get('description') or '')[:80]}"
+        for f in findings
+    )
+    return hashlib.md5("|".join(items).encode(), usedforsecurity=False).hexdigest()[:12]
+
+
+def evaluate_convergence(state: dict, findings: list | None = None) -> dict:
+    """Evaluate pipeline convergence deterministically (no LLM).
+
+    Mutates state with round/findings metadata.
+    Returns dict with decision/reason/counts.
+    """
+    if findings is not None:
+        # Store new findings, compute fingerprint, bump round
+        # Save current fingerprint as prev before computing new one
+        curr_fp = state.get("findings_fingerprint", "")
+        state["findings"] = findings
+        state["findings_fingerprint"] = _compute_fingerprint(
+            [f for f in findings if f.get("severity") in ("P0", "P1")]
+        )
+        state["prev_findings_fingerprint"] = curr_fp
+        state["round"] = state.get("round", 0) + 1
+
+    active_findings = state.get("findings", [])
+    round_num = state.get("round", 0)
+    max_rounds = state.get("max_rounds", MAX_CONVERGENCE_ROUNDS)
+
+    p0 = [f for f in active_findings if f.get("severity") == "P0"]
+    p1 = [f for f in active_findings if f.get("severity") == "P1"]
+    p2 = [f for f in active_findings if f.get("severity") == "P2"]
+    p0p1 = list(p0) + list(p1)
+
+    # No P0/P1 → converged
+    if not p0p1:
+        return {
+            "decision": "converged",
+            "reason": f"No P0/P1 findings ({len(p2)} P2 advisories)",
+            "round": round_num,
+            "p0_count": 0,
+            "p1_count": 0,
+            "p2_count": len(p2),
+        }
+
+    # Hard stop: max rounds with P0/P1 remaining
+    if round_num >= max_rounds:
+        return {
+            "decision": "maxed_out",
+            "reason": f"Reached max rounds ({max_rounds}) — "
+                      f"{len(p0)} P0, {len(p1)} P1 unresolved",
+            "round": round_num,
+            "p0_count": len(p0),
+            "p1_count": len(p1),
+            "p2_count": len(p2),
+        }
+
+    # Stuck: same P0/P1 fingerprint as previous round
+    current_fp = _compute_fingerprint(p0p1)
+    prev_fp = state.get("prev_findings_fingerprint", "")
+    if current_fp and current_fp == prev_fp:
+        return {
+            "decision": "stuck",
+            "reason": f"Same {len(p0p1)} P0/P1 findings as previous round — "
+                      "fixes are not converging",
+            "round": round_num,
+            "p0_count": len(p0),
+            "p1_count": len(p1),
+            "p2_count": len(p2),
+        }
+
+    # Continue
+    return {
+        "decision": "continue",
+        "reason": f"{len(p0p1)} P0/P1 findings remain — "
+                  f"round {round_num}/{max_rounds}",
+        "round": round_num,
+        "p0_count": len(p0),
+        "p1_count": len(p1),
+        "p2_count": len(p2),
+    }
+
+
+# ── Convergence via board ───────────────────────────────────────────────────┘
+
+
+def on_convergence(state: dict, convergence_result: dict) -> None:
+    """Update kanban board after convergence evaluation.
+
+    - Comments with findings
+    - Completes parent on converged/maxed_out
+    - Blocks on stuck
+    - Unblocks @coder for next round on continue
+    """
+    parent_id = state.get("kanban_parent_id")
+    task_ids = state.get("kanban_task_ids", {})
+    if not parent_id:
         return
 
     decision = convergence_result.get("decision", "unknown")
@@ -191,62 +359,144 @@ def on_convergence(state: dict, convergence_result: dict) -> None:
     p2 = convergence_result.get("p2_count", 0)
     round_num = convergence_result.get("round", 0)
 
-    # Build findings summary from state
+    # Build findings summary
     findings = state.get("findings", [])
-    findings_lines: list[str] = []
+    findings_lines = []
     for f in findings:
         sev = f.get("severity", "?")
-        file = f.get("file", "?")
-        desc = f.get("description", "")[:60]
-        findings_lines.append(f"  [{sev}] {file}: {desc}")
+        file_ = f.get("file", "?")
+        desc = (f.get("description") or "")[:60]
+        findings_lines.append(f"  [{sev}] {file_}: {desc}")
     findings_text = "\n".join(findings_lines) if findings_lines else "  (none)"
 
     summary = (
-        f"Конвергенция: {decision}\n"
+        f"🔍 **Конвергенция: {decision}**\n"
         f"Раунд: {round_num}  |  "
         f"P0: {p0}  P1: {p1}  P2: {p2}\n"
         f"{reason}\n\n"
-        f"Findings:\n{findings_text}"
+        f"**Findings:**\n{findings_text}"
     )
 
-    comment(task_id, summary)
+    comment(parent_id, summary)
 
     if decision == "converged":
         metadata = {
             "decision": "converged",
             "round": round_num,
-            "p0": p0,
-            "p1": p1,
-            "p2": p2,
+            "p0": p0, "p1": p1, "p2": p2,
         }
-        complete(task_id, result_summary=reason, metadata=metadata)
+        complete(parent_id, result_summary=reason, metadata=metadata)
+        # Close all child tasks too
+        for agent, tid in task_ids.items():
+            complete(tid, result_summary=f"✅ @{agent} done")
 
     elif decision == "stuck":
-        block_task(
-            task_id,
-            reason=f"Stuck after round {round_num}: {reason}",
-            kind="needs_input",
-        )
+        block_task(parent_id,
+                   reason=f"Stuck after round {round_num}: {reason}",
+                   kind="needs_input")
 
     elif decision == "maxed_out":
         metadata = {
             "decision": "maxed_out",
             "round": round_num,
-            "p0": p0,
-            "p1": p1,
-            "p2": p2,
+            "p0": p0, "p1": p1, "p2": p2,
         }
-        complete(
-            task_id,
-            result_summary=f"Maxed out: {reason}",
-            metadata=metadata,
-        )
+        complete(parent_id,
+                 result_summary=f"Maxed out: {reason}",
+                 metadata=metadata)
+
+    elif decision == "continue":
+        # Unblock @coder for next round
+        coder_id = task_ids.get("coder")
+        if coder_id:
+            unblock(coder_id)
+            comment(parent_id,
+                    f"🔄 Раунд {round_num}: @coder перезапущен "
+                    f"({len(findings)} findings)")
 
 
 def on_clear(state: dict) -> None:
-    """Close kanban task on pipeline clear (abort / cancel)."""
-    task_id = state.get("kanban_task_id")
-    if not task_id:
-        return
-    comment(task_id, "🧹 Пайплайн очищен (отмена/сброс)")
-    complete(task_id, result_summary="Cancelled")
+    """Close kanban tasks on pipeline clear (abort/cancel)."""
+    parent_id = state.get("kanban_parent_id")
+    task_ids = state.get("kanban_task_ids", {})
+    if parent_id:
+        comment(parent_id, "🧹 Пайплайн очищен (отмена/сброс)")
+        complete(parent_id, result_summary="Cancelled")
+    for tid in task_ids.values():
+        complete(tid, result_summary="Cancelled")
+
+
+# ── Resume from board ───────────────────────────────────────────────────────┘
+
+
+def scan_board() -> dict | None:
+    """Scan the pipeline board for an active pipeline run.
+
+    Returns state dict reconstructed from kanban tasks, or None if idle.
+
+    Finds: parent tasks with status = running/todo (not done/blocked).
+    """
+    tasks = list_tasks(status="running")
+    if not tasks:
+        tasks = list_tasks(status="todo")
+
+    if not tasks:
+        return None
+
+    # Find the first non-completed parent
+    for t in tasks:
+        if t.get("status") in ("running", "todo", "blocked", "stuck",
+                                "needs_input"):
+            parent_id = t.get("id")
+            if not parent_id:
+                continue
+            detail = show_task(parent_id)
+            if not detail:
+                continue
+
+            # Reconstruct state from parent + children
+            title = t.get("title", "")
+            body = t.get("body", "")
+            children = detail.get("children", [])
+
+            # Find which child is ready/todo
+            current_idx = -1
+            completed = []
+            pipeline = []
+            task_ids = {}
+            for child in children:
+                cid = child.get("id", "")
+                ctitle = child.get("title", "")
+                cstatus = child.get("status", "")
+                agent = ""
+                if ctitle.startswith("@"):
+                    agent = ctitle.split(":")[0].lstrip("@").split()[0]
+                if agent:
+                    task_ids[agent] = cid
+                    pipeline.append(agent)
+                if cstatus == "done":
+                    completed.append(agent)
+                elif cstatus in ("ready", "todo", "running"):
+                    current_idx = pipeline.index(agent) if agent in pipeline else -1
+
+            # Extract category from body
+            category = ""
+            for line in body.split("\n"):
+                if line.startswith("Категория:"):
+                    category = line.split(":", 1)[1].strip()
+
+            state = {
+                "request": body.split("Запрос: ", 1)[1] if "Запрос: " in body else title,
+                "category": category,
+                "pipeline": pipeline,
+                "current_idx": current_idx if current_idx >= 0 else 0,
+                "completed": completed,
+                "status": t.get("status", "running"),
+                "kanban_parent_id": parent_id,
+                "kanban_task_ids": task_ids,
+                "round": 0,
+                "findings": [],
+            }
+            return state
+
+    return None
