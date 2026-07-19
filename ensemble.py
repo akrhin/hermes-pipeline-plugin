@@ -172,7 +172,9 @@ def judge_candidates(request: str, candidates: list[dict],
             "judge_model": judge_cfg.get("model", "deepseek-v4-flash"),
         }
 
-    return {"winner_id": candidates[0]["id"], "rationale": "Unknown mode, picked first", "mode": "fallback"}
+    return {"winner_id": candidates[0]["id"],
+            "rationale": "Unknown mode, picked first",
+            "mode": "fallback"}
 
 
 def build_judge_call_args(prompt: str, config: dict) -> dict:
