@@ -22,6 +22,17 @@ import logging
 import subprocess
 from typing import Any
 
+try:
+    from .ensemble import (
+        generate_candidates as ensemble_gen_candidates,
+        judge_candidates as ensemble_judge_candidates,
+    )
+except ImportError:
+    from ensemble import (  # noqa: F811
+        generate_candidates as ensemble_gen_candidates,
+        judge_candidates as ensemble_judge_candidates,
+    )
+
 logger = logging.getLogger(__name__)
 
 BOARD = "pipeline"
@@ -573,8 +584,7 @@ def generate_candidates(state: dict, agent_id: str, n: int = 5) -> list[dict]:
     """Generate N candidate variations for ensemble execution.
     Delegates to ensemble.py for full implementation.
     """
-    from .ensemble import generate_candidates as _gen
-    return _gen(state, agent_id, n)
+    return ensemble_gen_candidates(state, agent_id, n)
 
 
 def judge_candidates(request: str, candidates: list[dict],
@@ -583,8 +593,7 @@ def judge_candidates(request: str, candidates: list[dict],
     """Select the best candidate from N results.
     Delegates to ensemble.py for full implementation.
     """
-    from .ensemble import judge_candidates as _judge
-    return _judge(request, candidates, judge_mode, judge_config)
+    return ensemble_judge_candidates(request, candidates, judge_mode, judge_config)
 
 
 def create_ensemble_subtasks(state: dict, agent_id: str, candidates: list[dict]) -> dict:

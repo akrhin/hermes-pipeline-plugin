@@ -37,6 +37,21 @@ if PLUGIN_DIR not in sys.path:
 import classify
 import kanban as kb
 
+try:
+    from .ensemble import (
+        generate_candidates as ensemble_generate_candidates,
+        judge_candidates as ensemble_judge_candidates,
+        should_use_ensemble,
+        read_ensemble_config,
+    )
+except ImportError:
+    from ensemble import (  # noqa: F811
+        generate_candidates as ensemble_generate_candidates,
+        judge_candidates as ensemble_judge_candidates,
+        should_use_ensemble,
+        read_ensemble_config,
+    )
+
 # ── Tool schemas ──────────────────────────────────────────────────────────────
 
 CLASSIFY_SCHEMA = {
@@ -583,7 +598,6 @@ def handle_ensemble_run(args, **kwargs):
         n = args.get("n", 5)
 
         # Check if ensemble should be used
-        from .ensemble import should_use_ensemble, generate_candidates
         if not should_use_ensemble(state, agent_id):
             return json.dumps({
                 "agent_id": agent_id,
@@ -594,7 +608,7 @@ def handle_ensemble_run(args, **kwargs):
                                 "temperature": 0.7, "instruction_extra": "Single pass"}],
             }, ensure_ascii=False)
 
-        candidates = generate_candidates(state, agent_id, n)
+        candidates = ensemble_generate_candidates(state, agent_id, n)
 
         # Create kanban sub-tasks for visibility
         kb.create_ensemble_subtasks(state, agent_id, candidates)
@@ -620,9 +634,8 @@ def handle_ensemble_judge(args, **kwargs):
         candidates = args["candidates"]
         judge_mode = args.get("judge_mode", "deterministic")
 
-        from .ensemble import judge_candidates, read_ensemble_config
         config = read_ensemble_config()
-        result = judge_candidates(request, candidates, judge_mode, config)
+        result = ensemble_judge_candidates(request, candidates, judge_mode, config)
 
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
