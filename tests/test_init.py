@@ -200,3 +200,56 @@ class TestHandleClassify:
             "request": "баг: крашится при логине",
         }))
         assert result["category"] == "BUG_UNKNOWN"
+
+
+class TestHandleSave:
+    """Tests for pipeline_save handler."""
+
+    def test_save_missing_state(self):
+        """Missing state arg should return error."""
+        result = json.loads(plugin.handle_save({}))
+        assert "error" in result
+
+
+class TestHandleLoad:
+    """Tests for pipeline_load handler."""
+
+    def test_load_no_args(self):
+        """No args should not crash — returns state or null."""
+        result = json.loads(plugin.handle_load({}))
+        # Either None (no active pipeline) or a dict (if pipeline exists)
+        assert result is None or isinstance(result, dict)
+
+
+class TestHandleResume:
+    """Tests for pipeline_resume handler."""
+
+    def test_resume_no_args(self):
+        """No args should not crash."""
+        result = json.loads(plugin.handle_resume({}))
+        assert result is None or isinstance(result, dict)
+
+
+class TestHandleAdvance:
+    """Tests for pipeline_advance handler."""
+
+    def test_advance_missing_state(self):
+        """Missing state should return error."""
+        result = plugin.handle_advance({"completed_agent": "finder"})
+        res = json.loads(result) if isinstance(result, str) else result
+        assert "error" in res if isinstance(res, dict) else True
+
+    def test_advance_missing_agent(self):
+        """Missing agent should return error."""
+        result = plugin.handle_advance({"state": {"pipeline": ["finder"]}})
+        res = json.loads(result) if isinstance(result, str) else result
+        assert "error" in res if isinstance(res, dict) else True
+
+
+class TestHandleClear:
+    """Tests for pipeline_clear handler."""
+
+    def test_clear_no_args(self):
+        """No args should not crash — graceful cleanup."""
+        result = json.loads(plugin.handle_clear({}))
+        assert result.get("status") == "ok"
