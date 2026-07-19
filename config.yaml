@@ -13,8 +13,6 @@ pipeline:
         model: openrouter/free
     # agents — точечное переопределение (высший приоритет)
     agents:
-      security:                       # только security оставить Pro
-        model: deepseek-v4-pro
-      coder:                          # coder тоже на Pro
+      coder:                          # coder на delegate + flash
         provider: delegate
         model: deepseek-v4-flash

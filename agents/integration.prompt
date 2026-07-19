@@ -8,7 +8,14 @@
 Категория: {category}
 
 ### Full context
-{full_context}
+### Integration context
+{implementation_context}
+
+### Documentation context
+{documentation_context}
+
+### Infrastructure context
+{infrastructure_context}
 
 ## Что ты проверяешь
 

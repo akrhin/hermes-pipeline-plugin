@@ -318,6 +318,73 @@ def handle_advance(args, **kwargs):
         return json.dumps({"error": str(e)}, ensure_ascii=False)
 
 
+# ── Agent context sections: какие секции контекста нужны каждому агенту ──
+# Вместо полного контекста передаём только релевантные секции.
+# full_context убран — integration.prompt переписан на конкретные секции.
+AGENT_CONTEXT_FIELDS = {
+    "finder":       ["research"],
+    "analyst":      ["research"],
+    "researcher":   ["research"],
+    "architect":    ["research", "planning"],
+    "planner":      ["planning", "infrastructure"],
+    "coder":        ["implementation", "planning"],
+    "editor":       ["implementation", "planning"],
+    "fixer":        ["implementation"],
+    "refactorer":   ["implementation"],
+    "reviewer":     ["implementation", "research"],
+    "security":     ["implementation", "research"],
+    "integration":  ["implementation", "documentation", "infrastructure"],
+    "tester":       ["implementation"],
+    "debugger":     ["implementation"],
+    "documenter":   ["implementation", "documentation"],
+    "devops":       ["infrastructure"],
+    "optimizer":    ["implementation"],
+}
+
+
+def _build_agent_prompt(agent_id: str, context: dict, request: str, category: str) -> dict:
+    """Build a prompt for an agent, including only the context sections it needs."""
+    import os
+
+    agent_id = os.path.basename(agent_id)
+    prompt_path = os.path.join(PLUGIN_DIR, "agents", f"{agent_id}.prompt")
+    resolved = os.path.realpath(prompt_path)
+    agents_dir = os.path.realpath(os.path.join(PLUGIN_DIR, "agents"))
+    if not resolved.startswith(agents_dir):
+        return {"error": f"Unknown agent: {agent_id}"}
+
+    with open(resolved, "r", encoding="utf-8") as f:
+        template = f.read()
+
+    request_esc = request.replace("{", "{{").replace("}", "}}")
+    category_esc = category.replace("{", "{{").replace("}", "}}")
+
+    # Build only the context sections this agent actually needs
+    # Unknown agents (not in AGENT_CONTEXT_FIELDS) get all sections for backward compat
+    fields = AGENT_CONTEXT_FIELDS.get(agent_id)
+    if fields is None:
+        # Fallback: render all 6 context sections + full_context for unknown agents
+        fields = ["research", "planning", "implementation", "quality", "documentation", "infrastructure",
+                   "full_context"]
+
+    format_kwargs = {
+        "request": request_esc,
+        "category": category_esc,
+    }
+    for field in fields:
+        if field == "full_context":
+            format_kwargs["full_context"] = json.dumps(context, ensure_ascii=False, indent=2)
+        else:
+            field_name = f"{field}_context"
+            format_kwargs[field_name] = json.dumps(context.get(field, {}), ensure_ascii=False, indent=2)
+
+    try:
+        formatted = template.format(**format_kwargs)
+        return {"prompt": formatted}
+    except KeyError as e:
+        return {"error": f"Missing placeholder in prompt: {e}"}
+
+
 def handle_prompt(args, **kwargs):
     try:
         agent_id = args["agent_id"]
@@ -325,32 +392,10 @@ def handle_prompt(args, **kwargs):
         request = args.get("request", "")
         category = args.get("category", "")
 
-        agent_id = os.path.basename(agent_id)
-        prompt_path = os.path.join(PLUGIN_DIR, "agents", f"{agent_id}.prompt")
-        resolved = os.path.realpath(prompt_path)
-        agents_dir = os.path.realpath(os.path.join(PLUGIN_DIR, "agents"))
-        if not resolved.startswith(agents_dir):
-            return json.dumps({"error": f"Unknown agent: {agent_id}"})
-
-        with open(resolved, "r", encoding="utf-8") as f:
-            template = f.read()
-
-        request_esc = request.replace("{", "{{").replace("}", "}}")
-        category_esc = category.replace("{", "{{").replace("}", "}}")
-
-        formatted = template.format(
-            request=request_esc,
-            category=category_esc,
-            research_context=json.dumps(context.get("research", {}), ensure_ascii=False, indent=2),
-            planning_context=json.dumps(context.get("planning", {}), ensure_ascii=False, indent=2),
-            implementation_context=json.dumps(context.get("implementation", {}), ensure_ascii=False, indent=2),
-            quality_context=json.dumps(context.get("quality", {}), ensure_ascii=False, indent=2),
-            documentation_context=json.dumps(context.get("documentation", {}), ensure_ascii=False, indent=2),
-            infrastructure_context=json.dumps(context.get("infrastructure", {}), ensure_ascii=False, indent=2),
-            full_context=json.dumps(context, ensure_ascii=False, indent=2),
-        )
-
-        return json.dumps({"prompt": formatted}, ensure_ascii=False)
+        result = _build_agent_prompt(agent_id, context, request, category)
+        if "error" in result:
+            return json.dumps(result)
+        return json.dumps(result, ensure_ascii=False)
     except KeyError as e:
         return json.dumps({"error": f"Missing placeholder: {e}"})
     except Exception as e:
@@ -430,30 +475,11 @@ def handle_run_agent(args, **kwargs):
         request = state.get("request", "")
         category = state.get("category", "")
 
-        # 5. Build prompt from template (same logic as handle_prompt)
-        prompt_path = os.path.join(PLUGIN_DIR, "agents", f"{agent_id}.prompt")
-        resolved = os.path.realpath(prompt_path)
-        agents_dir = os.path.realpath(os.path.join(PLUGIN_DIR, "agents"))
-        if not resolved.startswith(agents_dir):
-            return json.dumps({"error": f"Prompt template not found: agents/{agent_id}.prompt"})
-
-        with open(resolved, "r", encoding="utf-8") as f:
-            template = f.read()
-
-        request_esc = request.replace("{", "{{").replace("}", "}}")
-        category_esc = category.replace("{", "{{").replace("}", "}}")
-
-        prompt = template.format(
-            request=request_esc,
-            category=category_esc,
-            research_context=json.dumps(ctx.get("research", {}), ensure_ascii=False, indent=2),
-            planning_context=json.dumps(ctx.get("planning", {}), ensure_ascii=False, indent=2),
-            implementation_context=json.dumps(ctx.get("implementation", {}), ensure_ascii=False, indent=2),
-            quality_context=json.dumps(ctx.get("quality", {}), ensure_ascii=False, indent=2),
-            documentation_context=json.dumps(ctx.get("documentation", {}), ensure_ascii=False, indent=2),
-            infrastructure_context=json.dumps(ctx.get("infrastructure", {}), ensure_ascii=False, indent=2),
-            full_context=json.dumps(ctx, ensure_ascii=False, indent=2),
-        )
+        # 5. Build prompt via shared function (selective context, no full_context)
+        prompt_result = _build_agent_prompt(agent_id, ctx, request, category)
+        if "error" in prompt_result:
+            return json.dumps(prompt_result)
+        prompt = prompt_result["prompt"]
 
         # 6. Build call_args for delegation agents
         call_args = {
