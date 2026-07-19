@@ -570,54 +570,44 @@ def get_agent_context(state: dict, agent_id: str) -> dict:
 
 
 def generate_candidates(state: dict, agent_id: str, n: int = 5) -> list[dict]:
-    """Prepare N candidate variation packages for parallel execution.
-
-    Each candidate gets the same task but with different temperature
-    and instruction_extra for diversity. Uses AGENT_CONTEXT_FIELDS
-    for selective context per agent.
+    """Generate N candidate variations for ensemble execution.
+    Delegates to ensemble.py for full implementation.
     """
-    task = state.get("request", "")
-    ctx = state.get("context", {})
-    category = state.get("category", "")
-
-    variations = [
-        {"temperature": 0.3, "instruction_extra": "Будь консервативен. Минимальные изменения."},
-        {"temperature": 0.5, "instruction_extra": "Пиши чистый код с комментариями и type hints."},
-        {"temperature": 0.7, "instruction_extra": "Стандартный production-подход."},
-        {"temperature": 0.9, "instruction_extra": "Полное решение с тестами и обработкой ошибок."},
-        {"temperature": 1.1, "instruction_extra": "Нестандартный подход, креативное решение."},
-    ]
-
-    candidates = []
-    for i in range(min(n, len(variations))):
-        var = variations[i]
-        prompt = f"{task}\n\n{var['instruction_extra']}"
-        candidates.append({
-            "id": f"candidate_{i+1}",
-            "task": prompt,
-            "temperature": var["temperature"],
-            "instruction_extra": var["instruction_extra"],
-        })
-    return candidates
+    from .ensemble import generate_candidates as _gen
+    return _gen(state, agent_id, n)
 
 
-def judge_candidates(request: str, candidates: list[dict]) -> dict:
-    """Select the best candidate using deterministic heuristics.
-
-    Returns the winner candidate id and reasoning.
-    For MVP: picks the candidate with most balanced metrics.
-    For production: delegates to LLM Judge.
+def judge_candidates(request: str, candidates: list[dict],
+                     judge_mode: str = "deterministic",
+                     judge_config: dict | None = None) -> dict:
+    """Select the best candidate from N results.
+    Delegates to ensemble.py for full implementation.
     """
-    if not candidates:
-        return {"winner_id": None, "rationale": "No candidates"}
+    from .ensemble import judge_candidates as _judge
+    return _judge(request, candidates, judge_mode, judge_config)
 
-    # Deterministic judge: prefer middle temperature (balanced approach)
-    balanced_idx = len(candidates) // 2  # middle candidate
-    winner = candidates[balanced_idx]
 
-    return {
-        "winner_id": winner["id"],
-        "rationale": f"Selected {winner['id']} (T={winner['temperature']}) — "
-                     f"{winner['instruction_extra']}",
-        "temperature": winner["temperature"],
-    }
+def create_ensemble_subtasks(state: dict, agent_id: str, candidates: list[dict]) -> dict:
+    """Create N sub-tasks on the kanban board under the parent task."""
+    parent_id = state.get("kanban_parent_id")
+    task_ids = state.get("kanban_task_ids", {}).copy()
+    if not parent_id:
+        return state
+
+    request = state.get("request", "Ensemble")
+
+    # Create a sub-task marker: agent_id+"/ensemble" under the main agent
+    ensemble_task_ids = {}
+    for c in candidates:
+        cid = c["id"]
+        c_title = f"  {cid}: {request[:40]}"
+        c_body = f"Ensemble candidate: {cid}\nT={c['temperature']}\n{c['instruction_extra']}"
+        child = create_child(c_title, parent_id, body=c_body)
+        if child:
+            ensemble_task_ids[cid] = child
+
+    agent_ensemble_key = f"{agent_id}/ensemble"
+    task_ids[agent_ensemble_key] = ensemble_task_ids
+    state["kanban_task_ids"] = task_ids
+    state["ensemble_tasks"] = ensemble_task_ids
+    return state

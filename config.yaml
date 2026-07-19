@@ -1,4 +1,4 @@
-# Pipeline Plugin Config v2.2
+# Pipeline Plugin Config v3.0
 # Модели для агентов пайплайна.
 # Читается из ~/.hermes/plugins/pipeline/config.yaml
 # Приоритет: agents > defaults > BUILTIN_MODEL_MAP (models.py)
@@ -16,3 +16,27 @@ pipeline:
       coder:                          # coder на delegate + flash
         provider: delegate
         model: deepseek-v4-flash
+
+  # ── Best-of-N Ensemble configuration ──
+  ensemble:
+    enabled: true
+    default_n: 5
+    max_n: 10
+    agents:
+      coder:
+        enabled: true
+        n: 5
+        judge_mode: llm
+      planner:
+        enabled: false
+        n: 3
+        judge_mode: deterministic
+      tester:
+        enabled: false
+        n: 3
+        judge_mode: deterministic
+    judge:
+      model: deepseek-v4-flash
+      provider: polza
+    cost_optimization:
+      disable_on_round_gt: 1

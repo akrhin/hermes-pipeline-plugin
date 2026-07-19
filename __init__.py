@@ -572,15 +572,37 @@ def handle_run_agent(args, **kwargs):
 
 
 def handle_ensemble_run(args, **kwargs):
-    """Generate N candidate packages for ensemble execution."""
+    """Generate N candidate packages for ensemble execution.
+
+    Checks config: if ensemble disabled or round > max, returns single.
+    Creates kanban sub-tasks for each candidate.
+    """
     try:
         state = args["state"]
         agent_id = args["agent_id"]
         n = args.get("n", 5)
-        candidates = kb.generate_candidates(state, agent_id, n)
+
+        # Check if ensemble should be used
+        from .ensemble import should_use_ensemble, generate_candidates
+        if not should_use_ensemble(state, agent_id):
+            return json.dumps({
+                "agent_id": agent_id,
+                "n": 1,
+                "ensemble": False,
+                "reason": "Ensemble disabled for this agent/round",
+                "candidates": [{"id": "single", "task": state.get("request", ""),
+                                "temperature": 0.7, "instruction_extra": "Single pass"}],
+            }, ensure_ascii=False)
+
+        candidates = generate_candidates(state, agent_id, n)
+
+        # Create kanban sub-tasks for visibility
+        kb.create_ensemble_subtasks(state, agent_id, candidates)
+
         return json.dumps({
             "agent_id": agent_id,
             "n": len(candidates),
+            "ensemble": True,
             "candidates": candidates,
         }, ensure_ascii=False)
     except Exception as e:
@@ -588,11 +610,20 @@ def handle_ensemble_run(args, **kwargs):
 
 
 def handle_ensemble_judge(args, **kwargs):
-    """Evaluate candidates and select best one."""
+    """Evaluate candidates and select best one.
+
+    If mode=llm and judge_prompt available, orchestrator runs delegate_task
+    with the built prompt. Otherwise uses deterministic fallback.
+    """
     try:
         request = args["request"]
         candidates = args["candidates"]
-        result = kb.judge_candidates(request, candidates)
+        judge_mode = args.get("judge_mode", "deterministic")
+
+        from .ensemble import judge_candidates, read_ensemble_config
+        config = read_ensemble_config()
+        result = judge_candidates(request, candidates, judge_mode, config)
+
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
