@@ -1,4 +1,4 @@
-# AGENTS.md — Pipeline Plugin (v2.2, Kanban-native)
+# AGENTS.md — Pipeline Plugin (v3.1, Kanban-native)
 
 ## What This Is
 
@@ -16,12 +16,12 @@ hermes plugins enable pipeline
 
 ## How It Works
 
-Плагин регистрирует **10 инструментов**. Состояние — в kanban.board:
+Плагин регистрирует **12 инструментов**. Состояние — в kanban.board:
 - Parent task «🔷 Пайплайн: ...» с дочерними тасками для каждого агента
 - Статус агента: `ready` → `running` → `done`
 - `promote` следующего агента при завершении предыдущего
 
-## Tools (v2.2)
+## Tools (v3.1)
 
 | Tool | Purpose |
 |------|---------|
@@ -35,6 +35,8 @@ hermes plugins enable pipeline
 | `agent_prompt(agent_id, context)` | Build agent prompt from template |
 | `agent_model(agent_id)` | Get provider + model for agent |
 | `pipeline_run_agent(state, agent_id, context?)` | Build delegation package — returns prompt, model routing, and directive |
+| `pipeline_ensemble_run(state, agent_id, n?)` | Generate N candidate packages for Best-of-N ensemble. Checks config (round ≤ max_round), creates kanban subtasks |
+| `pipeline_ensemble_judge(request, candidates, judge_mode?)` | Evaluate N candidates and select best one. Modes: deterministic (MVP middle pick) or llm (generates judge prompt for delegation) |
 
 ## Model Routing
 
@@ -187,14 +189,16 @@ BUILTIN_MODEL_MAP        ← низший (хардкод в models.py)
 
 | File | Purpose |
 |------|---------|
-| `plugin.yaml` | Manifest (v2.2.0, 10 tools) |
-| `__init__.py` | Plugin core: 10 tools + register (MODEL_MAP из models.py) |
+| `plugin.yaml` | Manifest (v3.1.1, 12 tools) |
+| `__init__.py` | Plugin core: 12 tools + register (MODEL_MAP из models.py) |
 | `models.py` | **v2.2** Model config loader: YAML → merge → MODEL_MAP |
-| `kanban.py` | Kanban API (create_tree, advance, converge, scan_board, resume) |
+| `kanban.py` | Kanban API (create_tree, advance, converge, scan_board, resume) + ensemble (generate_candidates, judge_candidates, create_ensemble_subtasks) |
+| `ensemble.py` | **NEW v3.0** Best-of-N ensemble core: generate_candidates (7 T-variations), judge_candidates (deterministic + LLM), should_use_ensemble, read_ensemble_config |
 | `classify.py` | Keyword-based request classification |
-| `agents/*.prompt` | Prompt templates for each agent |
-| `AGENTS.md` | This file (v2.2) |
-| `ARCHITECTURE.md` | Full architecture doc (v2.2) |
+| `agents/*.prompt` | Prompt templates for each agent + `judge.prompt` (LLM Judge) |
+| `AGENTS.md` | This file (v3.1) |
+| `ARCHITECTURE.md` | Full architecture doc (v2.1 — needs update) |
+| `config.yaml` | Pipeline config (models + ensemble section) |
 | `skill/pipeline-orchestrator/` | Orchestrator skill |
 
 ## v1.x → v2.0 Changes
