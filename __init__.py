@@ -4,7 +4,7 @@ Pipeline Plugin v2.0 — Kanban-native multi-agent orchestration.
 Variant C: state.json eliminated. kanban.db = single source of truth.
 Board `pipeline` stores the entire pipeline lifecycle as a task tree.
 
-Provides 8 tools:
+Provides 9 tools:
   - pipeline_classify: classify request → category + agent list
   - pipeline_convergence: evaluate convergence (deterministic, no LLM)
   - pipeline_save: create/update kanban task tree (idempotent)

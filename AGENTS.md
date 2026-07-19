@@ -52,7 +52,7 @@ hermes plugins enable pipeline
 
 | File | Purpose |
 |------|---------|
-| `plugin.yaml` | Manifest |
+| `plugin.yaml` | Manifest (v2.0.0, 9 tools) |
 | `__init__.py` | Plugin core: 9 tools + register |
 | `kanban.py` | Kanban API (create_tree, advance, converge, scan_board, resume) |
 | `classify.py` | Keyword-based request classification |
@@ -76,5 +76,6 @@ hermes plugins enable pipeline
 
 - Плагин не содержит логики пайплайна — её несёт скилл-оркестратор
 - После правки плагина нужен `hermes plugins reload` или рестарт сессии
-- `kanban--json` вывод парсится в `kanban.py` — если формат Hermes изменится, сломается
+- `kanban --json` парсится — если формат Hermes изменится, сломается
 - `scan_board()` работает только с доской `pipeline`
+- `--parent` в `create` не заполняет `parent_task_ids` в JSON, но `show` видит детей по `child_task_ids`

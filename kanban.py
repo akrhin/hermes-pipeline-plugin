@@ -453,6 +453,8 @@ def scan_board() -> dict | None:
     """
     tasks = list_tasks(status="running")
     if not tasks:
+        tasks = list_tasks(status="ready")
+    if not tasks:
         tasks = list_tasks(status="todo")
 
     if not tasks:
@@ -460,18 +462,17 @@ def scan_board() -> dict | None:
 
     # Find the first non-completed parent
     for t in tasks:
-        if t.get("status") in ("running", "todo", "blocked", "stuck",
+        if t.get("status") in ("running", "ready", "todo", "blocked", "stuck",
                                 "needs_input"):
             parent_id = t.get("id")
             if not parent_id:
                 continue
 
             # Get all tasks to find children of this parent
+            detail = show_task(parent_id)
+            child_ids = detail.get("children", [])
             all_tasks = list_tasks(include_archived=True)
-            children = [
-                c for c in all_tasks
-                if parent_id in (c.get("parent_task_ids") or [])
-            ]
+            children = [c for c in all_tasks if c.get("id") in child_ids]
 
             title = t.get("title", "")
             body = t.get("body", "")
@@ -487,12 +488,12 @@ def scan_board() -> dict | None:
                 if line.startswith("Категория:"):
                     category = line.split(":", 1)[1].strip()
 
-            # Find which child is ready/todo
+            # Find which child is ready/todo — use the FIRST one (lowest index)
             current_idx = -1
             completed = []
             pipeline = []
             task_ids = {}
-            for child in children:
+            for idx, child in enumerate(children):
                 cid = child.get("id", "")
                 ctitle = child.get("title", "")
                 cstatus = child.get("status", "")
@@ -504,7 +505,8 @@ def scan_board() -> dict | None:
                     pipeline.append(agent)
                 if cstatus == "done":
                     completed.append(agent)
-                elif cstatus in ("ready", "todo", "running"):
+                elif cstatus in ("ready", "todo", "running") and current_idx == -1:
+                    # First non-completed child determines current_idx
                     current_idx = pipeline.index(agent) if agent in pipeline else -1
 
             state = {

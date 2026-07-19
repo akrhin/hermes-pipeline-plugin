@@ -1,6 +1,6 @@
 name: pipeline
-version: 1.2.0
-description: "Multi-agent pipeline orchestrator. Classifies requests, builds pipelines, manages state, delegates to specialized agents. v1.2.0: @integration agent + Kanban."
+version: 2.0.0
+description: "Pipeline Plugin v2.0 Kanban-native. Variant C: kanban.db is single source of truth, state.json removed. 9 tools: classify, convergence, save, load, clear, resume, advance, prompt, model."
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify
@@ -8,5 +8,7 @@ provides_tools:
   - pipeline_save
   - pipeline_load
   - pipeline_clear
+  - pipeline_resume
+  - pipeline_advance
   - agent_prompt
   - agent_model
