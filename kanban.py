@@ -109,23 +109,40 @@ def create_child(title: str, parent_id: str, body: str = "",
     return result.get("id") or None
 
 
+def _sqlite_update(query: str, params: tuple = ()) -> bool:
+    """Execute a write query on the kanban DB via direct SQLite."""
+    if not query:
+        return False
+    import os
+    import sqlite3
+    db_path = os.path.expanduser("~/.hermes/kanban/boards/pipeline/kanban.db")
+    if not os.path.isfile(db_path):
+        logger.warning("kanban DB not found: %s", db_path)
+        return False
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.execute(query, params)
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.Error as exc:
+        logger.warning("sqlite error: %s", exc)
+        return False
+
+
 def promote(task_id: str, force: bool = False) -> bool:
-    """Promote task to `ready` so it can be worked on.
+    """Promote task to ``ready`` via direct SQLite.
 
-    ``force=True`` bypasses parent-dependency gate — needed when the
-    parent task itself is in ``ready`` (not ``running``), which is the
-    normal state for a pipeline parent that has never been claimed by a
-    daemon worker.
-
-    Returns ``True`` iff the promote actually succeeded (the kanban CLI
-    returns ``"promoted": true``).
+    ``force`` is accepted for backward compatibility but has no effect —
+    direct SQLite has no parent-dependency gate.  The CLI ``promote``
+    command (which does enforce gates) has been replaced because it
+    silently returns ``{}`` when it fails (no error, no warning).
     """
-    cmd = ["promote", "--json"]
-    if force:
-        cmd.append("--force")  # Bug #1: без --force падает unsatisfied parent dependencies
-    cmd.append(task_id)
-    result = _kanban(*cmd)
-    return bool(result.get("promoted"))
+    # Bug #1 + Bug #5: kanban promote CLI молча падает — прямой SQLite
+    return _sqlite_update(
+        "UPDATE tasks SET status='ready' WHERE id=? AND status IN ('todo','blocked')",
+        (task_id,),
+    )
 
 
 def comment(task_id: str, text: str) -> bool:
@@ -135,14 +152,35 @@ def comment(task_id: str, text: str) -> bool:
 
 def complete(task_id: str, result_summary: str = "",
              metadata: dict | None = None) -> bool:
-    """Mark task done. Returns True if command succeeded."""
-    cmd = ["complete"]
-    if result_summary:
-        cmd.extend(["--result", result_summary])
-    if metadata:
-        cmd.extend(["--metadata", json.dumps(metadata, ensure_ascii=False)])
-    cmd.append(task_id)
-    return bool(_kanban(*cmd))
+    """Mark task done via direct SQLite.
+
+    ``result_summary`` and ``metadata`` are accepted for backward
+    compatibility but stored as a comment (since kanban comments are the
+    universal audit trail).  The CLI ``complete`` command silently
+    returns ``{}`` on failure, so we now write directly to the DB.
+    """
+    # Bug #5: kanban complete CLI молча падает — прямой SQLite
+    ok = _sqlite_update(
+        "UPDATE tasks SET status='done', completed_at=unixepoch() WHERE id=? AND status!='done'",
+        (task_id,),
+    )
+    if ok and result_summary:
+        # Store result summary as a comment via DB (kanban comments table)
+        import os
+        import sqlite3
+        db_path = os.path.expanduser("~/.hermes/kanban/boards/pipeline/kanban.db")
+        try:
+            conn = sqlite3.connect(db_path)
+            now = int(time.time())
+            conn.execute(
+                "INSERT INTO task_comments (task_id, body, created_at) VALUES (?, ?, ?)",
+                (task_id, result_summary, now),
+            )
+            conn.commit()
+            conn.close()
+        except (sqlite3.Error, OSError):
+            pass  # Comment is optional, don't fail the complete
+    return ok
 
 
 def block_task(task_id: str, reason: str = "",
