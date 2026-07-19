@@ -122,7 +122,7 @@ def promote(task_id: str, force: bool = False) -> bool:
     """
     cmd = ["promote", "--json"]
     if force:
-        cmd.append("--force")
+        cmd.append("--force")  # Bug #1: без --force падает unsatisfied parent dependencies
     cmd.append(task_id)
     result = _kanban(*cmd)
     return bool(result.get("promoted"))
@@ -274,6 +274,7 @@ def _claim_and_assign(task_id: str, assignee: str) -> bool:
     ``last_heartbeat_at`` so the dashboard can show meaningful lifecycle
     metadata.
     """
+    # Bug #3: claim CLI молча не работает без daemon-воркера — используем прямой SQLite
     if not task_id or not assignee:
         return False
     import os
@@ -337,7 +338,7 @@ def advance(state: dict, completed_agent: str) -> dict:
         if next_id:
             # Pipeline lifecycle: promote(todo→ready) then claim(ready→running)
             promote(next_id, force=True)
-            _claim_and_assign(next_id, f"@{next_agent}")
+            _claim_and_assign(next_id, f"@{next_agent}")  # Bug #2: ранее claim не делался — started_at был пуст
             if parent_id:
                 comment(parent_id, f"👉 Начинается этап @{next_agent}")
             logger.info("promoted+claimed %s → running (assignee=%s)", next_agent, next_agent)
@@ -582,7 +583,7 @@ def scan_board() -> dict | None:
     or the session was reset before any agent ran).
     """
     # Garbage-collect stale pipelines before scanning
-    cleaned = _cleanup_stale_pipelines(max_age_hours=24)
+    cleaned = _cleanup_stale_pipelines(max_age_hours=24)  # Bug #4: мёртвые пайплайны накапливались
     if cleaned:
         logger.info("cleaned up %d stale pipeline(s) before scan", cleaned)
 
