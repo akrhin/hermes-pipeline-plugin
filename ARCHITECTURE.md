@@ -1,20 +1,18 @@
-# Pipeline Plugin — Architecture
+# Pipeline Plugin v2.0 — Architecture (Kanban-native)
 
 ## Purpose
 
 Плагин-оркестратор для Hermes Agent, реализующий multi-agent пайплайны с quality gates.
-Задача: автоматизировать сложные задачи (новые фичи, багфиксы, рефакторинг) через
-последовательность специализированных агентов с разными моделями.
+**Variant C:** `state.json` удалён. `kanban.db` — единое состояние.
+После рестарта: `pipeline_resume()` сканирует доску.
 
 ## Key Design Decisions
 
-1. **Плагин, не MCP-сервер** — работает in-process с доступом к Hermes API и состоянию.
-2. **Нет команд** — пайплайн запускается не по команде, а по анализу сообщения агентом.
-3. **Состояние на диске** — JSON-файл для возобновления после перезапуска сессии.
-4. **Три уровня моделей** — Flash для быстрых задач, Pro (через delegation) для точных,
-   OpenRouter free для редких и нетяжёлых.
-5. **Я — оркестратор** — плагин только даёт инструменты (классификация, промпты, модель,
-   состояние). Логику пайплайна и вызовы делаю я, а не плагин.
+1. **Плагин, не MCP-сервер** — работает in-process с доступом к Hermes API и Kanban CLI.
+2. **Нет команд** — пайплайн запускается по анализу сообщения агентом.
+3. **Kanban.db = SSOT** — никакого `state.json`. Состояние живёт на доске `pipeline` в виде дерева задач.
+4. **Три уровня моделей** — Flash (прямо), Pro (через delegation), OpenRouter free.
+5. **Я — оркестратор** — плагин даёт инструменты, я шагаю по таскам на доске.
 
 ## Architecture
 
@@ -22,68 +20,104 @@
 ┌─ User ─────────────────────┐
 │ "добавь JWT аутентификацию" │
 └────────────┬────────────────┘
-             │ я анализирую ключевые слова
              ▼
-┌─ Agent (я, DeepSeek V4 Flash) ─────────────────────┐
-│                                                      │
-│  1. Распознаю триггер → вызываю pipeline_classify()  │
-│  2. Категоризирую → строю pipeline                   │
-│  3. checkpoint → спрашиваю тебя                      │
-│  4. Выполняю фазу:                                   │
-│     ├─ простые агенты → делаю сам (Flash)            │
-│     ├─ architect/reviewer/security → delegate_task    │
-│     │  (авто V4 Pro через твой delegation)           │
-│     └─ researcher → delegate_task с OpenRouter free  │
-│  5. Сохраняю состояние → pipeline_save()             │
-│  6. checkpoint → спрашиваю тебя                      │
-│  ...повторяю до конца пайплайна                      │
-│  7. Очищаю состояние → pipeline_clear()              │
-└──────────────────────────────────────────────────────┘
+┌─ Agent (я, DeepSeek V4 Flash) ───────────────────────┐
+│                                                        │
+│  1. Распознаю триггер → вызываю pipeline_classify()    │
+│  2. Категоризирую → строю pipeline                     │
+│  3. Создаю дерево задач на доске → pipeline_save()    │
+│     ├─ Parent: «🔷 Пайплайн: ...»                     │
+│     └─ Children: @finder, @analyst, ..., @documenter  │
+│  4. Цикл по агентам:                                  │
+│     ├─ pipeline_resume() → беру ready-таск             │
+│     ├─ выполняю агента                                 │
+│     └─ pipeline_advance(state, agent) → promote next  │
+│  5. Конвергенция: pipeline_convergence(state, findings)│
+│     ├─ continue → @coder разблокирован на след. раунд  │
+│     ├─ converged → parent complete                     │
+│     ├─ stuck → parent blocked (needs_input)            │
+│     └─ maxed_out → parent complete, escalation        │
+│  6. pipeline_clear() → закрыть все таски              │
+└────────────────────────────────────────────────────────┘
              │
              ▼
-┌─ Pipeline Plugin ─────────────────────────────────────┐
-│                                                        │
-│  pipeline_classify(request) → {category, pipeline[]}   │
-│  pipeline_save(state) → сохраняет state.json           │
-│  pipeline_load() → загружает state.json                │
-│  pipeline_clear() → удаляет state.json                 │
-│  agent_prompt(agent_id, context) → собирает промпт     │
-│  agent_model(agent_id) → {provider, model}             │
-│                                                        │
-│  ┌─── classify.py ────────────────────┐                │
-│  │  keyword-based категоризация       │                │
-│  │  8 категорий + pipelines           │                │
-│  └────────────────────────────────────┘                │
-│  ┌─── state.py ───────────────────────┐                │
-│  │  lifecycle: running / paused / done │                │
-│  │  expiry: 24h                       │                │
-│  └────────────────────────────────────┘                │
-│  ┌─── kanban.py ──────────────────────┐                │
-│  │  Автоматические хуки в Kanban      │                │
-│  │  ensure_task / on_convergence      │                │
-│  │  on_clear                          │                │
-│  └────────────────────────────────────┘                │
-│  ┌─── agents/ ────────────────────────┐                │
-│  │  architect.prompt                  │                │
-│  │  reviewer.prompt                   │                │
-│  │  security.prompt                   │                │
-│  │  researcher.prompt                 │                │
-│  └────────────────────────────────────┘                │
-└────────────────────────────────────────────────────────┘
+┌─ Pipeline Plugin (9 tools) ────────────────────────────┐
+│                                                          │
+│  pipeline_classify(request) → {category, pipeline[]}     │
+│  pipeline_save(state)      → создаётдерево на доске     │
+│  pipeline_load()           → scan_board()               │
+│  pipeline_resume()         → scan_board() (resume)      │
+│  pipeline_advance(s, a)    → mark done, promote next    │
+│  pipeline_clear()          → close all tasks            │
+│  pipeline_convergence(s,f) → evaluate + post to board   │
+│  agent_prompt(id, ctx)     → build prompt from template │
+│  agent_model(id)           → {provider, model}          │
+│                                                          │
+│  ┌─── classify.py ───────────────────┐                  │
+│  │  keyword-based категоризация       │                  │
+│  │  8 категорий + pipelines           │                  │
+│  └────────────────────────────────────┘                  │
+│  ┌─── kanban.py ──────────────────────┐                  │
+│  │  create_task_tree                  │                  │
+│  │  advance / evaluate_convergence    │                  │
+│  │  on_convergence / on_clear         │                  │
+│  │  scan_board / show_task / list     │                  │
+│  └────────────────────────────────────┘                  │
+│  ┌─── agents/ ────────────────────────┐                  │
+│  │  architect.prompt / reviewer.prompt │                  │
+│  │  security.prompt / researcher.prompt│                  │
+│  │  integration.prompt                │                  │
+│  └────────────────────────────────────┘                  │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ## Pipeline Definitions
 
 | Category | Pipeline |
 |----------|----------|
-| FEATURE | finder → analyst → architect → planner → coder → reviewer → tester → documenter |
-| SECURITY_RELATED | finder → analyst → researcher → architect → planner → coder → reviewer → security → tester → documenter |
+| FEATURE | finder → analyst → architect → planner → coder → reviewer → **integration** → tester → documenter |
+| SECURITY_RELATED | finder → analyst → researcher → architect → planner → coder → reviewer → security → **integration** → tester → documenter |
 | BUG_UNKNOWN | finder → debugger → fixer → reviewer → tester |
 | BUG_KNOWN | finder → fixer → reviewer → tester |
-| REFACTORING | finder → analyst → refactorer → reviewer → tester |
+| REFACTORING | finder → analyst → refactorer → reviewer → **integration** → tester |
 | PERFORMANCE | finder → analyst → optimizer → reviewer → tester |
 | INFRASTRUCTURE | finder → devops → (reviewer → tester if testable) |
 | DOCUMENTATION | finder → documenter → (reviewer optional) |
+
+## Kanban Task Tree
+
+```
+Parent: "🔷 Пайплайн: <request>"  [status: ready]
+  ├── @finder: <request>          [status: ready → done]
+  ├── @analyst: <request>         [status: todo → ready → done]
+  ├── @researcher: <request>
+  ├── @architect: <request>
+  ├── @planner: <request>
+  ├── @coder: <request>
+  ├── @reviewer: <request>
+  ├── @security: <request>
+  ├── @integration: <request>
+  ├── @tester: <request>
+  └── @documenter: <request>      [status: todo]
+```
+
+Только один child в статусе `ready` в любой момент времени.
+`pipeline_advance()` вызывает `promote` для следующего.
+При конвергенции: findings → comment на parent. Converged → parent complete, все children close.
+
+## Resume после restart
+
+```python
+state = pipeline_resume()  # scan_board()
+if state:
+    # Найден активный пайплайн:
+    #   request, category, pipeline (11 agents),
+    #   current_idx (кто ready), completed (кто done),
+    #   kanban_parent_id, kanban_task_ids
+    continue_pipeline(state)
+else:
+    # Доска пуста — работаем дальше
+```
 
 ## Model Routing
 
@@ -93,105 +127,61 @@
 | @coder, @editor, @fixer, @refactorer | Я напрямую | DeepSeek V4 Flash |
 | @tester, @debugger | Я напрямую | DeepSeek V4 Flash |
 | @documenter, @devops, @optimizer | Я напрямую | DeepSeek V4 Flash |
-| @architect | delegate_task | DeepSeek V4 Pro (твой delegation) |
+| @architect | delegate_task | DeepSeek V4 Pro (delegation) |
 | @reviewer | delegate_task | DeepSeek V4 Pro |
 | @security | delegate_task | DeepSeek V4 Pro |
-| @researcher | delegate_task | OpenRouter free (openrouter/free) |
+| @integration | delegate_task | DeepSeek V4 Pro |
+| @researcher | delegate_task | OpenRouter free |
 | @commenter | delegate_task | OpenRouter free |
 
-## State Schema
+## Convergence (deterministic, no LLM)
 
-Хранится в `~/.hermes/plugins/pipeline/state.json`:
+Алгоритм в `kanban.py` (бывший `state.py`):
 
-```
-{
-  "request": "string",
-  "category": "string",
-  "pipeline": ["finder", ...],
-  "current_idx": 0,
-  "completed": ["finder"],
-  "context": {
-    "research": { ... },
-    "planning": { ... },
-    "implementation": { ... },
-    "quality": { ... },
-    "documentation": { ... }
-  },
-  "checkpoints": {
-    "research_approved": bool | null,
-    "plan_approved": bool | null,
-    "implementation_approved": bool | null
-  },
-  "created_at": "ISO",
-  "updated_at": "ISO",
-  "status": "running" | "paused" | "done"
-}
-```
-
-## Kanban Integration (v1.2.0)
-
-Автоматическая публикация прогресса пайплайна на Hermes Kanban-доску `pipeline`:
-
-| Хук | Функция kanban.py | Действие |
-|-----|------------------|----------|
-| `pipeline_save` (первый вызов) | `ensure_task()` | `hermes kanban create` с idempotency-key |
-| `pipeline_convergence` (с findings) | `on_convergence(continue)` | `hermes kanban comment` с P0/P1/P2 |
-| `pipeline_convergence` (converged) | `on_convergence(converged)` | `hermes kanban complete` |
-| `pipeline_convergence` (stuck) | `on_convergence(stuck)` | `hermes kanban block` |
-| `pipeline_convergence` (maxed_out) | `on_convergence(maxed_out)` | `hermes kanban complete` |
-| `pipeline_clear` | `on_clear()` | `hermes kanban complete` (Cancelled) |
-
-Состояние: `state.json` хранит `kanban_task_id`. Idempotency-key = `pipe:{created_at}`.
-Никаких внешних сервисов — всё внутри Hermes, через subprocess к `hermes kanban --board pipeline`.
-
-## Quality Gates
-
-- **@reviewer** — после любого изменения кода. Если FAIL → revision loop до 3
-- **@tester** — после любого изменения кода. Если FAIL → @fixer → retest
-- **@security** — для SECURITY_RELATED. Если FAIL → STOP, показать пользователю
-- Revision loop: максимум 3 итерации, потом escalation к пользователю
+1. **findings** = массив `{severity, file, category, description}`
+2. **P0 + P1 = 0** → `converged`
+3. **round >= max_rounds (3) и P0/P1 есть** → `maxed_out`
+4. **Тот же fingerprint P0/P1 что в прошлом раунде** → `stuck`
+5. **Иначе** → `continue`
 
 ## Files
 
 ```
 hermes-pipeline-plugin/
-├── ARCHITECTURE.md            ← этот файл
-├── AGENTS.md                  ← инструкции для агентов
+├── ARCHITECTURE.md            ← этот файл (v2.0)
+├── AGENTS.md                  ← инструкции для агентов (v2.0)
 ├── README.md                  ← общее описание
-├── plugin.yaml                ← манифест плагина Hermes
-├── __init__.py                ← ядро плагина
-├── classify.py                ← классификация запросов
-├── kanban.py                  ← автоматическая Kanban-интеграция (v1.2.0)
-├── state.py                   ← управление состоянием
+├── plugin.yaml                ← манифест v2.0.0 (9 tools)
+├── __init__.py                ← ядро: 9 хендлеров + регистрация
+├── classify.py                ← классификация (8 категорий)
+├── kanban.py                  ← Kanban API: tree, advance, converge, scan, resume
 ├── LICENSE                    ← MIT
 ├── pyproject.toml             ← ruff config + build system
-├── .github/
-│   └── workflows/
-│       └── test.yml           ← CI (ruff + bandit + pytest)
+├── .github/workflows/test.yml ← CI (ruff + bandit + pytest)
 ├── agents/
 │   ├── architect.prompt
 │   ├── reviewer.prompt
 │   ├── security.prompt
+│   ├── integration.prompt
 │   └── researcher.prompt
 ├── tests/
-│   ├── test_classify.py
-│   ├── test_init.py
-│   └── test_state.py
+│   ├── test_classify.py           (21 тестов)
+│   ├── test_init.py               (17 тестов)
+│   └── test_kanban_convergence.py (12 тестов)
 ├── skill/
 │   └── pipeline-orchestrator/
-│       ├── SKILL.md                    ← оркестратор (checkpoints, revision loops)
+│       ├── SKILL.md               ← оркестратор (checkpoints, revision loops)
 │       ├── references/
-│       │   ├── go-security-tools.md    ← установка gosec/gitleaks
-│       │   └── pipeline_lessons.md     ← реальные gotcha
+│       │   ├── go-security-tools.md
+│       │   └── pipeline_lessons.md
 │       └── scripts/
-│           └── go-quality-gates.sh     ← скрипт проверки качества
-└── state.json                 ← runtime state (gitignored)
+│           └── go-quality-gates.sh
 ```
 
-## Изменения
+## Изменения (v1.x → v2.0)
 
 | Дата | Что |
 |------|-----|
-| 2026-07-18 | Начальная архитектура |
-| 2026-07-18 | Security audit: path traversal fix, state error handling |
-| 2026-07-18 | Full refactoring + documentation + public release |
+| 2026-07-18 | Начальная архитектура (v1.0.0, 7 tools, state.json on disk) |
+| 2026-07-18 | @integration agent, Kanban хуки (v1.2.0) |
+| 2026-07-19 | **Variant C**: state.json → kanban.db SSOT, state.py → kanban.py, +pipeline_resume, +pipeline_advance, 9 tools (v2.0.0) |
