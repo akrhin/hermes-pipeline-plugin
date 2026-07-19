@@ -20,6 +20,7 @@ import hashlib
 import json
 import logging
 import subprocess
+import time
 from typing import Any
 
 
@@ -108,9 +109,23 @@ def create_child(title: str, parent_id: str, body: str = "",
     return result.get("id") or None
 
 
-def promote(task_id: str) -> bool:
-    """Promote task to `ready` so it can be worked on."""
-    return bool(_kanban("promote", "--json", task_id))
+def promote(task_id: str, force: bool = False) -> bool:
+    """Promote task to `ready` so it can be worked on.
+
+    ``force=True`` bypasses parent-dependency gate — needed when the
+    parent task itself is in ``ready`` (not ``running``), which is the
+    normal state for a pipeline parent that has never been claimed by a
+    daemon worker.
+
+    Returns ``True`` iff the promote actually succeeded (the kanban CLI
+    returns ``"promoted": true``).
+    """
+    cmd = ["promote", "--json"]
+    if force:
+        cmd.append("--force")
+    cmd.append(task_id)
+    result = _kanban(*cmd)
+    return bool(result.get("promoted"))
 
 
 def comment(task_id: str, text: str) -> bool:
@@ -232,8 +247,10 @@ def create_task_tree(state: dict) -> dict:
         first_agent = pipeline[0]
         first_id = state["kanban_task_ids"].get(first_agent)
         if first_id:
-            promote(first_id)
-            logger.info("promoted first agent %s → ready", first_agent)
+            promote(first_id, force=True)
+            _claim_and_assign(first_id, f"@{first_agent}")
+            logger.info("promoted first agent %s → ready (assignee=%s)",
+                        first_agent, first_agent)
     # ══ Log the pipeline start on the parent task ════════════════════════
     comment(parent_id,
             f"🚀 Пайплайн запущен\n"
@@ -244,8 +261,37 @@ def create_task_tree(state: dict) -> dict:
     return state
 
 
+def _claim_and_assign(task_id: str, assignee: str) -> bool:
+    """Move a ``ready`` task to ``running`` and assign it.
+
+    Uses ``claim`` (sets ``started_at`` and status ``running``) then
+    ``assign`` to fill the assignee field so the dashboard can show
+    meaningful lifecycle data.
+
+    Returns ``True`` iff both operations succeeded.
+    """
+    if not task_id or not assignee:
+        return False
+    claimed = _kanban("claim", "--json", task_id)
+    if not claimed.get("claim_id"):
+        logger.warning("claim failed for %s: %s", task_id, claimed)
+        return False
+    assigned = _kanban("assign", task_id, assignee)
+    if assigned:
+        logger.info("claimed+assigned %s → running (assignee=%s)", task_id, assignee)
+    return bool(assigned)
+
+
 def advance(state: dict, completed_agent: str) -> dict:
     """Mark an agent task as done and promote the next one.
+
+    Sets ``completed`` on the current agent, then promotes the next
+    agent to ``ready`` and claims it into ``running`` with ``started_at``
+    and an assignee so the dashboard can show meaningful lifecycle data.
+
+    Pipeline parents live in ``ready`` (never claimed by a daemon
+    worker), so ``promote`` uses ``--force`` to bypass the parent-
+    dependency gate.
 
     Returns state dict with updated current_idx.
     """
@@ -264,16 +310,18 @@ def advance(state: dict, completed_agent: str) -> dict:
         completed.append(completed_agent)
         state["completed"] = completed
 
-    # Promote next
+    # Promote and claim next
     next_idx = current_idx + 1
     if next_idx < len(pipeline):
         next_agent = pipeline[next_idx]
         next_id = task_ids.get(next_agent)
         if next_id:
-            promote(next_id)
+            # Pipeline lifecycle: promote(todo→ready) then claim(ready→running)
+            promote(next_id, force=True)
+            _claim_and_assign(next_id, f"@{next_agent}")
             if parent_id:
                 comment(parent_id, f"👉 Начинается этап @{next_agent}")
-            logger.info("promoted %s → ready", next_agent)
+            logger.info("promoted+claimed %s → running (assignee=%s)", next_agent, next_agent)
         state["current_idx"] = next_idx
 
     return state
@@ -462,12 +510,63 @@ def on_clear(state: dict) -> None:
 # ── Resume from board ───────────────────────────────────────────────────────┘
 
 
+def _cleanup_stale_pipelines(max_age_hours: int = 24) -> int:
+    """Archive pipeline parents that have been in ``ready`` for too long.
+
+    A pipeline parent in ``ready`` with no agent ever promoted to
+    ``running`` is a stale zombie — it was created by ``pipeline_save``,
+    the first promote silently failed (BUG #1 pre-fix), and no agent ever
+    picked it up.  This function finds those and archives them so the
+    dashboard stays clean.
+
+    Returns the number of pipelines archived.
+    """
+    now = int(time.time())
+    cutoff = now - max_age_hours * 3600
+    all_tasks = list_tasks()
+    archived = 0
+    for t in all_tasks:
+        tid = t.get("id", "")
+        # Only pipeline parents: title starts with 🔷
+        if not tid or not t.get("title", "").startswith("🔷"):
+            continue
+        if t.get("status") != "ready":
+            continue
+        created = t.get("created_at", 0) or 0
+        if created > cutoff:
+            continue  # too young
+        # Check that it really has children (a pipeline parent)
+        detail = show_task(tid)
+        if len(detail.get("children", [])) < 2:
+            continue
+        # Archive all children first
+        children_tasks = list_tasks(include_archived=True)
+        child_ids = detail.get("children", [])
+        for c in children_tasks:
+            if c.get("id") in child_ids:
+                complete(c["id"], result_summary="Archived (stale pipeline)")
+        # Then archive the parent
+        complete(tid, result_summary="Archived (stale pipeline — no agent ever started)")
+        logger.info("cleaned up stale pipeline %s (created %d)", tid, created)
+        archived += 1
+    return archived
+
+
 def scan_board() -> dict | None:
     """Scan the pipeline board for an active pipeline run.
 
     Returns state dict reconstructed from kanban tasks, or None if idle.
     Uses list() to find parents, then filters children by parent_task_ids.
+
+    Before scanning, archives any stale zombie pipelines that were
+    created but never started (first promote silently failed pre-fix,
+    or the session was reset before any agent ran).
     """
+    # Garbage-collect stale pipelines before scanning
+    cleaned = _cleanup_stale_pipelines(max_age_hours=24)
+    if cleaned:
+        logger.info("cleaned up %d stale pipeline(s) before scan", cleaned)
+
     tasks = list_tasks(status="running")
     if not tasks:
         tasks = list_tasks(status="ready")
