@@ -541,3 +541,26 @@ def scan_board() -> dict | None:
             return state
 
     return None
+
+
+def get_agent_context(state: dict, agent_id: str) -> dict:
+    """Extract agent-specific context from pipeline state.
+
+    Returns context dict with agent-appropriate sections
+    (e.g. @coder gets implementation_context, @reviewer gets quality_context).
+    """
+    ctx = state.get("context", {})
+
+    # Build agent-specific context
+    agent_ctx = dict(ctx)  # shallow copy
+    # Highlight the most relevant section
+    if agent_id in ("coder", "editor", "fixer", "refactorer"):
+        agent_ctx["_focus"] = "implementation"
+    elif agent_id in ("reviewer", "security", "tester"):
+        agent_ctx["_focus"] = "quality"
+    elif agent_id == "documenter":
+        agent_ctx["_focus"] = "documentation"
+    elif agent_id == "devops":
+        agent_ctx["_focus"] = "infrastructure"
+
+    return agent_ctx

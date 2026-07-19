@@ -207,3 +207,121 @@ class TestHandleClassify:
             "request": "баг: крашится при логине",
         }))
         assert result["category"] == "BUG_UNKNOWN"
+
+# ── pipeline_run_agent tests ───────────────────────────────────────────────
+
+def test_run_agent_returns_delegation_package():
+    """handle_run_agent returns full delegation package with expected fields."""
+    from __init__ import handle_run_agent
+    state = {
+        "request": "добавить JWT",
+        "category": "FEATURE",
+        "pipeline": ["finder", "analyst", "architect"],
+        "current_idx": 2,
+        "completed": ["finder", "analyst"],
+        "status": "running",
+    }
+    result = json.loads(handle_run_agent({"state": state, "agent_id": "architect"}))
+    assert result["agent_id"] == "architect"
+    assert result["directive"] == "delegate"
+    assert result["tool_hint"] == "delegate_task"
+    assert result["provider"] == "delegate"
+    assert result["model"] == "deepseek-v4-pro"
+    assert "prompt" in result
+    assert result["call_args"] is not None
+    assert result["call_args"]["prompt"] == result["prompt"]
+    assert "state" in result
+
+
+def test_run_agent_direct_for_flash():
+    """Flash agents get directive: 'direct' and call_args: null."""
+    from __init__ import handle_run_agent
+    state = {
+        "request": "test",
+        "category": "BUG_KNOWN",
+        "pipeline": ["finder", "fixer", "reviewer", "tester"],
+        "current_idx": 1,
+        "completed": ["finder"],
+        "status": "running",
+    }
+    result = json.loads(handle_run_agent({"state": state, "agent_id": "fixer"}))
+    assert result["directive"] == "direct"
+    assert result["tool_hint"] is None
+    assert result["call_args"] is None
+    assert result["prompt"] is None
+
+
+def test_run_agent_delegate_free():
+    """Free-tier agents get directive: delegate_free."""
+    from __init__ import handle_run_agent
+    state = {
+        "request": "research",
+        "category": "SECURITY_RELATED",
+        "pipeline": ["finder", "analyst", "researcher", "architect"],
+        "current_idx": 2,
+        "completed": ["finder", "analyst"],
+        "status": "running",
+    }
+    result = json.loads(handle_run_agent({"state": state, "agent_id": "researcher"}))
+    assert result["directive"] == "delegate_free"
+    assert result["tool_hint"] == "delegate_task"
+    assert result["call_args"] is not None
+    assert result["call_args"]["provider"] == "delegate_free"
+
+
+def test_run_agent_unknown_agent():
+    """Unknown agent_id returns error."""
+    from __init__ import handle_run_agent
+    state = {"request": "x", "pipeline": ["finder"], "current_idx": 0, "status": "running"}
+    result = json.loads(handle_run_agent({"state": state, "agent_id": "nonexistent"}))
+    assert "error" in result
+    assert "Unknown agent" in result["error"]
+
+
+def test_run_agent_missing_request():
+    """State missing 'request' returns error."""
+    from __init__ import handle_run_agent
+    state = {"pipeline": ["finder"], "current_idx": 0, "status": "running"}
+    result = json.loads(handle_run_agent({"state": state, "agent_id": "finder"}))
+    assert "error" in result
+    assert "request" in result["error"]
+
+
+def test_run_agent_missing_pipeline():
+    """State missing 'pipeline' returns error."""
+    from __init__ import handle_run_agent
+    state = {"request": "x", "current_idx": 0, "status": "running"}
+    result = json.loads(handle_run_agent({"state": state, "agent_id": "finder"}))
+    assert "error" in result
+    assert "pipeline" in result["error"]
+
+
+def test_run_agent_context_override():
+    """context parameter overrides state.context."""
+    from __init__ import handle_run_agent
+    state = {
+        "request": "test",
+        "category": "FEATURE",
+        "pipeline": ["architect"],
+        "current_idx": 0,
+        "completed": [],
+        "status": "running",
+        "context": {"research": {"original": "from_state"}},
+    }
+    override = {"research": {"overridden": "yes"}, "planning": {}}
+    result = json.loads(handle_run_agent({
+        "state": state, "agent_id": "architect", "context": override
+    }))
+    assert result["agent_id"] == "architect"
+    # prompt should contain overridden context
+    assert "overridden" in result["prompt"]
+
+
+def test_run_agent_path_traversal_guard():
+    """Agent IDs with path traversal are sanitized."""
+    from __init__ import handle_run_agent
+    state = {"request": "x", "pipeline": ["finder"], "current_idx": 0, "status": "running"}
+    result = json.loads(handle_run_agent({"state": state, "agent_id": "../finder"}))
+    # Should resolve to "finder" after basename, not error
+    assert "error" not in result
+    assert result["agent_id"] == "finder"

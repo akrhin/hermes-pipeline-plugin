@@ -1,4 +1,4 @@
-# Pipeline Plugin v2.0 — Architecture (Kanban-native)
+# Pipeline Plugin v2.1 — Architecture (Kanban-native)
 
 ## Purpose
 
@@ -29,9 +29,10 @@
 │     ├─ Parent: «🔷 Пайплайн: ...»                     │
 │     └─ Children: @finder, @analyst, ..., @documenter  │
 │  4. Цикл по агентам:                                  │
-│     ├─ pipeline_resume() → беру ready-таск             │
-│     ├─ выполняю агента                                 │
-│     └─ pipeline_advance(state, agent) → promote next  │
+│     ├─ pipeline_run_agent(state, agent) → pkg          │  ← NEW v2.1
+│     ├─ delegate_task(**pkg.call_args)  (для Pro)       │
+│     ├─ или выполняю prompt напрямую    (для Flash)      │
+│     └─ pipeline_advance(state, agent) → promote next   │
 │  5. Конвергенция: pipeline_convergence(state, findings)│
 │     ├─ continue → @coder разблокирован на след. раунд  │
 │     ├─ converged → parent complete                     │
@@ -41,7 +42,7 @@
 └────────────────────────────────────────────────────────┘
              │
              ▼
-┌─ Pipeline Plugin (9 tools) ────────────────────────────┐
+┌─ Pipeline Plugin (10 tools) ────────────────────────────┐
 │                                                          │
 │  pipeline_classify(request) → {category, pipeline[]}     │
 │  pipeline_save(state)      → создаётдерево на доске     │
@@ -52,6 +53,7 @@
 │  pipeline_convergence(s,f) → evaluate + post to board   │
 │  agent_prompt(id, ctx)     → build prompt from template │
 │  agent_model(id)           → {provider, model}          │
+│  pipeline_run_agent(s,a,c) → delegation package         │
 │                                                          │
 │  ┌─── classify.py ───────────────────┐                  │
 │  │  keyword-based категоризация       │                  │
@@ -132,7 +134,6 @@ else:
 | @security | delegate_task | DeepSeek V4 Pro |
 | @integration | delegate_task | DeepSeek V4 Pro |
 | @researcher | delegate_task | OpenRouter free |
-| @commenter | delegate_task | OpenRouter free |
 
 ## Convergence (deterministic, no LLM)
 
@@ -148,11 +149,11 @@ else:
 
 ```
 hermes-pipeline-plugin/
-├── ARCHITECTURE.md            ← этот файл (v2.0)
+├── ARCHITECTURE.md            ← этот файл (v2.1)
 ├── AGENTS.md                  ← инструкции для агентов (v2.0)
 ├── README.md                  ← общее описание
-├── plugin.yaml                ← манифест v2.0.0 (9 tools)
-├── __init__.py                ← ядро: 9 хендлеров + регистрация
+├── plugin.yaml                ← манифест v2.1.0 (10 tools)
+├── __init__.py                ← ядро: 10 хендлеров + регистрация
 ├── classify.py                ← классификация (8 категорий)
 ├── kanban.py                  ← Kanban API: tree, advance, converge, scan, resume
 ├── LICENSE                    ← MIT
@@ -185,3 +186,4 @@ hermes-pipeline-plugin/
 | 2026-07-18 | Начальная архитектура (v1.0.0, 7 tools, state.json on disk) |
 | 2026-07-18 | @integration agent, Kanban хуки (v1.2.0) |
 | 2026-07-19 | **Variant C**: state.json → kanban.db SSOT, state.py → kanban.py, +pipeline_resume, +pipeline_advance, 9 tools (v2.0.0) |
+| 2026-07-19 | **v2.1.0**: +pipeline_run_agent (delegation package pattern), 10 tools |
