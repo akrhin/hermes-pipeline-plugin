@@ -208,3 +208,11 @@ Build delegation package for running a pipeline agent. Returns:
 5. **state.json не существует.** Не пытайся читать `~/.hermes/plugins/pipeline/state.json` — его больше нет.
 6. **Не сохраняй state вручную.** Всё состояние на доске. Кеш в рабочей памяти агента — временный.
 7. **После рестарта Hermes** kanban.db жив. `pipeline_resume()` подхватит.
+
+## Audit Checklist
+
+При аудите кода (@analyst, @reviewer, @security, @tester) используй checklist:
+`references/code-audit-checklist.md`
+
+Особое внимание — **Race Conditions** и **Leaks** (раздел 2-3).
+Это то что статический анализ не ловит, и что первый пайплайн пропускает.
