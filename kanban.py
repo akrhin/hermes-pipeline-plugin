@@ -173,8 +173,8 @@ def complete(task_id: str, result_summary: str = "",
             conn = sqlite3.connect(db_path)
             now = int(time.time())
             conn.execute(
-                "INSERT INTO task_comments (task_id, body, created_at) VALUES (?, ?, ?)",
-                (task_id, result_summary, now),
+                "INSERT INTO task_comments (task_id, body, created_at, author) VALUES (?, ?, ?, ?)",
+                (task_id, result_summary, now, "pipeline-orchestrator"),
             )
             conn.commit()
             conn.close()
