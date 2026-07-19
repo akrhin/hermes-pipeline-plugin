@@ -1,6 +1,6 @@
 name: pipeline
-version: 2.2.0
-description: "Pipeline Plugin v2.2 Kanban-native. Variant C: kanban.db is SSOT. MODEL_MAP → config.yaml (models.py). 10 tools: +pipeline_run_agent (delegation package)."
+version: 3.0.0
+description: "Pipeline Plugin v3.0 — Kanban-native. Selective context. Best-of-N ensemble (12 tools)."
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify
@@ -13,3 +13,5 @@ provides_tools:
   - agent_prompt
   - agent_model
   - pipeline_run_agent
+  - pipeline_ensemble_run
+  - pipeline_ensemble_judge
