@@ -40,9 +40,11 @@ VALID_PROVIDER_TYPES = frozenset({"direct", "delegate", "delegate_free"})
 
 
 def _get_config_path() -> Path:
-    """Путь к Hermes config.yaml."""
+    """Путь к конфигу плагина: ~/.hermes/plugins/pipeline/config.yaml.
+    Не читает главный config.yaml Hermes, чтобы не засорять его.
+    """
     hermes_home = os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes"))
-    return Path(hermes_home) / "config.yaml"
+    return Path(hermes_home) / "plugins" / "pipeline" / "config.yaml"
 
 
 def _read_config_section() -> dict[str, Any] | None:

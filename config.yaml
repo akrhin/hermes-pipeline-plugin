@@ -1,0 +1,20 @@
+# Pipeline Plugin Config v2.2
+# Модели для агентов пайплайна.
+# Читается из ~/.hermes/plugins/pipeline/config.yaml
+# Приоритет: agents > defaults > BUILTIN_MODEL_MAP (models.py)
+
+pipeline:
+  models:
+    # defaults — групповое переопределение по типу провайдера
+    defaults:
+      delegate:
+        model: deepseek-v4-flash     # все Pro → Flash
+      delegate_free:
+        model: openrouter/free
+    # agents — точечное переопределение (высший приоритет)
+    agents:
+      security:                       # только security оставить Pro
+        model: deepseek-v4-pro
+      coder:                          # coder тоже на Pro
+        provider: delegate
+        model: deepseek-v4-flash
