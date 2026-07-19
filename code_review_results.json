@@ -1,0 +1,162 @@
+[
+  {
+    "severity": "P0",
+    "file": "kanban.py:218 (unblock) → promote()",
+    "function": "unblock / promote",
+    "description": "После конвергенции с решением 'continue' для раунда 2+ вызывается unblock(coder_id), который вызывает promote(task_id, force=True). Но promote() обновляет только задачи со статусом IN ('todo','blocked'). После первого раунда все child task'и — 'done'. UPDATE WHERE status IN ('todo','blocked') не находит coder'а (он 'done'), и promote молча возвращает False. Следующий раунд конвергенции никогда не запускается.",
+    "impact": "P0 — пайплайн с конвергенцией (convergence) мёртв после первого раунда. 'continue' не приводит к перезапуску coder'а. Все последующие раунды — мёртвый код.",
+    "fix_suggestion": "Заменить unblock() на отдельную SQLite-функцию reopen_task(task_id), которая делает UPDATE tasks SET status='ready', completed_at=NULL WHERE id=? — сбрасывает статус 'done'→'ready'. Либо добавить в promote() дополнительное условие: OR status='done' и сброс completed_at=NULL. Также нужно, чтобы round 2+ пересоздавал/переоткрывал task'и для всех агентов, а не только coder'а."
+  },
+  {
+    "severity": "P0",
+    "file": "kanban.py:139, 192, 342",
+    "function": "_sqlite_update / complete / _claim_and_assign",
+    "description": "Три функции в kanban.py используют жёстко закодированный путь ~/.hermes/kanban/boards/pipeline/kanban.db. Модуль models.py корректно читает HERMES_HOME из os.environ, но kanban.py полностью игнорирует эту переменную. Если пользователь установил HERMES_HOME=/custom/path, kanban-операции пишут/читают не ту БД и молча возвращают False.",
+    "impact": "P0 — плагин полностью сломан для установок с нестандартным HERMES_HOME. Все kanban-операции (promote, complete, claim) молча падают. Пользователь не получает никаких ошибок, кроме логов уровня WARNING без контекста проблемы.",
+    "fix_suggestion": "Заменить os.path.expanduser('~/.hermes/') на hermes_home = os.environ.get('HERMES_HOME', os.path.expanduser('~/.hermes')) во всех трёх функциях. Вынести определение db_path в константу на уровне модуля, чтобы избежать дублирования."
+  },
+  {
+    "severity": "P0",
+    "file": "ensemble.py:136-171",
+    "function": "judge_candidates (LLM mode)",
+    "description": "Функция judge_candidates(judge_mode='llm') возвращает winner_id, установленный на candidate[len//2] (середина списка), ДО того как LLM Judge реально оценил кандидатов. Поле rationale содержит заглушку 'LLM Judge would evaluate here — run via delegate_task with prompt'. Это значит, что JSON-ответ содержит неправильный winner_id, и оркестратор должен УГАДАТЬ, что winner_id из ответа — мусор и его нужно заменить после вызова delegate_task.",
+    "impact": "P0 — опасный design: функция называется 'judge' и возвращает winner_id, но winner_id не является результатом судейства. Любой код, читающий результат, получит неверный ответ. Поле 'mode: llm' — единственный намёк, что данные недостоверны, но его легко пропустить.",
+    "fix_suggestion": "Вариант A: Убрать winner_id из ответа для LLM-режима (null), добавить поле judge_prompt с инструкцией оркестратору. Вариант B: Разделить на две функции — prepare_judge_prompt() (возвращает prompt для делегирования) и judge_candidates() (вызывается ПОСЛЕ получения LLM-ответа и возвращает настоящий winner_id)."
+  },
+  {
+    "severity": "P0",
+    "file": "__init__.py:507-554 (handle_run_agent)",
+    "function": "handle_run_agent for direct/Flash agents",
+    "description": "handle_run_agent для direct-агентов (finder, analyst, coder, tester и др.) возвращает {'prompt': None, 'call_args': None}. Документация говорит, что оркестратор 'executes the prompt directly' для Flash-агентов, но плагин не предоставляет никакого промпта. Оркестратор должен сам знать, что делает каждый Flash-агент — но это знание дублируется между плагином и оркестратором. Если оркестратор не запрограммирован под конкретного агента, единственная информация, которую он получает — {'provider': 'direct', 'model': 'deepseek-v4-flash'}, что бесполезно.",
+    "impact": "P0 — контракт с оркестратором неполный. Для новых типов Flash-агентов (добавленных через config.yaml) оркестратор не знает, что делать. Плагин имеет богатые prompt-темплейты в agents/*.prompt, но не отдаёт их для direct-агентов.",
+    "fix_suggestion": "Использовать _build_agent_prompt() для ВСЕХ агентов, включая direct. Для direct-агентов возвращать prompt в поле prompt, но call_args=null (оркестратор использует prompt в своём контексте, не делегирует). prompt больше не должен быть null для direct."
+  },
+  {
+    "severity": "P1",
+    "file": "__init__.py:347-504",
+    "function": "handle_save, handle_load, handle_clear, handle_resume, handle_advance, handle_model, handle_ensemble_run, handle_ensemble_judge",
+    "description": "8 из 12 handler-функций перехватывают Exception и возвращают {'error': str(e)} БЕЗ traceback.format_exc(). В отличие от handle_classify, handle_convergence, handle_run_agent и handle_prompt (которые включают traceback), эти 8 handler'ов теряют stack trace при любой ошибке. Это делает отладку production-сбоев чрезвычайно сложной — видна только строка ошибки без контекста, кто вызвал и в какой строке.",
+    "impact": "P1 — невозможность диагностировать production-ошибки. Любое исключение (KeyError, TypeError, OSError) маскируется, и разработчик видит только 'error: 'name' is not defined' без указания файла и строки.",
+    "fix_suggestion": "Добавить traceback.format_exc() во все 8 handler'ов. Пример: return json.dumps({'error': str(e), 'traceback': traceback.format_exc()}, ensure_ascii=False). traceback уже импортирован в __init__.py (строка 31)."
+  },
+  {
+    "severity": "P1",
+    "file": "kanban.py:635-739",
+    "function": "scan_board",
+    "description": "scan_board() реконструирует {'request', 'category', 'pipeline', 'current_idx', 'completed'} из kanban-задач, но НЕ восстанавливает {'context', 'findings', 'checkpoints', 'max_rounds'}. Это означает, что после pipeline_resume (рестарт оркестратора) вся накопленная контекстная информация — research, planning, implementation findings — теряется. Следующий агент получит пустой контекст.",
+    "impact": "P1 — рестарт пайплайна теряет всё накопленное состояние. Findings не сохраняются в kanban (только как комментарии, которые не парсятся). Оркестратор после рестарта начинает с пустого контекста, что приводит к неверным решениям конвергенции.",
+    "fix_suggestion": "Добавить парсинг комментариев родительской задачи для извлечения findings. Добавить поле 'context' в body задачи (JSON-блок). Либо хранить context как metadata в kanban (если kanban API поддерживает). Минимальное решение: добавить поле state_json в task body, куда сериализовать весь state."
+  },
+  {
+    "severity": "P1",
+    "file": "kanban.py:559-567 (on_convergence)",
+    "function": "on_convergence (maxed_out)",
+    "description": "При decision='converged' (строка 543-552) on_convergence закрывает И родителя, И всех детей. При decision='maxed_out' (строка 559-567) закрывается ТОЛЬКО родитель — дети остаются висеть со статусами 'done', 'running' или 'ready'. Это неконсистентно: пайплайн завершён (maxed_out), но child task'и не закрыты.",
+    "impact": "P1 — при maxed_out доска kanban содержит 'done' parent'а с 'running' или 'ready' детьми. Уборка мусора (_cleanup_stale_pipelines) может случайно зачистить такой пайплайн, т.к. parent — 'done', а children могут быть 'ready' (но они не будут найдены, т.к. parent уже complete).",
+    "fix_suggestion": "Добавить цикл закрытия детей в блок maxed_out, аналогично converged:\nfor agent, tid in task_ids.items():\n    complete(tid, result_summary=f'✅ @{agent} done (maxed_out)')"
+  },
+  {
+    "severity": "P1",
+    "file": "kanban.py:174-204",
+    "function": "complete",
+    "description": "Функция complete() принимает аргумент metadata: dict | None = None (строка 176), но НИГДЕ не использует его. В on_convergence (строка 544-548, 560-564) формируется rich metadata-словарь {'decision': ..., 'round': ..., 'p0': ..., 'p1': ..., 'p2': ...}, который передаётся в complete(), но бесшумно игнорируется. Структурированные данные о конвергенции теряются.",
+    "impact": "P1 — structured convergence metadata не сохраняется. Если dashboard или аудиту нужна информация о том, почему пайплайн завершился, её нет. В старом state.json эти данные были.",
+    "fix_suggestion": "Либо (а) записывать metadata в канал комментариев как JSON-блок, либо (б) убрать параметр metadata из сигнатуры complete(), чтобы не вводить в заблуждение. Предпочтительно (а): if metadata: conn.execute('INSERT INTO task_comments ...', (task_id, json.dumps(metadata), now, 'pipeline-orchestrator'))"
+  },
+  {
+    "severity": "P1",
+    "file": "__init__.py:328-343 (handle_convergence)",
+    "function": "handle_convergence",
+    "description": "handle_convergence принимает state-словарь по ссылке и передаёт его в kb.evaluate_convergence(state, findings), который МУТИРУЕТ state in-place (добавляет 'round', 'findings', 'findings_fingerprint', 'prev_findings_fingerprint'). Поскольку state — это тот же объект, что и у вызывающего оркестратора, мутация влияет на вызывающий код без его ведома.",
+    "impact": "P1 — неожиданный side-effect. Если оркестратор сохранил state до вызова convergence, он может быть удивлён, что его состояние изменилось. Может привести к subtle bugs при повторных вызовах с тем же state.",
+    "fix_suggestion": "Перед мутацией делать deepcopy: import copy; state = copy.deepcopy(state) в handle_convergence перед вызовом kb.evaluate_convergence. Либо изменить evaluate_convergence так, чтобы возвращать новый dict вместо мутации входящего."
+  },
+  {
+    "severity": "P1",
+    "file": "classify.py:87-93",
+    "function": "CATEGORIES['DOCUMENTATION'].keywords",
+    "description": "Ключевое слово 'док' (3 символа, <=5, слово-граница) может давать false positive на 'док-станция' (docking station), 'докер' (docker), 'доклад'. Слово 'док' слишком короткое и неспецифичное для DOCUMENTATION. В то же время INFRASTRUCTURE содержит 'docker' как самостоятельное ключевое слово — 'докер' матчится корректно через 'docker' (латиница), но 'док' может ложно классифицировать инфраструктурные запросы как DOCUMENTATION.",
+    "impact": "P1 — ложная классификация документационных пайплайнов для запросов про Docker, док-станции и доклады. Пользователь получает пайплайн с 2 агентами вместо полного.",
+    "fix_suggestion": "Удалить 'док' из ключевых слов DOCUMENTATION. Более специфичные синонимы: 'документация', 'документ', 'описание'. Либо добавить в DOCUMENTATION более длинные ключевые слова, чтобы 'док' не был единственным триггером."
+  },
+  {
+    "severity": "P1",
+    "file": "agents/integration.prompt",
+    "function": "AGENT_CONTEXT_FIELDS mismatch",
+    "description": "integration.prompt содержит заголовок '### Full context' (строка 10) за которым НЕ следует плейсхолдер {full_context}. После заголовка сразу идёт '### Integration context'. Это мёртвый заголовок, который вводит в заблуждение. AGENT_CONTEXT_FIELDS['integration'] = ['implementation', 'documentation', 'infrastructure'] — 'full_context' не включён, поэтому плейсхолдер {full_context} действительно не нужен, но заголовок остался как артефакт.",
+    "impact": "P1 — в промпте интеграционного аудитора есть вводящий в заблуждение заголовок 'Full context' без содержимого. Агент может подумать, что у него есть доступ к полному контексту (хотя его нет), что влияет на решения при аудите.",
+    "fix_suggestion": "Удалить строку '### Full context' из integration.prompt, чтобы заголовок не вводил в заблуждение."
+  },
+  {
+    "severity": "P2",
+    "file": "kanban.py:136",
+    "function": "_sqlite_update",
+    "description": "Функция _sqlite_update импортирует os локально (import os), хотя os уже импортирован на уровне модуля (строка 19). Это избыточный код.",
+    "impact": "P2 — код-стайл, микро-оверхед. Нет функционального влияния.",
+    "fix_suggestion": "Удалить import os из тела функции _sqlite_update."
+  },
+  {
+    "severity": "P2",
+    "file": "__init__.py:328-343 (handle_convergence)",
+    "function": "handle_convergence — пустой findings list",
+    "description": "Guard на строке 333 проверяет 'if findings is None and not state.get(\"findings\")'. Если findings=[] (пустой список), то findings is None == False, и код идёт дальше в evaluate_convergence(state, []), который возвращает decision='converged' (нет P0/P1). Но это не конвергенция — это отсутствие данных. Должен возвращаться 'unknown'.",
+    "impact": "P2 — ложная конвергенция при явной передаче пустого списка findings. Узкий edge case, но может ввести в заблуждение при отладке.",
+    "fix_suggestion": "Добавить проверку: if not findings: return json.dumps({'decision': 'unknown', 'reason': 'Empty findings list — cannot evaluate', ...})"
+  },
+  {
+    "severity": "P2",
+    "file": "kanban.py:721",
+    "function": "scan_board",
+    "description": "scan_board() ищет текущий active child по статусам ('ready', 'todo', 'running'). Если child был заблокирован (status='blocked') через on_convergence('stuck') → block_task(), то scan_board() не найдёт его как текущий. current_idx останется -1 и будет заменён на 0. После pipeline_resume() заблокированный пайплайн покажет current_idx=0 (первый агент), а не заблокированный.",
+    "impact": "P2 — после resume заблокированного пайплайна current_idx неверный. Оркестратор может попытаться запустить первого агента заново вместо обработки блокировки.",
+    "fix_suggestion": "Добавить 'blocked' в список статусов на строке 721: elif cstatus in ('ready', 'todo', 'running', 'blocked') and current_idx == -1"
+  },
+  {
+    "severity": "P2",
+    "file": "kanban.py:593-632",
+    "function": "_cleanup_stale_pipelines",
+    "description": "Фильтр на строке 620: if len(detail.get('children', [])) < 2: continue. Пайплайны с одним агентом (гипотетически configurable) никогда не будут очищены. Также функция предполагает, что parent всегда имеет поле children с длиной >= 2, что является хардкодным допущением.",
+    "impact": "P2 — очень узкий edge case. На практике все пайплайны имеют >= 3 агентов.",
+    "fix_suggestion": "Изменить условие на 'if len(detail.get('children', [])) < 1' — один ребёнок тоже валидный пайплайн."
+  },
+  {
+    "severity": "P2",
+    "file": "agents/judge.prompt",
+    "function": "dead code — no 'judge' agent in MODEL_MAP",
+    "description": "Файл agents/judge.prompt существует, но MODEL_MAP (models.py) не содержит агента 'judge'. AGENT_CONTEXT_FIELDS (__init__.py) также не содержит 'judge'. Единственный способ загрузить judge.prompt — прямой вызов _build_agent_prompt('judge', ...), но оркестратор не использует agent_prompt для judge — ensemble.py имеет свою _build_judge_prompt(). Таким образом, judge.prompt — мёртвый код.",
+    "impact": "P2 — поддерживать неиспользуемый промпт-файл. Вводит в заблуждение разработчиков (думают, что judge-система использует этот файл).",
+    "fix_suggestion": "Удалить agents/judge.prompt, т.к. ensemble.py использует свою inline _build_judge_prompt(). Либо добавить 'judge' в AGENT_CONTEXT_FIELDS и MODEL_MAP, если планируется унифицировать через agent_prompt."
+  },
+  {
+    "severity": "P2",
+    "file": "ensemble.py:75-102",
+    "function": "generate_candidates",
+    "description": "Функция generate_candidates() вызывает read_ensemble_config() на каждой итерации (строка 85), которая открывает и парсит YAML-файл. Это лишний файловый I/O на каждый вызов генерации кандидатов.",
+    "impact": "P2 — незначительное снижение производительности (чтение файла).",
+    "fix_suggestion": "Передать config параметром в generate_candidates(), а не читать его внутри. Или закешировать config (lru_cache или module-level cache)."
+  },
+  {
+    "severity": "P2",
+    "file": "kanban.py:148-158",
+    "function": "judge_candidates (deterministic mode)",
+    "description": "Детерминистический режим judge всегда выбирает среднего кандидата (candidates[len(candidates)//2]). Это не имеет эвристической ценности — не учитывает ни температуру, ни instruction_extra. Лучше выбирать кандидата с нейтральной температурой (0.7) или со standard instruction.",
+    "impact": "P2 — детерминистический выбор неоптимален. MVP fallback, но может быть улучшен.",
+    "fix_suggestion": "Искать кандидата с temperature=0.7 (стандартный production-подход) как наиболее сбалансированный, вместо механического middle. Или: если есть кандидат с 'Стандартный production-подход' в instruction_extra — выбирать его."
+  },
+  {
+    "severity": "P2",
+    "file": "kanban.py:692",
+    "function": "scan_board — title parsing",
+    "description": "Извлечение request из title выполняется через title.replace('🔷  Пайплайн: ', '', 1) (строка 692). Если формат заголовка изменится (например, будет 🔷 Pipeline: на английском, или двойной пробел), извлечение тихо вернёт полный заголовок как request.",
+    "impact": "P2 — хрупкость парсинга. При смене локализации или форматирования заголовков может сломаться без явной ошибки.",
+    "fix_suggestion": "Хранить request в body (как 'Запрос: ...'), а парсинг title сделать fallback-ом. Строка 695 уже парсит body для request — приоритет body над title."
+  },
+  {
+    "severity": "P2",
+    "file": "kanban.py:635-739",
+    "function": "scan_board — multiple active pipelines",
+    "description": "Если есть несколько активных пайплайнов (например, старый не очищен, запущен новый), scan_board() сортирует по created_at desc и возвращает ПЕРВЫЙ подходящий. Это может вернуть НЕ тот пайплайн, который нужен оркестратору. Нет механизма выбора конкретного пайплайна.",
+    "impact": "P2 — при наличии мусора (старых активных пайплайнов) может быть выбран неверный. На практике _cleanup_stale_pipelines уменьшает вероятность, но не исключает.",
+    "fix_suggestion": "Добавить поддержку pipeline_id в scan_board() для точного выбора. Добавить лог с warning при обнаружении >1 активного пайплайна."
+  }
+]

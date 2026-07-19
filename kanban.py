@@ -129,10 +129,12 @@ def _sqlite_update(query: str, params: tuple = ()) -> bool:
         return False
     try:
         conn = sqlite3.connect(db_path)
-        conn.execute(query, params)
-        conn.commit()
-        conn.close()
-        return True
+        try:
+            conn.execute(query, params)
+            conn.commit()
+            return True
+        finally:
+            conn.close()
     except sqlite3.Error as exc:
         logger.warning("sqlite error: %s", exc)
         return False
@@ -145,11 +147,12 @@ def _sqlite_select(query: str, params: tuple = ()) -> list[dict]:
         return []
     try:
         conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cur = conn.execute(query, params)
-        rows = [dict(r) for r in cur.fetchall()]
-        conn.close()
-        return rows
+        try:
+            conn.row_factory = sqlite3.Row
+            cur = conn.execute(query, params)
+            return [dict(r) for r in cur.fetchall()]
+        finally:
+            conn.close()
     except sqlite3.Error:
         return []
 
@@ -357,6 +360,31 @@ def _claim_and_assign(task_id: str, assignee: str) -> bool:
     )
 
 
+def _update_parent_status(parent_id: str | None, status: str):
+    """Update parent task status directly via SQLite."""
+    if not parent_id:
+        return
+    import os, sqlite3
+    db_path = os.path.expanduser("~/.hermes/kanban/boards/pipeline/kanban.db")
+    try:
+        conn = sqlite3.connect(db_path)
+        now = int(time.time())
+        if status == "running":
+            conn.execute(
+                "UPDATE tasks SET status=?, started_at=COALESCE(started_at,?) WHERE id=?",
+                (status, now, parent_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE tasks SET status=?, completed_at=? WHERE id=?",
+                (status, now, parent_id),
+            )
+        conn.commit()
+        conn.close()
+    except sqlite3.Error as exc:
+        logger.warning("sqlite error in _update_parent_status: %s", exc)
+
+
 def advance(state: dict, completed_agent: str) -> dict:
     """Mark an agent task as done and promote the next one.
 
@@ -364,9 +392,9 @@ def advance(state: dict, completed_agent: str) -> dict:
     agent to ``ready`` and claims it into ``running`` with ``started_at``
     and an assignee so the dashboard can show meaningful lifecycle data.
 
-    Pipeline parents live in ``ready`` (never claimed by a daemon
-    worker), so ``promote`` uses ``--force`` to bypass the parent-
-    dependency gate.
+    Updates the parent pipeline task status:
+    - first advance  → parent becomes ``running``
+    - all children done → parent becomes ``done``
 
     Returns state dict with updated current_idx.
     """
@@ -384,6 +412,19 @@ def advance(state: dict, completed_agent: str) -> dict:
     if completed_agent not in completed:
         completed.append(completed_agent)
         state["completed"] = completed
+
+    # Update parent status: running on first advance, done on last
+    if parent_id:
+        is_first_advance = current_idx == 0
+        is_last_agent = (current_idx + 1) >= len(pipeline)
+        if is_first_advance:
+            _update_parent_status(parent_id, "running")
+            comment(parent_id, f"🚀 Запущен этап @{completed_agent}")
+        if is_last_agent:
+            _update_parent_status(parent_id, "done")
+            comment(parent_id, "✅ Пайплайн завершён")
+        else:
+            pass  # already running
 
     # Promote and claim next
     next_idx = current_idx + 1
