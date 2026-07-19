@@ -73,11 +73,17 @@ AGENT_DESCRIPTIONS: dict[str, str] = {
 
 
 def _kanban(*args: str) -> dict[str, Any]:
-    """Run ``hermes kanban --board <BOARD> <args>``. Returns parsed JSON or {}.
+    """[deprecated] Run ``hermes kanban --board <BOARD> <args>``. Returns parsed JSON or {}.
+
+    .. deprecated::
+       Use ``_sqlite_update()`` / ``_sqlite_select()`` instead of CLI subprocess.
+       Only ``create_parent`` and ``create_child`` still rely on this helper.
+
     Callers MUST pass ``--json`` as part of *args* when they expect JSON output.
     ``--json`` is a per-command flag (not global), so placing it in the global
     prefix is an error — it must be after the subcommand.
     """
+    logger.warning("_kanban() is deprecated — use _sqlite_update / _sqlite_select instead (args=%s)", args)
     cmd = ["hermes", "kanban", "--board", BOARD]
     cmd.extend(args)
     try:
@@ -151,6 +157,24 @@ def _sqlite_update(query: str, params: tuple = ()) -> bool:
         return False
 
 
+def _sqlite_select(query: str, params: tuple = ()) -> list[dict]:
+    """Execute a SELECT query and return rows as list of dicts."""
+    import os
+    import sqlite3
+    db_path = os.path.expanduser("~/.hermes/kanban/boards/pipeline/kanban.db")
+    if not os.path.isfile(db_path):
+        return []
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute(query, params)
+        rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return rows
+    except sqlite3.Error:
+        return []
+
+
 def promote(task_id: str, force: bool = False) -> bool:
     """Promote task to ``ready`` via direct SQLite.
 
@@ -167,8 +191,23 @@ def promote(task_id: str, force: bool = False) -> bool:
 
 
 def comment(task_id: str, text: str) -> bool:
-    """Append a comment. Returns True if command succeeded."""
-    return bool(_kanban("comment", task_id, text))
+    """Append a comment via direct SQLite. Returns True if succeeded."""
+    import os
+    import sqlite3
+    db_path = os.path.expanduser("~/.hermes/kanban/boards/pipeline/kanban.db")
+    if not os.path.isfile(db_path):
+        return False
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "INSERT INTO task_comments (task_id, body, created_at, author) VALUES (?, ?, unixepoch(), ?)",
+            (task_id, text, "pipeline-orchestrator"),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.Error:
+        return False
 
 
 def complete(task_id: str, result_summary: str = "",
@@ -206,11 +245,18 @@ def complete(task_id: str, result_summary: str = "",
 
 def block_task(task_id: str, reason: str = "",
                kind: str = "needs_input") -> bool:
-    """Block a task for human review. Returns True if command succeeded."""
-    cmd = ["block", "--kind", kind, task_id]
-    if reason:
-        cmd.append(reason)
-    return bool(_kanban(*cmd))
+    """Block a task via direct SQLite. Returns True if succeeded.
+
+    ``kind`` controls the resulting status:
+      - ``dependency`` → ``todo`` (auto-promoted by recompute_ready)
+      - ``needs_input``, ``capability``, ``transient`` → ``blocked``
+    """
+    import sqlite3
+    status = "todo" if kind == "dependency" else "blocked"
+    return _sqlite_update(
+        "UPDATE tasks SET status=?, block_kind=COALESCE(?, block_kind) WHERE id=?",
+        (status, kind, task_id),
+    )
 
 
 def unblock(task_id: str) -> bool:
@@ -219,24 +265,34 @@ def unblock(task_id: str) -> bool:
 
 
 def list_tasks(status: str = "", include_archived: bool = False) -> list[dict]:
-    """List tasks, optionally filtered by status. Returns list of dicts."""
-    cmd = ["ls", "--json"]
+    """List tasks via direct SQLite, optionally filtered by status."""
+    sql = "SELECT id, title, body, assignee, status, priority, created_by, created_at, started_at, completed_at, block_kind, block_recurrences FROM tasks WHERE 1=1"
+    params: list[str] = []
     if status:
-        cmd.extend(["--status", status])
-    if include_archived:
-        cmd.extend(["--archived"])
-    result = _kanban(*cmd)
-    if isinstance(result, list):
-        return result
-    if "tasks" in result:
-        return result["tasks"]
-    return []
+        sql += " AND status=?"
+        params.append(status)
+    if not include_archived:
+        sql += " AND status!='archived'"
+    sql += " ORDER BY created_at DESC"
+    return _sqlite_select(sql, tuple(params))
 
 
 def show_task(task_id: str) -> dict:
-    """Get full task detail (comments, children, etc.)."""
-    result = _kanban("show", "--json", task_id)
-    return result if isinstance(result, dict) else {}
+    """Get full task detail via direct SQLite (task + children + comments)."""
+    rows = _sqlite_select("SELECT * FROM tasks WHERE id=?", (task_id,))
+    if not rows:
+        return {}
+    task = rows[0]
+    task["children"] = [
+        r["child_id"] for r in _sqlite_select(
+            "SELECT child_id FROM task_links WHERE parent_id=?", (task_id,)
+        )
+    ]
+    task["comments"] = _sqlite_select(
+        "SELECT * FROM task_comments WHERE task_id=? ORDER BY created_at ASC",
+        (task_id,),
+    )
+    return task
 
 
 def parent_task_id(pipeline: list[str], request: str = "") -> str:
