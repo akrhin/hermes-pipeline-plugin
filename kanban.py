@@ -155,8 +155,8 @@ def block_task(task_id: str, reason: str = "",
 
 
 def unblock(task_id: str) -> bool:
-    """Unblock a task (for next convergence round). Alias for promote()."""
-    return promote(task_id)
+    """Unblock a task (for next convergence round). Needs --force."""
+    return promote(task_id, force=True)
 
 
 def list_tasks(status: str = "", include_archived: bool = False) -> list[dict]:
@@ -264,22 +264,41 @@ def create_task_tree(state: dict) -> dict:
 def _claim_and_assign(task_id: str, assignee: str) -> bool:
     """Move a ``ready`` task to ``running`` and assign it.
 
-    Uses ``claim`` (sets ``started_at`` and status ``running``) then
-    ``assign`` to fill the assignee field so the dashboard can show
-    meaningful lifecycle data.
+    The kanban ``claim`` CLI requires a running daemon worker and
+    silently fails when none is present (returns ``{}`` without
+    ``claim_id``).  Since pipeline orchestrators do not (and should not)
+    run a daemon, we write directly to the kanban DB — the same DB the
+    pipeline dashboard reads via SQLite.
 
-    Returns ``True`` iff both operations succeeded.
+    Sets ``status`` → ``running``, ``assignee``, ``started_at``, and
+    ``last_heartbeat_at`` so the dashboard can show meaningful lifecycle
+    metadata.
     """
     if not task_id or not assignee:
         return False
-    claimed = _kanban("claim", "--json", task_id)
-    if not claimed.get("claim_id"):
-        logger.warning("claim failed for %s: %s", task_id, claimed)
+    import os
+    import sqlite3
+    db_path = os.path.expanduser("~/.hermes/kanban/boards/pipeline/kanban.db")
+    if not os.path.isfile(db_path):
+        logger.warning("kanban DB not found: %s", db_path)
         return False
-    assigned = _kanban("assign", task_id, assignee)
-    if assigned:
-        logger.info("claimed+assigned %s → running (assignee=%s)", task_id, assignee)
-    return bool(assigned)
+    try:
+        conn = sqlite3.connect(db_path)
+        now = int(time.time())
+        conn.execute(
+            "UPDATE tasks SET status='running', assignee=COALESCE(assignee,?), "
+            "started_at=COALESCE(started_at,?), last_heartbeat_at=? WHERE id=?",
+            (assignee, now, now, task_id),
+        )
+        conn.commit()
+        conn.close()
+        logger.info(
+            "sqlite: claimed+assigned %s → running (assignee=%s)", task_id, assignee
+        )
+        return True
+    except sqlite3.Error as exc:
+        logger.warning("sqlite error in _claim_and_assign: %s", exc)
+        return False
 
 
 def advance(state: dict, completed_agent: str) -> dict:
