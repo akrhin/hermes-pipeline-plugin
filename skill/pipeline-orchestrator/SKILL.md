@@ -1,12 +1,12 @@
 ---
 name: pipeline-orchestrator
-description: Orchestration logic for Pipeline Plugin v2.1 (Kanban-native) — state in kanban.db, no state.json. Variant C: board is SSOT.
+description: Orchestration logic for Pipeline Plugin v3.1 (Kanban-native + Ensemble) — kanban.db SSOT, selective context, Best-of-N ensemble.
 author: Hermes + Vladimir
 category: hermes
-tags: [pipeline, orchestration, multi-agent, quality-gates, kanban, variant-c]
+tags: [pipeline, orchestration, multi-agent, quality-gates, kanban, ensemble, variant-c]
 ---
 
-# Pipeline Orchestrator v2.1 — Kanban-native (Variant C)
+# Pipeline Orchestrator v3.1 — Kanban-native + Ensemble
 
 ## Architecture
 
@@ -19,7 +19,7 @@ User request → pipeline_classify → pipeline_save (create task tree on board)
          │  → вижу какой @agent ready  │
          └──────────┬──────────────────┘
                     ↓
-            выполняю агента
+            выполняю агента с selective context
             pipeline_advance(state, agent)
             → promote следующего
                     ↓
@@ -28,191 +28,157 @@ User request → pipeline_classify → pipeline_save (create task tree on board)
          → findings на доску, решение
                     ↓
          converged? → pipeline_clear()
-         continue?  → следующий раунд
+         continue?  → @coder single pass (ensemble OFF)
 ```
-
-**Kлючевое отличие от v1.x:** нет `state.json`, нет `pstate.save()`/`load()`.  
-Всё состояние — на доске `pipeline` в kanban.db.  
-После рестарта: `pipeline_resume()` → сканирую доску → «ага, @coder done, @reviewer ready».
 
 ## 🚨 Delegation Rule (CRITICAL)
 
-`delegate_task` — это **agent-level** инструмент. Плагин НЕ МОЖЕТ его вызвать.
-Вместо этого используй `pipeline_run_agent(state, agent_id)`:
+Используй `pipeline_run_agent(state, agent_id)` для всех агентов:
 
 1. Вызови `pipeline_run_agent(state, agent_id)` → получи delegation package
-2. Прочитай `call_args` из ответа
-3. Вызови `delegate_task(**call_args)` сам (ты — оркестратор, а не плагин)
-4. Сохрани результат
-5. Вызови `pipeline_advance(state, agent_id)` → promote следующего
+2. Для Pro (architect, reviewer, security, integration):
+   - Прочитай `call_args` → `delegate_task(**call_args)`
+3. Для Flash (finder, analyst, coder, tester и др.):
+   - Используй prompt напрямую (directive: "direct")
+4. Вызови `pipeline_advance(state, agent_id)` → promote следующего
+5. **Никогда не вызывай delegate_task напрямую — всегда через pipeline_run_agent**
 
-**Никогда не пытайся вызвать delegate_task изнутри плагина.**
-**Всегда: pipeline_run_agent → delegate_task → pipeline_advance.**
+## Ensemble Flow (NEW v3.0+)
+
+Для @coder на первом convergence round (round=0):
+
+```
+if agent == 'coder' and state.round <= 1 and ensemble enabled (config.yaml):
+
+  1. pipeline_ensemble_run(state, 'coder', n=5)
+     → generate_candidates(): 5 вариаций T=0.3..1.1
+     → create_ensemble_subtasks(): N подтасков на доске
+
+  2. delegate_task × 5 (параллельно)
+     → каждый candidate: {prompt, model: deepseek-v4-flash, temperature}
+
+  3. pipeline_ensemble_judge(request, results, judge_mode='llm')
+     → mode='deterministic': выбирает среднего (быстро, MVP)
+     → mode='llm': build_judge_prompt() → делегация в LLM Judge
+     → возвращает {winner_id, rationale, scores}
+
+  4. Результат (выбранный код) → @reviewer как обычно
+
+else:
+  → обычный single pass @coder
+  → на convergence rounds (2+) ensemble auto-off (экономия)
+```
 
 ## Available Tools
 
-Плагин регистрирует **10 инструментов** в toolset `pipeline`:
+Плагин регистрирует **12 инструментов** в toolset `pipeline`:
 
 ### 1. `pipeline_classify(request: str)`
 Классифицирует запрос, возвращает `{category, pipeline, pipeline_type}`.
-Вызывается **первым**.
 
 ### 2. `pipeline_save(state: dict)`
-Создаёт дерево задач на доске pipeline:
-- Parent: «🔷 Пайплайн: <request>»
-- Children: по одному на каждого агента, с `--parent` линком
-- Первый агент сразу в `ready`
-- **Idempotent:** если parent уже существует (по idempotency-key), не дублирует
+Создаёт дерево задач на доске pipeline. Idempotent.
 
-**Вызывается один раз** при старте пайплайна.
+### 3. `pipeline_load()` / `pipeline_resume()`
+Сканирование доски, возврат state. После рестарта — `pipeline_resume()`.
 
-### 3. `pipeline_load()`
-Сканирует доску pipeline, ищет активный (не done) parent.
-Возвращает реконструированный state dict или **null**, если пайплайна нет.
+### 4. `pipeline_advance(state: dict, completed_agent: str)`
+Mark done + promote next.
 
-### 4. `pipeline_resume()`
-То же что `pipeline_load()`, но явный semantic:
-- После `/resume` команды
-- После рестарта сессии
-- Когда хочешь проверить «а не висит ли что-то на доске?»
+### 5. `pipeline_convergence(state: dict, findings?: list)`
+Детерминированная конвергенция (fingerprint, severity, max_rounds).
 
-### 5. `pipeline_advance(state: dict, completed_agent: str)`
-Отмечает агента как `done` и `promote` следующего в `ready`.
-Возвращает обновлённый state с `current_idx` +1.
+### 6. `pipeline_clear()`
+Close all tasks.
 
-### 6. `pipeline_convergence(state: dict, findings?: list)`
-Детерминированная конвергенция:
-- Вычисляет fingerprint, сравнивает с предыдущим раундом
-- Решает: `continue` / `converged` / `stuck` / `maxed_out`
-- Пишет findings как comment на доску (через `kb.on_convergence`)
-- На `continue`: разблокирует @coder для следующего раунда
-- Состояние **не сохраняется на диск** — state в working memory агента
+### 7. `agent_prompt(agent_id, context, request?, category?)`
+Читает шаблон `agents/<agent_id>.prompt`, подставляет ТОЛЬКО нужные секции контекста (AGENT_CONTEXT_FIELDS). Больше НЕ передаёт full_context.
 
-### 7. `pipeline_clear()`
-Закрывает все задачи на доске (cancel/abort).
-Комментирует «🧹 Пайплайн очищен».
+### 8./9. `agent_model(agent_id)` / `pipeline_run_agent(state, agent_id, context?)`
+Model routing + delegation package.
 
-### 8. `agent_prompt(agent_id, context, request?, category?)`
-Читает `agents/<agent_id>.prompt`, подставляет контекст.
-Возвращает `{prompt: "..."}`.
+### 10./11. `pipeline_ensemble_run(state, agent_id, n?)` / `pipeline_ensemble_judge(request, candidates, judge_mode?)`
+Best-of-N ensemble: генерация N вариаций + выбор лучшей.
 
-### 9. `agent_model(agent_id)`
-Возвращает `{provider, model}` для агента.
+## Selective Context (v2.3+)
 
-### 10. `pipeline_run_agent(state: dict, agent_id: str, context?: dict)`
+Раньше каждый агент получал `full_context = json.dumps(весь контекст)`. Теперь:
 
-Build delegation package for running a pipeline agent. Returns:
+| Агент | Получает | НЕ получает |
+|-------|----------|-------------|
+| @coder | implementation + planning | research, quality, docs, infra |
+| @reviewer | implementation + research | planning, quality, docs, infra |
+| @security | implementation + research | planning, quality, docs |
+| @integration | implementation + documentation + infra | research, quality |
+| @tester | implementation | всё остальное |
+| @documenter | implementation + documentation | research, planning, quality |
 
-```json
-{
-  "agent_id": "architect",
-  "directive": "delegate",
-  "tool_hint": "delegate_task",
-  "provider": "delegate",
-  "model": "deepseek-v4-pro",
-  "prompt": "...",
-  "call_args": {"prompt": "...", "provider": "delegate", "model": "deepseek-v4-pro", "description": "Pipeline agent: architect"},
-  "state": {...}
-}
+Full_context доступен только для fallback (неизвестные агенты, backward compat).
+
+## Config
+
+```yaml
+pipeline:
+  models:
+    # model per agent
+  ensemble:
+    enabled: true
+    default_n: 5
+    max_n: 10
+    agents:
+      coder:
+        enabled: true
+        n: 5
+        judge_mode: llm
+    judge:
+      model: deepseek-v4-flash
+      provider: polza
+    cost_optimization:
+      disable_on_round_gt: 1
 ```
 
-**Directive types:**
-- `"delegate"` → Pro агенты (architect, reviewer, security, integration). Оркестратор вызывает `delegate_task(**call_args)`.
-- `"delegate_free"` → Free-tier (researcher). Аналогично delegate.
-- `"direct"` → Flash-агенты. Оркестратор использует prompt напрямую в своём контексте.
-
-## Pipeline Flow (checkpoint-style)
+## Pipeline Flow
 
 ```
-1. classify(request)
-   → {category, pipeline: [...]}
+1. classify(request) → {category, pipeline}
 
 2. save({request, category, pipeline, status: "running"})
    → {kanban_parent_id, kanban_task_ids}
 
-3. Цикл по агентам:
-   for each agent_id in pipeline[current_idx:]:
-     # ── Шаг 1: получи delegation package ──
-     pkg = pipeline_run_agent(state, agent_id)
-     # pkg = {agent_id, directive, tool_hint, provider, model, prompt, call_args, state}
-
-     # ── Шаг 2: выполни агента ──
+3. Цикл по агентам с selective context:
+   for each agent in pipeline[current_idx:]:
+     pkg = pipeline_run_agent(state, agent)
      if pkg.directive in ("delegate", "delegate_free"):
        result = delegate_task(**pkg.call_args)
-       # сохрани result
      elif pkg.directive == "direct":
-       # используй pkg.prompt напрямую в своём контексте (Flash-агенты)
-       # выполняй шаги промпта своими инструментами
-       result = <твой вывод после выполнения>
+       # выполняю prompt напрямую
+       result = <мой вывод>
+     
+     # Если @coder и round=0 и ensemble enabled:
+     #   pipeline_ensemble_run → 5 candidates
+     #   delegate_task × 5
+     #   pipeline_ensemble_judge → winner
+     
+     state = pipeline_advance(pkg.state, agent)
 
-     # ── Шаг 3: продвинь пайплайн ──
-     state = pipeline_advance(pkg.state, agent_id)
-     # state.current_idx теперь указывает на следующего агента
-
-     # ── Шаг 4: checkpoint? ──
-     # Спроси пользователя на ключевых этапах
-
-4. Конвергенция (после @tester + @documenter):
-   findings = собрать из результатов ревью/секьюрити
+4. Конвергенция:
+   findings = собрать из результатов
    decision = pipeline_convergence(state, findings)
-   → continue? → раунд 2:
-       1. pipeline_run_agent(state, "coder") → pkg
-       2. delegate_task(**pkg.call_args)
-       3. Затем reviewer → security → integration → tester → documenter
-       4. (каждый через pipeline_run_agent → delegate_task → pipeline_advance)
-   → converged? → готово, pipeline_clear()
-   → stuck? → показать findings, спросить что делать
+   continue? → раунд 2:
+     1. pipeline_run_agent(state, "coder") → single pass (ensemble OFF)
+     2. delegate_task / direct (результаты)
+     3. Затем reviewer → security → ... → documenter
+   converged? → готово, pipeline_clear()
+   stuck? → показать findings, ждать пользователя
+
+5. checkpoint? — спросить пользователя на ключевых этапах
 ```
-
-## Checkpoints
-
-Перед каждым ответственным этапом — спросить пользователя:
-- После `@researcher` (перед архитектором): «Вот что нашёл, проектируем?»
-- После `@planner` (перед кодером): «План устраивает?»
-- После `@coder` (перед ревью): «Код готов, пускать ревьюера?»
-- На каждой итерации конвергенции
-
-Пользователь может сказать «да», «стоп», «продолжай без спроса».
-
-## Resume After Restart
-
-При старте новой сессии:
-
-```
-1. pipeline_resume()
-2. Если вернул state:
-   - Показать: «Есть незавершённый пайплайн: <request>, этап @<agent>, раунд N. Продолжаем?»
-   - Если «да»: беру state, вызываю advance() для текущего ready-агента
-   - Если «нет»: pipeline_clear()
-3. Если null: работаем дальше, пайплайна нет
-```
-
-## Kanban Integration
-
-Не вызывать `hermes kanban` напрямую. Всё через инструменты плагина:
-- `pipeline_save` → создаёт дерево
-- `pipeline_advance` → promote следующего
-- `pipeline_convergence` → comment + complete/block/continue
-- `pipeline_clear` → закрыть всё
-
-На доске:
-- Parent: статус `running` пока идёт, `done` когда converged/maxed_out, `blocked` если stuck
-- Children: `todo` → `ready` → `running` → `done`
 
 ## Pitfalls
 
-1. **Состояние в working memory.** После рестарта сессии state теряется — нужен `pipeline_resume()`.
-2. **Idempotency ключи.** `pipeline_save` использует md5 от списка агентов. Если агенты совпадают — не дублирует. Если надо пересоздать — сначала `pipeline_clear()`.
-3. **Kanban CLI формат.** `kanban.py` парсит `--json` вывод. Если Hermes изменит JSON-формат — `scan_board()` сломается.
-4. **scan_board() ищет только доску pipeline.** Другие доски не трогает.
-5. **state.json не существует.** Не пытайся читать `~/.hermes/plugins/pipeline/state.json` — его больше нет.
-6. **Не сохраняй state вручную.** Всё состояние на доске. Кеш в рабочей памяти агента — временный.
-7. **После рестарта Hermes** kanban.db жив. `pipeline_resume()` подхватит.
-
-## Audit Checklist
-
-При аудите кода (@analyst, @reviewer, @security, @tester) используй checklist:
-`references/code-audit-checklist.md`
-
-Особое внимание — **Race Conditions** и **Leaks** (раздел 2-3).
-Это то что статический анализ не ловит, и что первый пайплайн пропускает.
+1. **Состояние в working memory.** После рестарта — `pipeline_resume()`.
+2. **Idempotency.** `pipeline_save` использует md5. Для пересоздания — `pipeline_clear()`.
+3. **Kanban CLI формат.** `_kanban()` парсит JSON. Если Hermes изменит формат — сломается.
+4. **Ensemble только на round=0.** На round 1+ single pass (экономия).
+5. **AGENT_CONTEXT_FIELDS** — если добавил нового агента, пропиши ему секции контекста. Unknown fallback передаёт всё (backward compat).
+6. **state.json не существует.** Не пытайся читать — его нет.
