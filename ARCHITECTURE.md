@@ -135,6 +135,25 @@ else:
 | @integration | delegate_task | DeepSeek V4 Pro |
 | @researcher | delegate_task | OpenRouter free |
 
+## Model Configuration (v2.2+)
+
+MODEL_MAP больше не хардкодится в `__init__.py`. Вместо этого:
+
+1. **`models.py`** содержит:
+   - `BUILTIN_MODEL_MAP` — хардкодный fallback (текущие 17 агентов)
+   - `load_model_config()` — читает `~/.hermes/config.yaml` → секция `pipeline.models`
+   - Merge-логика: BUILTIN → defaults → agents
+
+2. **`__init__.py`** вызывает `MODEL_MAP = load_model_config()` при импорте.
+
+3. **Config merge priority:**
+   1. `pipeline.models.agents.<agent_id>` — per-agent override (высший)
+   2. `pipeline.models.defaults.<provider_type>` — default по типу провайдера
+   3. `BUILTIN_MODEL_MAP` — хардкод (низший)
+
+4. **Устойчивость:** если config.yaml отсутствует, битый, или секции нет —
+   работает текущий хардкод без изменений.
+
 ## Convergence (deterministic, no LLM)
 
 Алгоритм в `kanban.py` (бывший `state.py`):
@@ -149,11 +168,12 @@ else:
 
 ```
 hermes-pipeline-plugin/
-├── ARCHITECTURE.md            ← этот файл (v2.1)
-├── AGENTS.md                  ← инструкции для агентов (v2.0)
-├── README.md                  ← общее описание
-├── plugin.yaml                ← манифест v2.1.0 (10 tools)
-├── __init__.py                ← ядро: 10 хендлеров + регистрация
+├── ARCHITECTURE.md            ← этот файл (v2.2)
+├── AGENTS.md                  ← инструкции для агентов (v2.2)
+├── README.md
+├── plugin.yaml                ← манифест v2.2.0
+├── __init__.py                ← ядро: 10 хендлеров + регистрация (MODEL_MAP из models.py)
+├── models.py                  ← NEW: MODEL_MAP loader (YAML config → merge)
 ├── classify.py                ← классификация (8 категорий)
 ├── kanban.py                  ← Kanban API: tree, advance, converge, scan, resume
 ├── LICENSE                    ← MIT
@@ -168,7 +188,8 @@ hermes-pipeline-plugin/
 ├── tests/
 │   ├── test_classify.py           (21 тестов)
 │   ├── test_init.py               (17 тестов)
-│   └── test_kanban_convergence.py (12 тестов)
+│   ├── test_kanban_convergence.py (12 тестов)
+│   └── test_models.py             ← NEW: тесты для load_model_config
 ├── skill/
 │   └── pipeline-orchestrator/
 │       ├── SKILL.md               ← оркестратор (checkpoints, revision loops)
@@ -187,3 +208,4 @@ hermes-pipeline-plugin/
 | 2026-07-18 | @integration agent, Kanban хуки (v1.2.0) |
 | 2026-07-19 | **Variant C**: state.json → kanban.db SSOT, state.py → kanban.py, +pipeline_resume, +pipeline_advance, 9 tools (v2.0.0) |
 | 2026-07-19 | **v2.1.0**: +pipeline_run_agent (delegation package pattern), 10 tools |
+| 2026-07-19 | **v2.2.0**: MODEL_MAP → config.yaml (models.py) |
