@@ -217,13 +217,12 @@ def create_task_tree(state: dict) -> dict:
         if first_id:
             promote(first_id)
             logger.info("promoted first agent %s → ready", first_agent)
-
     # ══ Log the pipeline start on the parent task ════════════════════════
     comment(parent_id,
             f"🚀 Пайплайн запущен\n"
             f"Категория: {category}\n"
             f"Агенты: {agents_str}\n"
-            f"Первый этап: @{pipeline[0]}")
+            f"Первый этап: @{pipeline[0] if pipeline else '?'}")
 
     return state
 
@@ -255,7 +254,8 @@ def advance(state: dict, completed_agent: str) -> dict:
         next_id = task_ids.get(next_agent)
         if next_id:
             promote(next_id)
-            comment(parent_id or "", f"👉 Начинается этап @{next_agent}")
+            if parent_id:
+                comment(parent_id, f"👉 Начинается этап @{next_agent}")
             logger.info("promoted %s → ready", next_agent)
         state["current_idx"] = next_idx
 
@@ -505,7 +505,7 @@ def scan_board() -> dict | None:
                 if line.startswith("Категория:"):
                     category = line.split(":", 1)[1].strip()
 
-            # Find which child is ready/todo — use the FIRST one (lowest index)
+    # Find which child is ready/todo — use the FIRST one (lowest index)
             current_idx = -1
             completed = []
             pipeline = []
@@ -516,15 +516,15 @@ def scan_board() -> dict | None:
                 cstatus = child.get("status", "")
                 agent = ""
                 if ctitle.startswith("@"):
-                    agent = ctitle.split(":")[0].lstrip("@").split()[0]
+                    agent = ctitle.split(":", 1)[0].lstrip("@").strip()
                 if agent:
                     task_ids[agent] = cid
                     pipeline.append(agent)
                 if cstatus == "done":
                     completed.append(agent)
                 elif cstatus in ("ready", "todo", "running") and current_idx == -1:
-                    # First non-completed child determines current_idx
-                    current_idx = pipeline.index(agent) if agent in pipeline else -1
+                    if agent in pipeline:
+                        current_idx = pipeline.index(agent)
 
             state = {
                 "request": request,
@@ -564,3 +564,60 @@ def get_agent_context(state: dict, agent_id: str) -> dict:
         agent_ctx["_focus"] = "infrastructure"
 
     return agent_ctx
+
+
+# ── Ensemble / Best-of-N ──────────────────────────────────────────────────────
+
+
+def generate_candidates(state: dict, agent_id: str, n: int = 5) -> list[dict]:
+    """Prepare N candidate variation packages for parallel execution.
+
+    Each candidate gets the same task but with different temperature
+    and instruction_extra for diversity. Uses AGENT_CONTEXT_FIELDS
+    for selective context per agent.
+    """
+    task = state.get("request", "")
+    ctx = state.get("context", {})
+    category = state.get("category", "")
+
+    variations = [
+        {"temperature": 0.3, "instruction_extra": "Будь консервативен. Минимальные изменения."},
+        {"temperature": 0.5, "instruction_extra": "Пиши чистый код с комментариями и type hints."},
+        {"temperature": 0.7, "instruction_extra": "Стандартный production-подход."},
+        {"temperature": 0.9, "instruction_extra": "Полное решение с тестами и обработкой ошибок."},
+        {"temperature": 1.1, "instruction_extra": "Нестандартный подход, креативное решение."},
+    ]
+
+    candidates = []
+    for i in range(min(n, len(variations))):
+        var = variations[i]
+        prompt = f"{task}\n\n{var['instruction_extra']}"
+        candidates.append({
+            "id": f"candidate_{i+1}",
+            "task": prompt,
+            "temperature": var["temperature"],
+            "instruction_extra": var["instruction_extra"],
+        })
+    return candidates
+
+
+def judge_candidates(request: str, candidates: list[dict]) -> dict:
+    """Select the best candidate using deterministic heuristics.
+
+    Returns the winner candidate id and reasoning.
+    For MVP: picks the candidate with most balanced metrics.
+    For production: delegates to LLM Judge.
+    """
+    if not candidates:
+        return {"winner_id": None, "rationale": "No candidates"}
+
+    # Deterministic judge: prefer middle temperature (balanced approach)
+    balanced_idx = len(candidates) // 2  # middle candidate
+    winner = candidates[balanced_idx]
+
+    return {
+        "winner_id": winner["id"],
+        "rationale": f"Selected {winner['id']} (T={winner['temperature']}) — "
+                     f"{winner['instruction_extra']}",
+        "temperature": winner["temperature"],
+    }

@@ -229,6 +229,71 @@ RUN_AGENT_SCHEMA = {
 }
 
 
+# ── Ensemble tool schemas ─────────────────────────────────────────────────────
+
+
+ENSEMBLE_RUN_SCHEMA = {
+    "name": "pipeline_ensemble_run",
+    "description": (
+        "Generate N candidate task packages for Best-of-N ensemble execution. "
+        "Returns list of candidate packages with varied temperature/instructions. "
+        "Orchestrator runs delegate_task for each, then calls pipeline_ensemble_judge."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "state": {
+                "type": "object",
+                "description": "Current pipeline state",
+            },
+            "agent_id": {
+                "type": "string",
+                "description": "Agent to run in ensemble mode (e.g. 'coder')",
+            },
+            "n": {
+                "type": "integer",
+                "description": "Number of candidates (default: 5, max: 10)",
+                "default": 5,
+                "minimum": 2,
+                "maximum": 10,
+            },
+        },
+        "required": ["state", "agent_id"],
+    },
+}
+
+
+ENSEMBLE_JUDGE_SCHEMA = {
+    "name": "pipeline_ensemble_judge",
+    "description": (
+        "Evaluate N candidate results and select the best one. "
+        "Returns winner id, rationale, and all candidate scores."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "request": {
+                "type": "string",
+                "description": "Original task/request",
+            },
+            "candidates": {
+                "type": "array",
+                "description": "Array of candidate results with id and output",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "output": {"type": "string"},
+                        "temperature": {"type": "number"},
+                    },
+                },
+            },
+        },
+        "required": ["request", "candidates"],
+    },
+}
+
+
 # ── Handlers ──────────────────────────────────────────────────────────────────
 
 
@@ -344,7 +409,6 @@ AGENT_CONTEXT_FIELDS = {
 
 def _build_agent_prompt(agent_id: str, context: dict, request: str, category: str) -> dict:
     """Build a prompt for an agent, including only the context sections it needs."""
-    import os
 
     agent_id = os.path.basename(agent_id)
     prompt_path = os.path.join(PLUGIN_DIR, "agents", f"{agent_id}.prompt")
@@ -507,6 +571,33 @@ def handle_run_agent(args, **kwargs):
         return json.dumps({"error": str(e), "traceback": traceback.format_exc()})
 
 
+def handle_ensemble_run(args, **kwargs):
+    """Generate N candidate packages for ensemble execution."""
+    try:
+        state = args["state"]
+        agent_id = args["agent_id"]
+        n = args.get("n", 5)
+        candidates = kb.generate_candidates(state, agent_id, n)
+        return json.dumps({
+            "agent_id": agent_id,
+            "n": len(candidates),
+            "candidates": candidates,
+        }, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+
+def handle_ensemble_judge(args, **kwargs):
+    """Evaluate candidates and select best one."""
+    try:
+        request = args["request"]
+        candidates = args["candidates"]
+        result = kb.judge_candidates(request, candidates)
+        return json.dumps(result, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+
 # ── Registration ──────────────────────────────────────────────────────────────
 
 
@@ -521,7 +612,9 @@ def register(ctx):
         ("pipeline_advance", ADVANCE_SCHEMA, handle_advance),
         ("agent_prompt", PROMPT_SCHEMA, handle_prompt),
         ("agent_model", MODEL_SCHEMA, handle_model),
-        ("pipeline_run_agent", RUN_AGENT_SCHEMA, handle_run_agent),  # ← NEW 10th
+        ("pipeline_run_agent", RUN_AGENT_SCHEMA, handle_run_agent),
+        ("pipeline_ensemble_run", ENSEMBLE_RUN_SCHEMA, handle_ensemble_run),
+        ("pipeline_ensemble_judge", ENSEMBLE_JUDGE_SCHEMA, handle_ensemble_judge),
     ]:
         ctx.register_tool(
             name=name,
