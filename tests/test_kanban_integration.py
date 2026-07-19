@@ -1,0 +1,138 @@
+"""
+Integration tests for Pipeline Plugin v2.0 Kanban API.
+
+Requires `hermes` CLI with Kanban support.
+Skipped if the CLT is unavailable or `pipeline` board doesn't exist.
+Runs serially (one session) to avoid parent collisions.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+
+import pytest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+import kanban as kb
+
+
+def _has_kanban():
+    hermes = shutil.which("hermes")
+    if not hermes:
+        return False
+    try:
+        r = subprocess.run(
+            [hermes, "kanban", "boards", "ls", "--json"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if r.returncode != 0:
+            return False
+        boards = json.loads(r.stdout)
+        return any(b.get("slug") == "pipeline" for b in boards)
+    except Exception:
+        return False
+
+
+def _cleanup(state):
+    """Close all tasks for a pipeline state."""
+    if not state:
+        return
+    parent = state.get("kanban_parent_id")
+    if not parent:
+        return
+    for tid in state.get("kanban_task_ids", {}).values():
+        kb.complete(tid, result_summary="Int-test cleanup")
+    kb.complete(parent, result_summary="Int-test cleanup")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def clean_board():
+    """Clean the board before and after the test session."""
+    yield
+    # Session teardown: close any leftover active tasks
+    state = kb.scan_board()
+    while state:
+        _cleanup(state)
+        time.sleep(0.3)
+        state = kb.scan_board()
+
+
+# Track created parents so each test can uniquely identify its own
+_created_parents: dict[str, str] = {}
+
+def _unique_state(pipeline=None):
+    ts = str(time.time())
+    return {
+        "request": f"Int test {ts}",
+        "category": "TEST",
+        "pipeline": pipeline or ["finder", "coder", "tester"],
+        "current_idx": 0,
+        "completed": [],
+        "context": {},
+        "checkpoints": {},
+        "status": "running",
+    }
+
+
+@pytest.mark.skipif(not _has_kanban(), reason="Kanban CLI or pipeline board not available")
+class TestKanbanTreeIntegration:
+    """Integration tests exercising create_task_tree against real Kanban CLI."""
+
+    def test_create_task_tree_idempotent(self):
+        """Calling create_task_tree twice with same state should not duplicate tasks."""
+        state = _unique_state()
+        first = kb.create_task_tree(dict(state))
+        parent1 = first.get("kanban_parent_id")
+        assert parent1 is not None
+        assert len(first.get("kanban_task_ids", {})) == 3
+
+        second = kb.create_task_tree(dict(state))
+        assert second.get("kanban_parent_id") == parent1
+        _cleanup(first)
+
+    def test_create_task_tree_creates_children(self):
+        """Each agent should have a child task on the board."""
+        state = _unique_state()
+        state = kb.create_task_tree(state)
+        parent = state.get("kanban_parent_id")
+        task_ids = state.get("kanban_task_ids", {})
+
+        detail = kb.show_task(parent)
+        child_ids = set(detail.get("children", []))
+        created_ids = set(task_ids.values())
+        assert created_ids.issubset(child_ids)
+        _cleanup(state)
+
+    def test_scan_board_roundtrip(self):
+        """After create_task_tree + advance, scan_board should find the pipeline."""
+        state = _unique_state()
+        created = kb.create_task_tree(dict(state))
+        parent_id = created.get("kanban_parent_id")
+
+        kb.advance(created, "finder")
+        time.sleep(0.3)
+
+        restored = kb.scan_board()
+        assert restored is not None, "scan_board should find active pipeline"
+        assert restored.get("kanban_parent_id") == parent_id, \
+            f"Expected parent {parent_id}, got {restored.get('kanban_parent_id')}"
+        assert len(restored.get("pipeline", [])) == 3
+        assert "finder" in restored.get("completed", [])
+
+        _cleanup(created)
+
+    def test_scan_board_after_complete(self):
+        """After completing all tasks, scan_board should return None."""
+        state = _unique_state()
+        created = kb.create_task_tree(dict(state))
+        _cleanup(created)
+        time.sleep(0.3)
+
+        restored = kb.scan_board()
+        assert restored is None, "scan_board should return None after cleanup"

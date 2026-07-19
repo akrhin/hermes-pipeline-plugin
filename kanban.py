@@ -123,8 +123,8 @@ def block_task(task_id: str, reason: str = "",
 
 
 def unblock(task_id: str) -> bool:
-    """Unblock a task (for next convergence round)."""
-    return bool(_kanban("promote", "--json", task_id))
+    """Unblock a task (for next convergence round). Alias for promote()."""
+    return promote(task_id)
 
 
 def list_tasks(status: str = "", include_archived: bool = False) -> list[dict]:
@@ -460,8 +460,25 @@ def scan_board() -> dict | None:
     if not tasks:
         return None
 
-    # Find the first non-completed parent
+    # Filter to only parent tasks (those with children on the board)
+    parent_tasks = []
     for t in tasks:
+        tid = t.get("id", "")
+        if not tid:
+            continue
+        detail = show_task(tid)
+        children = detail.get("children", [])
+        if len(children) >= 2:  # A pipeline parent has 2+ children
+            parent_tasks.append(t)
+
+    if not parent_tasks:
+        return None
+
+    # Sort by created_at descending — prefer the most recent active pipeline
+    parent_tasks.sort(key=lambda t: t.get("created_at", 0), reverse=True)
+
+    # Find the first non-completed parent
+    for t in parent_tasks:
         if t.get("status") in ("running", "ready", "todo", "blocked", "stuck",
                                 "needs_input"):
             parent_id = t.get("id")

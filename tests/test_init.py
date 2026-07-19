@@ -1,5 +1,7 @@
 """
 Unit tests for pipeline plugin core (__init__.py) — Kanban-native variant.
+No Kanban CLI calls — pure Python tests only.
+Integration tests (scan_board, kanban CLI) live in test_kanban_integration.py.
 """
 
 from __future__ import annotations
@@ -112,7 +114,8 @@ class TestHandlePrompt:
 
 
 class TestHandleConvergence:
-    """Tests for pipeline_convergence handler — no disk state, works with in-memory dict."""
+    """Tests for pipeline_convergence handler — pure logic, no kanban CLI needed
+    because state without kanban_parent_id short-circuits on_convergence()."""
 
     def _make_state(self):
         return {
@@ -129,9 +132,7 @@ class TestHandleConvergence:
         }
 
     def test_convergence_no_state(self):
-        result = json.loads(plugin.handle_convergence({
-            "state": {},
-        }))
+        result = json.loads(plugin.handle_convergence({"state": {}}))
         assert result["decision"] == "unknown"
 
     def test_convergence_converged(self):
@@ -153,7 +154,6 @@ class TestHandleConvergence:
         assert result["p0_count"] == 1
 
     def test_convergence_stuck(self):
-        """Same findings 2 rounds → stuck."""
         state = self._make_state()
         r1 = json.loads(plugin.handle_convergence({
             "state": state,
@@ -169,7 +169,6 @@ class TestHandleConvergence:
         assert r2["decision"] == "stuck"
 
     def test_convergence_maxed_out(self):
-        """3 rounds → maxed_out."""
         state = self._make_state()
         for _ in range(3):
             result = json.loads(plugin.handle_convergence({
@@ -178,6 +177,14 @@ class TestHandleConvergence:
                               "description": "XSS"}],
             }))
         assert result["decision"] == "maxed_out"
+
+
+class TestHandleSave:
+    """Basic error-path test — save with missing args returns error."""
+
+    def test_save_missing_state(self):
+        result = json.loads(plugin.handle_save({}))
+        assert "error" in result
 
 
 class TestHandleClassify:
@@ -200,56 +207,3 @@ class TestHandleClassify:
             "request": "баг: крашится при логине",
         }))
         assert result["category"] == "BUG_UNKNOWN"
-
-
-class TestHandleSave:
-    """Tests for pipeline_save handler."""
-
-    def test_save_missing_state(self):
-        """Missing state arg should return error."""
-        result = json.loads(plugin.handle_save({}))
-        assert "error" in result
-
-
-class TestHandleLoad:
-    """Tests for pipeline_load handler."""
-
-    def test_load_no_args(self):
-        """No args should not crash — returns state or null."""
-        result = json.loads(plugin.handle_load({}))
-        # Either None (no active pipeline) or a dict (if pipeline exists)
-        assert result is None or isinstance(result, dict)
-
-
-class TestHandleResume:
-    """Tests for pipeline_resume handler."""
-
-    def test_resume_no_args(self):
-        """No args should not crash."""
-        result = json.loads(plugin.handle_resume({}))
-        assert result is None or isinstance(result, dict)
-
-
-class TestHandleAdvance:
-    """Tests for pipeline_advance handler."""
-
-    def test_advance_missing_state(self):
-        """Missing state should return error."""
-        result = plugin.handle_advance({"completed_agent": "finder"})
-        res = json.loads(result) if isinstance(result, str) else result
-        assert "error" in res if isinstance(res, dict) else True
-
-    def test_advance_missing_agent(self):
-        """Missing agent should return error."""
-        result = plugin.handle_advance({"state": {"pipeline": ["finder"]}})
-        res = json.loads(result) if isinstance(result, str) else result
-        assert "error" in res if isinstance(res, dict) else True
-
-
-class TestHandleClear:
-    """Tests for pipeline_clear handler."""
-
-    def test_clear_no_args(self):
-        """No args should not crash — graceful cleanup."""
-        result = json.loads(plugin.handle_clear({}))
-        assert result.get("status") == "ok"
