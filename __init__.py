@@ -1,14 +1,24 @@
 """
-Pipeline Plugin — multi-agent orchestration for Hermes Agent.
+Pipeline Plugin v2.0 — Kanban-native multi-agent orchestration.
 
-Provides 7 tools:
-  - pipeline_classify: classify request → category + pipeline
+Variant C: state.json eliminated. kanban.db = single source of truth.
+Board `pipeline` stores the entire pipeline lifecycle as a task tree.
+
+Provides 8 tools:
+  - pipeline_classify: classify request → category + agent list
   - pipeline_convergence: evaluate convergence (deterministic, no LLM)
-  - pipeline_save: persist pipeline state to disk
-  - pipeline_load: load persisted pipeline state
-  - pipeline_clear: remove persisted pipeline state
+  - pipeline_save: create/update kanban task tree (idempotent)
+  - pipeline_load: reconstruct state from kanban board
+  - pipeline_clear: close all kanban tasks (abort/cancel)
+  - pipeline_resume: scan board for active pipeline (for restarts)
+  - pipeline_advance: mark agent done, promote next
   - agent_prompt: build prompt for a specific agent
   - agent_model: get provider+model for a specific agent
+
+Key change from v1.x:
+  - state.py removed → convergence logic in kanban.py
+  - state.json removed → state in kanban.db (Hermes Kanban board)
+  - After restart: pipeline_resume() scans board, no state.json needed
 """
 
 import json
@@ -16,16 +26,15 @@ import os
 import sys
 import traceback
 
-# Absolute imports — works both as stand-alone and as Hermes plugin
 PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 if PLUGIN_DIR not in sys.path:
     sys.path.insert(0, PLUGIN_DIR)
 
 import classify
-import kanban
-import state as pstate
+import kanban as kb
 
-# ── Tool schemas ─────────────────────────────────────────────────────────────┐
+
+# ── Tool schemas ──────────────────────────────────────────────────────────────
 
 CLASSIFY_SCHEMA = {
     "name": "pipeline_classify",
@@ -44,13 +53,17 @@ CLASSIFY_SCHEMA = {
 
 CONVERGENCE_SCHEMA = {
     "name": "pipeline_convergence",
-    "description": "Evaluate pipeline convergence (deterministic, no LLM). Returns continue/converged/stuck/maxed_out based on round count, findings fingerprint, and severity counts.",
+    "description": "Evaluate pipeline convergence (deterministic, no LLM). Returns continue/converged/stuck/maxed_out based on round count, findings fingerprint, and severity counts. Findings are posted to the Kanban board as comments.",
     "parameters": {
         "type": "object",
         "properties": {
+            "state": {
+                "type": "object",
+                "description": "Pipeline state dict (from pipeline_load or pipeline_resume). Must contain pipeline, kanban_parent_id, etc.",
+            },
             "findings": {
                 "type": "array",
-                "description": "Current round findings (list of dicts with severity/file/category/description). Optional — if omitted, reads from saved state.",
+                "description": "Current round findings (list of dicts with severity/file/category/description). Optional — omit to evaluate without new findings.",
                 "items": {
                     "type": "object",
                     "properties": {
@@ -63,19 +76,19 @@ CONVERGENCE_SCHEMA = {
                 },
             },
         },
-        "required": [],
+        "required": ["state"],
     },
 }
 
 SAVE_SCHEMA = {
     "name": "pipeline_save",
-    "description": "Save pipeline state to disk (overwrites previous state).",
+    "description": "Create/update the kanban task tree for a pipeline run. Idempotent — if the parent task already exists (by idempotency key), subsequent calls update existing tasks without duplication. Returns the state dict with kanban_parent_id and kanban_task_ids populated.",
     "parameters": {
         "type": "object",
         "properties": {
             "state": {
                 "type": "object",
-                "description": "Complete pipeline state object",
+                "description": "Pipeline state with request, category, pipeline fields. On first call, creates the full task tree. On subsequent calls, returns existing tree.",
                 "properties": {
                     "request": {"type": "string"},
                     "category": {"type": "string"},
@@ -84,15 +97,9 @@ SAVE_SCHEMA = {
                     "completed": {"type": "array", "items": {"type": "string"}},
                     "context": {"type": "object"},
                     "checkpoints": {"type": "object"},
-                    "round": {"type": "integer", "description": "Current convergence round (0-based)"},
-                    "max_rounds": {"type": "integer", "description": "Max convergence rounds before forced stop"},
-                    "findings": {"type": "array", "description": "List of findings for current round"},
-                    "findings_fingerprint": {"type": "string", "description": "MD5 fingerprint of P0/P1 findings for stuck detection"},
-                    "convergence": {"type": "string", "enum": ["running", "converged", "stuck", "maxed_out", "paused", "done"]},
                     "status": {"type": "string", "enum": ["running", "paused", "done"]},
-                    "kanban_task_id": {"type": "string", "description": "Hermes Kanban task ID for this pipeline run"},
                 },
-                "required": ["request", "category", "pipeline", "current_idx", "completed", "context", "checkpoints", "status"],
+                "required": ["request", "category", "pipeline", "status"],
             },
         },
         "required": ["state"],
@@ -101,7 +108,7 @@ SAVE_SCHEMA = {
 
 LOAD_SCHEMA = {
     "name": "pipeline_load",
-    "description": "Load the saved pipeline state from disk. Returns null if none exists.",
+    "description": "Scan the kanban board for the current pipeline state. Returns the reconstructed state dict for the active (non-completed, non-cancelled) pipeline run, or None if no active pipeline is found.",
     "parameters": {
         "type": "object",
         "properties": {},
@@ -111,11 +118,40 @@ LOAD_SCHEMA = {
 
 CLEAR_SCHEMA = {
     "name": "pipeline_clear",
-    "description": "Delete saved pipeline state from disk.",
+    "description": "Close all kanban tasks for the current pipeline run (cancels/aborts).",
     "parameters": {
         "type": "object",
         "properties": {},
         "required": [],
+    },
+}
+
+RESUME_SCHEMA = {
+    "name": "pipeline_resume",
+    "description": "Scan the pipeline board for an active (non-completed) pipeline run. Returns reconstructed state dict or null if idle. Use this after agent restart to pick up where you left off — finds ready/todo/running tasks and reconstructs pipeline, current_idx, completed, etc.",
+    "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+}
+
+ADVANCE_SCHEMA = {
+    "name": "pipeline_advance",
+    "description": "Mark an agent task as complete and promote the next agent in the pipeline. Returns updated state dict with current_idx advanced.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "state": {
+                "type": "object",
+                "description": "Current pipeline state (from pipeline_load/resume).",
+            },
+            "completed_agent": {
+                "type": "string",
+                "description": "Agent id that just completed (e.g. 'finder', 'analyst', 'coder').",
+            },
+        },
+        "required": ["state", "completed_agent"],
     },
 }
 
@@ -161,7 +197,8 @@ MODEL_SCHEMA = {
     },
 }
 
-# ── Handlers ─────────────────────────────────────────────────────────────────┘
+
+# ── Handlers ──────────────────────────────────────────────────────────────────
 
 
 def handle_classify(args, **kwargs):
@@ -174,91 +211,80 @@ def handle_classify(args, **kwargs):
 
 
 def handle_convergence(args, **kwargs):
-    """
-    Evaluate convergence for the current pipeline state.
-
-    Если findings переданы — сохраняем их в state и инкрементим round,
-    потом оцениваем. Если нет — просто оцениваем текущий state.
-    """
+    """Evaluate convergence. Findings posted to kanban board state in-memory."""
     try:
-        findings = args.get("findings", None)
-        state = pstate.load()
-
-        if state is None:
-            return json.dumps({
-                "decision": "unknown",
-                "reason": "No active pipeline state",
-                "round": 0,
-            })
-
-        # Guard: if no findings provided AND state has none → cannot evaluate
+        state = args["state"]
+        findings = args.get("findings")
         if findings is None and not state.get("findings"):
             return json.dumps({
                 "decision": "unknown",
-                "reason": "No findings available — cannot evaluate convergence",
+                "reason": "No findings — cannot evaluate",
                 "round": state.get("round", 0),
             })
-
-        if findings is not None:
-            # Save findings, compute fingerprint, bump round
-            prev_fp = state.get("findings_fingerprint", "")
-            state["findings"] = findings
-            state["findings_fingerprint"] = pstate._compute_fingerprint(
-                [f for f in findings if f.get("severity") in ("P0", "P1")]
-            )
-            state["prev_findings_fingerprint"] = prev_fp
-            state["round"] = state.get("round", 0) + 1
-            # Ensure kanban task exists
-            state = kanban.ensure_task(state)
-            pstate.save(state)
-
-        result = pstate.evaluate_convergence(state)
-
-        # Update kanban for every convergence evaluation
-        kanban.on_convergence(state, result)
-
-        # Auto-save convergence status on terminal decisions
-        if result["decision"] in ("converged", "stuck", "maxed_out"):
-            state["status"] = "done"
-            state["convergence"] = result["decision"]
-            pstate.save(state)
-
+        result = kb.evaluate_convergence(state, findings)
+        kb.on_convergence(state, result)
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
-        return json.dumps({"error": str(e), "traceback": traceback.format_exc()}, ensure_ascii=False)
+        return json.dumps({"error": str(e), "traceback": traceback.format_exc()},
+                          ensure_ascii=False)
 
 
 def handle_save(args, **kwargs):
+    """Create/update kanban task tree. Idempotent."""
     try:
         state = args["state"]
-        # Auto-create kanban task on first save
-        state = kanban.ensure_task(state)
-        pstate.save(state)
-        return json.dumps({"status": "ok", "kanban_task_id": state.get("kanban_task_id")})
+        state = kb.create_task_tree(state)
+        return json.dumps({
+            "status": "ok",
+            "kanban_parent_id": state.get("kanban_parent_id"),
+            "kanban_task_ids": state.get("kanban_task_ids", {}),
+        }, ensure_ascii=False)
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
 
 
 def handle_load(args, **kwargs):
+    """Scan kanban board for active pipeline state."""
     try:
-        state = pstate.load()
+        state = kb.scan_board()
         if state is None:
             return json.dumps(None)
         return json.dumps(state, ensure_ascii=False)
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
 
 
 def handle_clear(args, **kwargs):
+    """Close all kanban tasks for the current pipeline."""
     try:
-        # Close kanban task before clearing state
-        state = pstate.load()
-        if state and state.get("status") in ("running", "paused"):
-            kanban.on_clear(state)
-        pstate.clear()
+        state = kb.scan_board()
+        if state:
+            kb.on_clear(state)
         return json.dumps({"status": "ok"})
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+
+def handle_resume(args, **kwargs):
+    """Scan board for an active pipeline. Returns state or null."""
+    try:
+        state = kb.scan_board()
+        if state is None:
+            return json.dumps(None)
+        return json.dumps(state, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+
+def handle_advance(args, **kwargs):
+    """Mark agent complete, promote next. Returns updated state."""
+    try:
+        state = args["state"]
+        agent = args["completed_agent"]
+        state = kb.advance(state, agent)
+        return json.dumps(state, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
 
 
 def handle_prompt(args, **kwargs):
@@ -268,28 +294,22 @@ def handle_prompt(args, **kwargs):
         request = args.get("request", "")
         category = args.get("category", "")
 
-        # Safe path resolution: prevent path traversal
-        agent_id = os.path.basename(agent_id)  # strip any dir components
+        agent_id = os.path.basename(agent_id)
         prompt_path = os.path.join(PLUGIN_DIR, "agents", f"{agent_id}.prompt")
-
-        # Resolve once, open on resolved path (avoids TOCTOU)
         resolved = os.path.realpath(prompt_path)
         agents_dir = os.path.realpath(os.path.join(PLUGIN_DIR, "agents"))
-
-        # Verify the resolved path is under agents/ — single check, single open
         if not resolved.startswith(agents_dir):
             return json.dumps({"error": f"Unknown agent: {agent_id}"})
 
         with open(resolved, "r", encoding="utf-8") as f:
             template = f.read()
 
-        # Escape literal braces in user-controlled strings to prevent KeyError
-        request = request.replace("{", "{{").replace("}", "}}")
-        category = category.replace("{", "{{").replace("}", "}}")
+        request_esc = request.replace("{", "{{").replace("}", "}}")
+        category_esc = category.replace("{", "{{").replace("}", "}}")
 
         formatted = template.format(
-            request=request,
-            category=category,
+            request=request_esc,
+            category=category_esc,
             research_context=json.dumps(context.get("research", {}), ensure_ascii=False, indent=2),
             planning_context=json.dumps(context.get("planning", {}), ensure_ascii=False, indent=2),
             implementation_context=json.dumps(context.get("implementation", {}), ensure_ascii=False, indent=2),
@@ -301,13 +321,12 @@ def handle_prompt(args, **kwargs):
 
         return json.dumps({"prompt": formatted}, ensure_ascii=False)
     except KeyError as e:
-        return json.dumps({"error": f"Missing placeholder in prompt template: {e}"})
+        return json.dumps({"error": f"Missing placeholder: {e}"})
     except Exception as e:
         return json.dumps({"error": str(e), "traceback": traceback.format_exc()})
 
 
 MODEL_MAP = {
-    # Direct (agent does these itself with DeepSeek V4 Flash)
     "finder":      {"provider": "direct", "model": "deepseek-v4-flash"},
     "analyst":     {"provider": "direct", "model": "deepseek-v4-flash"},
     "planner":     {"provider": "direct", "model": "deepseek-v4-flash"},
@@ -320,12 +339,10 @@ MODEL_MAP = {
     "documenter":  {"provider": "direct", "model": "deepseek-v4-flash"},
     "devops":      {"provider": "direct", "model": "deepseek-v4-flash"},
     "optimizer":   {"provider": "direct", "model": "deepseek-v4-flash"},
-    # delegate_task (auto DeepSeek V4 Pro via user's delegation setting)
     "architect":   {"provider": "delegate", "model": "deepseek-v4-pro"},
     "reviewer":    {"provider": "delegate", "model": "deepseek-v4-pro"},
     "security":    {"provider": "delegate", "model": "deepseek-v4-pro"},
     "integration": {"provider": "delegate", "model": "deepseek-v4-pro"},
-    # delegate_task with OpenRouter free
     "researcher":  {"provider": "delegate_free", "model": "openrouter/free"},
     "commenter":   {"provider": "delegate_free", "model": "openrouter/free"},
 }
@@ -342,49 +359,24 @@ def handle_model(args, **kwargs):
         return json.dumps({"error": str(e)})
 
 
-# ── Registration ─────────────────────────────────────────────────────────────┘
+# ── Registration ──────────────────────────────────────────────────────────────
 
 
 def register(ctx):
-    ctx.register_tool(
-        name="pipeline_classify",
-        toolset="pipeline",
-        schema=CLASSIFY_SCHEMA,
-        handler=handle_classify,
-    )
-    ctx.register_tool(
-        name="pipeline_convergence",
-        toolset="pipeline",
-        schema=CONVERGENCE_SCHEMA,
-        handler=handle_convergence,
-    )
-    ctx.register_tool(
-        name="pipeline_save",
-        toolset="pipeline",
-        schema=SAVE_SCHEMA,
-        handler=handle_save,
-    )
-    ctx.register_tool(
-        name="pipeline_load",
-        toolset="pipeline",
-        schema=LOAD_SCHEMA,
-        handler=handle_load,
-    )
-    ctx.register_tool(
-        name="pipeline_clear",
-        toolset="pipeline",
-        schema=CLEAR_SCHEMA,
-        handler=handle_clear,
-    )
-    ctx.register_tool(
-        name="agent_prompt",
-        toolset="pipeline",
-        schema=PROMPT_SCHEMA,
-        handler=handle_prompt,
-    )
-    ctx.register_tool(
-        name="agent_model",
-        toolset="pipeline",
-        schema=MODEL_SCHEMA,
-        handler=handle_model,
-    )
+    for name, schema, handler in [
+        ("pipeline_classify", CLASSIFY_SCHEMA, handle_classify),
+        ("pipeline_convergence", CONVERGENCE_SCHEMA, handle_convergence),
+        ("pipeline_save", SAVE_SCHEMA, handle_save),
+        ("pipeline_load", LOAD_SCHEMA, handle_load),
+        ("pipeline_clear", CLEAR_SCHEMA, handle_clear),
+        ("pipeline_resume", RESUME_SCHEMA, handle_resume),
+        ("pipeline_advance", ADVANCE_SCHEMA, handle_advance),
+        ("agent_prompt", PROMPT_SCHEMA, handle_prompt),
+        ("agent_model", MODEL_SCHEMA, handle_model),
+    ]:
+        ctx.register_tool(
+            name=name,
+            toolset="pipeline",
+            schema=schema,
+            handler=handler,
+        )
