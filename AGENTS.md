@@ -16,12 +16,12 @@ hermes plugins enable pipeline
 
 ## How It Works
 
-Плагин регистрирует **9 инструментов**. Состояние — в kanban.board:
+Плагин регистрирует **10 инструментов**. Состояние — в kanban.board:
 - Parent task «🔷 Пайплайн: ...» с дочерними тасками для каждого агента
 - Статус агента: `ready` → `running` → `done`
 - `promote` следующего агента при завершении предыдущего
 
-## Tools (v2.0)
+## Tools (v2.1)
 
 | Tool | Purpose |
 |------|---------|
@@ -34,12 +34,28 @@ hermes plugins enable pipeline
 | `pipeline_clear()` | Close all tasks (cancel/abort) |
 | `agent_prompt(agent_id, context)` | Build agent prompt from template |
 | `agent_model(agent_id)` | Get provider + model for agent |
+| `pipeline_run_agent(state, agent_id, context?)` | Build delegation package — returns prompt, model routing, and directive |
 
 ## Model Routing
 
 - **Flash** (`direct`): Finder, Analyst, Planner, Coder, Editor, Fixer, Refactorer, Tester, Debugger, Documenter, DevOps, Optimizer
 - **Pro** (`delegate_task`): Architect, Reviewer, Security, Integration
-- **Free** (`delegate_free`, OpenRouter): Researcher, Commenter
+- **Free** (`delegate_free`, OpenRouter): Researcher
+
+## Delegation Package (via pipeline_run_agent)
+
+`pipeline_run_agent()` возвращает delegation package с полем `directive`:
+
+- **`directive: "delegate"`** → Pro (architect, reviewer, security, integration)
+  Оркестратор вызывает `delegate_task(**call_args)` и получает результат.
+- **`directive: "delegate_free"`** → Free-tier (researcher)
+  Аналогично delegate, но через OpenRouter free модели.
+- **`directive: "direct"`** → Flash (finder, analyst, planner, coder, editor, fixer,
+  refactorer, tester, debugger, documenter, devops, optimizer)
+  Оркестратор использует prompt напрямую в своём контексте.
+
+**Правило:** никогда не вызывай `delegate_task` напрямую — всегда через `pipeline_run_agent`.
+Порядок: `pipeline_run_agent(state, agent_id)` → прочитать `call_args` → `delegate_task(**call_args)` → `pipeline_advance(state, agent_id)`.
 
 ## Pipeline Agents
 
@@ -52,8 +68,8 @@ hermes plugins enable pipeline
 
 | File | Purpose |
 |------|---------|
-| `plugin.yaml` | Manifest (v2.0.0, 9 tools) |
-| `__init__.py` | Plugin core: 9 tools + register |
+| `plugin.yaml` | Manifest (v2.1.0, 10 tools) |
+| `__init__.py` | Plugin core: 10 tools + register |
 | `kanban.py` | Kanban API (create_tree, advance, converge, scan_board, resume) |
 | `classify.py` | Keyword-based request classification |
 | `agents/*.prompt` | Prompt templates for each agent |
@@ -71,6 +87,15 @@ hermes plugins enable pipeline
 | Manual resume | `pipeline_resume()` — scans board |
 | No advance tool | `pipeline_advance(state, agent)` |
 | 7 tools | **9 tools** (+ resume + advance) |
+
+### v2.0 → v2.1
+
+| Old | New |
+|-----|-----|
+| 9 tools | **10 tools** (+ pipeline_run_agent) |
+| Manual delegation routing in skill | Delegation package returned by plugin |
+| Orchestrator guesses delegate vs direct | `directive` field tells orchestrator what to do |
+| `agent_prompt` + `agent_model` call separately | `pipeline_run_agent` returns both + call_args |
 
 ## Pitfalls
 

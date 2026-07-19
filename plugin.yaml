@@ -1,6 +1,6 @@
 name: pipeline
-version: 2.0.0
-description: "Pipeline Plugin v2.0 Kanban-native. Variant C: kanban.db is single source of truth, state.json removed. 9 tools: classify, convergence, save, load, clear, resume, advance, prompt, model."
+version: 2.1.0
+description: "Pipeline Plugin v2.1 Kanban-native. Variant C: kanban.db is SSOT. 10 tools: +pipeline_run_agent (delegation package)."
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify
@@ -12,3 +12,4 @@ provides_tools:
   - pipeline_advance
   - agent_prompt
   - agent_model
+  - pipeline_run_agent

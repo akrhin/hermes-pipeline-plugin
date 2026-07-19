@@ -1,12 +1,12 @@
 ---
 name: pipeline-orchestrator
-description: Orchestration logic for Pipeline Plugin v2.0 (Kanban-native) — state in kanban.db, no state.json. Variant C: board is SSOT.
+description: Orchestration logic for Pipeline Plugin v2.1 (Kanban-native) — state in kanban.db, no state.json. Variant C: board is SSOT.
 author: Hermes + Vladimir
 category: hermes
 tags: [pipeline, orchestration, multi-agent, quality-gates, kanban, variant-c]
 ---
 
-# Pipeline Orchestrator v2.0 — Kanban-native (Variant C)
+# Pipeline Orchestrator v2.1 — Kanban-native (Variant C)
 
 ## Architecture
 
@@ -35,9 +35,23 @@ User request → pipeline_classify → pipeline_save (create task tree on board)
 Всё состояние — на доске `pipeline` в kanban.db.  
 После рестарта: `pipeline_resume()` → сканирую доску → «ага, @coder done, @reviewer ready».
 
+## 🚨 Delegation Rule (CRITICAL)
+
+`delegate_task` — это **agent-level** инструмент. Плагин НЕ МОЖЕТ его вызвать.
+Вместо этого используй `pipeline_run_agent(state, agent_id)`:
+
+1. Вызови `pipeline_run_agent(state, agent_id)` → получи delegation package
+2. Прочитай `call_args` из ответа
+3. Вызови `delegate_task(**call_args)` сам (ты — оркестратор, а не плагин)
+4. Сохрани результат
+5. Вызови `pipeline_advance(state, agent_id)` → promote следующего
+
+**Никогда не пытайся вызвать delegate_task изнутри плагина.**
+**Всегда: pipeline_run_agent → delegate_task → pipeline_advance.**
+
 ## Available Tools
 
-Плагин регистрирует **9 инструментов** в toolset `pipeline`:
+Плагин регистрирует **10 инструментов** в toolset `pipeline`:
 
 ### 1. `pipeline_classify(request: str)`
 Классифицирует запрос, возвращает `{category, pipeline, pipeline_type}`.
@@ -85,6 +99,28 @@ User request → pipeline_classify → pipeline_save (create task tree on board)
 ### 9. `agent_model(agent_id)`
 Возвращает `{provider, model}` для агента.
 
+### 10. `pipeline_run_agent(state: dict, agent_id: str, context?: dict)`
+
+Build delegation package for running a pipeline agent. Returns:
+
+```json
+{
+  "agent_id": "architect",
+  "directive": "delegate",
+  "tool_hint": "delegate_task",
+  "provider": "delegate",
+  "model": "deepseek-v4-pro",
+  "prompt": "...",
+  "call_args": {"prompt": "...", "provider": "delegate", "model": "deepseek-v4-pro", "description": "Pipeline agent: architect"},
+  "state": {...}
+}
+```
+
+**Directive types:**
+- `"delegate"` → Pro агенты (architect, reviewer, security, integration). Оркестратор вызывает `delegate_task(**call_args)`.
+- `"delegate_free"` → Free-tier (researcher). Аналогично delegate.
+- `"direct"` → Flash-агенты. Оркестратор использует prompt напрямую в своём контексте.
+
 ## Pipeline Flow (checkpoint-style)
 
 ```
@@ -95,16 +131,35 @@ User request → pipeline_classify → pipeline_save (create task tree on board)
    → {kanban_parent_id, kanban_task_ids}
 
 3. Цикл по агентам:
-   for each agent in pipeline:
-     prompt = agent_prompt(agent, context)
-     run_agent(agent, prompt)  ← delegate_task или прямо
-     advance(state, agent)     ← mark done, promote next
-     checkpoint? ← спросить пользователя
+   for each agent_id in pipeline[current_idx:]:
+     # ── Шаг 1: получи delegation package ──
+     pkg = pipeline_run_agent(state, agent_id)
+     # pkg = {agent_id, directive, tool_hint, provider, model, prompt, call_args, state}
+
+     # ── Шаг 2: выполни агента ──
+     if pkg.directive in ("delegate", "delegate_free"):
+       result = delegate_task(**pkg.call_args)
+       # сохрани result
+     elif pkg.directive == "direct":
+       # используй pkg.prompt напрямую в своём контексте (Flash-агенты)
+       # выполняй шаги промпта своими инструментами
+       result = <твой вывод после выполнения>
+
+     # ── Шаг 3: продвинь пайплайн ──
+     state = pipeline_advance(pkg.state, agent_id)
+     # state.current_idx теперь указывает на следующего агента
+
+     # ── Шаг 4: checkpoint? ──
+     # Спроси пользователя на ключевых этапах
 
 4. Конвергенция (после @tester + @documenter):
    findings = собрать из результатов ревью/секьюрити
-   pipeline_convergence({state, findings})
-   → continue? → раунд 2 (coder → reviewer → security → tester → documenter)
+   decision = pipeline_convergence(state, findings)
+   → continue? → раунд 2:
+       1. pipeline_run_agent(state, "coder") → pkg
+       2. delegate_task(**pkg.call_args)
+       3. Затем reviewer → security → integration → tester → documenter
+       4. (каждый через pipeline_run_agent → delegate_task → pipeline_advance)
    → converged? → готово, pipeline_clear()
    → stuck? → показать findings, спросить что делать
 ```

@@ -1,10 +1,10 @@
 """
-Pipeline Plugin v2.0 — Kanban-native multi-agent orchestration.
+Pipeline Plugin v2.1 — Kanban-native multi-agent orchestration.
 
 Variant C: state.json eliminated. kanban.db = single source of truth.
 Board `pipeline` stores the entire pipeline lifecycle as a task tree.
 
-Provides 9 tools:
+Provides 10 tools:
   - pipeline_classify: classify request → category + agent list
   - pipeline_convergence: evaluate convergence (deterministic, no LLM)
   - pipeline_save: create/update kanban task tree (idempotent)
@@ -14,11 +14,15 @@ Provides 9 tools:
   - pipeline_advance: mark agent done, promote next
   - agent_prompt: build prompt for a specific agent
   - agent_model: get provider+model for a specific agent
+  - pipeline_run_agent: build delegation package for an agent (10th, v2.1)
 
 Key change from v1.x:
   - state.py removed → convergence logic in kanban.py
   - state.json removed → state in kanban.db (Hermes Kanban board)
   - After restart: pipeline_resume() scans board, no state.json needed
+
+Key change from v2.0:
+  - pipeline_run_agent added — delegation package pattern (agent→orchestrator bridge)
 """
 
 import json
@@ -32,7 +36,6 @@ if PLUGIN_DIR not in sys.path:
 
 import classify
 import kanban as kb
-
 
 # ── Tool schemas ──────────────────────────────────────────────────────────────
 
@@ -197,6 +200,34 @@ MODEL_SCHEMA = {
     },
 }
 
+RUN_AGENT_SCHEMA = {
+    "name": "pipeline_run_agent",
+    "description": (
+        "Build a delegation package for running a pipeline agent. "
+        "The orchestrator reads the response and calls delegate_task (for Pro agents) "
+        "or executes the prompt directly (for Flash agents). "
+        "Returns {agent_id, directive, tool_hint, provider, model, prompt, call_args, state}."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "state": {
+                "type": "object",
+                "description": "Current pipeline state (from pipeline_load/resume).",
+            },
+            "agent_id": {
+                "type": "string",
+                "description": "Agent to run: architect, reviewer, security, coder, etc.",
+            },
+            "context": {
+                "type": "object",
+                "description": "Optional context override. Uses state.context if omitted.",
+            },
+        },
+        "required": ["state", "agent_id"],
+    },
+}
+
 
 # ── Handlers ──────────────────────────────────────────────────────────────────
 
@@ -344,7 +375,6 @@ MODEL_MAP = {
     "security":    {"provider": "delegate", "model": "deepseek-v4-pro"},
     "integration": {"provider": "delegate", "model": "deepseek-v4-pro"},
     "researcher":  {"provider": "delegate_free", "model": "openrouter/free"},
-    "commenter":   {"provider": "delegate_free", "model": "openrouter/free"},
 }
 
 
@@ -357,6 +387,111 @@ def handle_model(args, **kwargs):
         return json.dumps(result)
     except Exception as e:
         return json.dumps({"error": str(e)})
+
+
+def handle_run_agent(args, **kwargs):
+    """Build delegation package: prompt + routing + directive.
+
+    Returns {agent_id, directive, tool_hint, provider, model, prompt, call_args, state}.
+    Orchestrator reads call_args and calls delegate_task(**call_args) for Pro agents,
+    or uses prompt directly for Flash agents.
+    """
+    try:
+        agent_id = args["agent_id"]
+        state = args["state"]
+        context_override = args.get("context")
+
+        # 1. Validate state
+        if "request" not in state:
+            return json.dumps({"error": "State missing required field: request"})
+        if "pipeline" not in state:
+            return json.dumps({"error": "State missing required field: pipeline"})
+
+        # 2. Validate agent_id (path traversal guard — same as handle_prompt)
+        agent_id = os.path.basename(agent_id)
+        routing = MODEL_MAP.get(agent_id)
+        if routing is None:
+            return json.dumps({"error": f"Unknown agent: {agent_id}"})
+
+        # 3. Determine directive
+        provider = routing["provider"]
+        model = routing["model"]
+
+        if provider == "delegate":
+            directive = "delegate"
+            tool_hint = "delegate_task"
+        elif provider == "delegate_free":
+            directive = "delegate_free"
+            tool_hint = "delegate_task"
+        else:  # "direct"
+            directive = "direct"
+            tool_hint = None
+            # Flash agents: return minimal package without prompt file
+            return json.dumps({
+                "agent_id": agent_id,
+                "directive": directive,
+                "tool_hint": tool_hint,
+                "provider": provider,
+                "model": model,
+                "prompt": None,
+                "call_args": None,
+                "state": state,
+            }, ensure_ascii=False)
+
+        # 4. Resolve context (delegation agents only)
+        ctx = context_override if context_override is not None else state.get("context", {})
+        request = state.get("request", "")
+        category = state.get("category", "")
+
+        # 5. Build prompt from template (same logic as handle_prompt)
+        prompt_path = os.path.join(PLUGIN_DIR, "agents", f"{agent_id}.prompt")
+        resolved = os.path.realpath(prompt_path)
+        agents_dir = os.path.realpath(os.path.join(PLUGIN_DIR, "agents"))
+        if not resolved.startswith(agents_dir):
+            return json.dumps({"error": f"Prompt template not found: agents/{agent_id}.prompt"})
+
+        with open(resolved, "r", encoding="utf-8") as f:
+            template = f.read()
+
+        request_esc = request.replace("{", "{{").replace("}", "}}")
+        category_esc = category.replace("{", "{{").replace("}", "}}")
+
+        prompt = template.format(
+            request=request_esc,
+            category=category_esc,
+            research_context=json.dumps(ctx.get("research", {}), ensure_ascii=False, indent=2),
+            planning_context=json.dumps(ctx.get("planning", {}), ensure_ascii=False, indent=2),
+            implementation_context=json.dumps(ctx.get("implementation", {}), ensure_ascii=False, indent=2),
+            quality_context=json.dumps(ctx.get("quality", {}), ensure_ascii=False, indent=2),
+            documentation_context=json.dumps(ctx.get("documentation", {}), ensure_ascii=False, indent=2),
+            infrastructure_context=json.dumps(ctx.get("infrastructure", {}), ensure_ascii=False, indent=2),
+            full_context=json.dumps(ctx, ensure_ascii=False, indent=2),
+        )
+
+        # 6. Build call_args for delegation agents
+        call_args = {
+            "prompt": prompt,
+            "provider": provider,
+            "model": model,
+            "description": f"Pipeline agent: {agent_id}",
+        }
+
+        # 7. Return delegation package
+        return json.dumps({
+            "agent_id": agent_id,
+            "directive": directive,
+            "tool_hint": tool_hint,
+            "provider": provider,
+            "model": model,
+            "prompt": prompt,
+            "call_args": call_args,
+            "state": state,  # pass-through for pipeline_advance
+        }, ensure_ascii=False)
+
+    except KeyError as e:
+        return json.dumps({"error": f"Missing placeholder in prompt: {e}"})
+    except Exception as e:
+        return json.dumps({"error": str(e), "traceback": traceback.format_exc()})
 
 
 # ── Registration ──────────────────────────────────────────────────────────────
@@ -373,6 +508,7 @@ def register(ctx):
         ("pipeline_advance", ADVANCE_SCHEMA, handle_advance),
         ("agent_prompt", PROMPT_SCHEMA, handle_prompt),
         ("agent_model", MODEL_SCHEMA, handle_model),
+        ("pipeline_run_agent", RUN_AGENT_SCHEMA, handle_run_agent),  # ← NEW 10th
     ]:
         ctx.register_tool(
             name=name,
