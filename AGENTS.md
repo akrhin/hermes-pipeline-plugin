@@ -1,4 +1,4 @@
-# AGENTS.md — Pipeline Plugin (v2.0, Kanban-native)
+# AGENTS.md — Pipeline Plugin (v2.2, Kanban-native)
 
 ## What This Is
 
@@ -21,7 +21,7 @@ hermes plugins enable pipeline
 - Статус агента: `ready` → `running` → `done`
 - `promote` следующего агента при завершении предыдущего
 
-## Tools (v2.1)
+## Tools (v2.2)
 
 | Tool | Purpose |
 |------|---------|
@@ -38,29 +38,128 @@ hermes plugins enable pipeline
 
 ## Model Routing
 
-Модели настраиваются через `~/.hermes/config.yaml` → секция `pipeline.models`.
-Если секция отсутствует — используются значения по умолчанию (ниже).
+### Полная таблица агентов и моделей
 
-- **По умолчанию:**
-  - **Flash** (`direct`): Finder, Analyst, Planner, Coder, Editor, Fixer, Refactorer, Tester, Debugger, Documenter, DevOps, Optimizer
-  - **Pro** (`delegate`): Architect, Reviewer, Security, Integration
-  - **Free** (`delegate_free`): Researcher
+| Агент | Тип | Провайдер | Дефолтная модель | Когда вызывается |
+|-------|-----|-----------|-----------------|------------------|
+| @finder | Flash | `direct` | `deepseek-v4-flash` | Всегда первый — разведка, сбор информации |
+| @analyst | Flash | `direct` | `deepseek-v4-flash` | Анализ, диагностика, поиск корня проблемы |
+| @researcher | Free | `delegate_free` | `openrouter/free` | Внешние исследования (не используется в каждом пайплайне) |
+| @architect | Pro | `delegate` | `deepseek-v4-pro` | Проектирование решения (требует рассуждений) |
+| @planner | Flash | `direct` | `deepseek-v4-flash` | Разбивка на задачи |
+| @coder | Flash | `direct` | `deepseek-v4-flash` | Написание кода |
+| @editor | Flash | `direct` | `deepseek-v4-flash` | Редактирование (не всегда в пайплайне) |
+| @fixer | Flash | `direct` | `deepseek-v4-flash` | Фикс известных багов |
+| @refactorer | Flash | `direct` | `deepseek-v4-flash` | Рефакторинг |
+| @reviewer | Pro | `delegate` | `deepseek-v4-pro` | Код-ревью с качественной оценкой |
+| @security | Pro | `delegate` | `deepseek-v4-pro` | Security audit (только SECURITY_RELATED) |
+| @integration | Pro | `delegate` | `deepseek-v4-pro` | Консистентность, кросс-файловые проверки |
+| @tester | Flash | `direct` | `deepseek-v4-flash` | Написание тестов, прогон |
+| @debugger | Flash | `direct` | `deepseek-v4-flash` | Отладка (только BUG_UNKNOWN) |
+| @documenter | Flash | `direct` | `deepseek-v4-flash` | Документация |
+| @devops | Flash | `direct` | `deepseek-v4-flash` | Инфраструктура (только INFRASTRUCTURE) |
+| @optimizer | Flash | `direct` | `deepseek-v4-flash` | Оптимизация (только PERFORMANCE) |
 
-- **Конфигурация** (опционально, `~/.hermes/config.yaml`):
-  ```yaml
-  pipeline:
-    models:
-      defaults:          # default overrides by provider type
-        direct:
-          model: deepseek-v4-flash
-        delegate:
-          model: deepseek-v4-pro
-        delegate_free:
-          model: openrouter/free
-      agents:            # per-agent overrides (highest priority)
-        coder:
-          model: deepseek-v4-pro
-  ```
+### Как работают модели
+
+Три режима выполнения:
+
+- **`direct`** (Flash) — я выполняю задачу сам, в своём контексте. Не делегирую сабагенту. Дешево, быстро, подходит для механической работы.
+- **`delegate`** (Pro) — я вызываю `delegate_task` с моделью `deepseek-v4-pro`. Дороже, но лучше для задач требующих рассуждений.
+- **`delegate_free`** (Free) — то же делегирование, но через дешёвую модель (OpenRouter free). Для второстепенных задач.
+
+### Настройка через ~/.hermes/config.yaml
+
+Все модели можно переопределить через конфиг-файл Hermes.
+Для этого добавьте секцию `pipeline.models`:
+
+```yaml
+pipeline:
+  models:
+    # ── Defaults: применяются ко всем агентам данного типа ──
+    defaults:
+      direct:
+        model: deepseek-v4-flash      # заменить Flash-модель для всех direct-агентов
+      delegate:
+        model: deepseek-v4-pro        # заменить Pro-модель для всех delegate-агентов
+      delegate_free:
+        model: openrouter/free        # заменить free-модель
+
+    # ── Per-agent: точечное переопределение (высший приоритет) ──
+    agents:
+      # Можно переопределить только модель
+      coder:
+        model: deepseek-v4-pro
+      # Можно переопределить провайдер и модель
+      architect:
+        provider: direct
+        model: deepseek-v4-flash
+      # Можно переопределить тип провайдера (меняется способ выполнения)
+      tester:
+        provider: delegate
+        model: deepseek-v4-pro
+      security:
+        model: deepseek-v4-pro
+```
+
+#### Примеры конфигов
+
+**A. Экономия токенов — все Pro в Flash:**
+```yaml
+pipeline:
+  models:
+    defaults:
+      delegate:
+        provider: direct
+        model: deepseek-v4-flash
+```
+→ architect, reviewer, security, integration больше не делегируются, выполняются мной напрямую. Ноль вызовов `deepseek-v4-pro`.
+
+**B. Только безопасность на Pro, всё остальное Flash:**
+```yaml
+pipeline:
+  models:
+    defaults:
+      delegate:
+        provider: direct
+        model: deepseek-v4-flash
+    agents:
+      security:
+        provider: delegate
+        model: deepseek-v4-pro
+```
+→ все Pro-агенты стали Flash, кроме security (остался на Pro).
+
+**C. Coder на самом мощном:**
+```yaml
+pipeline:
+  models:
+    agents:
+      coder:
+        provider: delegate
+        model: openrouter/anthropic/claude-sonnet-4
+```
+→ @coder делегируется через OpenRouter с Claude Sonnet 4.
+
+**D. Замена free-модели:**
+```yaml
+pipeline:
+  models:
+    defaults:
+      delegate_free:
+        model: perplexity/sonar-pro
+```
+→ researcher использует perplexity вместо OpenRouter free.
+
+#### Приоритет слияния конфига
+
+```
+agents.<agent_id>        ← высший (точечная настройка конкретного агента)
+defaults.<provider_type> ← средний (групповая настройка по типу)
+BUILTIN_MODEL_MAP        ← низший (хардкод в models.py)
+```
+
+Если секция `pipeline.models` отсутствует или файл повреждён — используется хардкодная `BUILTIN_MODEL_MAP` из `models.py`. Никаких изменений в поведении.
 
 ## Delegation Package (via pipeline_run_agent)
 
@@ -88,14 +187,14 @@ hermes plugins enable pipeline
 
 | File | Purpose |
 |------|---------|
-| `plugin.yaml` | Manifest (v2.1.0, 10 tools) |
-| `__init__.py` | Plugin core: 10 tools + register |
-| `models.py` | Model config loader: YAML → merge → MODEL_MAP |
+| `plugin.yaml` | Manifest (v2.2.0, 10 tools) |
+| `__init__.py` | Plugin core: 10 tools + register (MODEL_MAP из models.py) |
+| `models.py` | **v2.2** Model config loader: YAML → merge → MODEL_MAP |
 | `kanban.py` | Kanban API (create_tree, advance, converge, scan_board, resume) |
 | `classify.py` | Keyword-based request classification |
 | `agents/*.prompt` | Prompt templates for each agent |
-| `AGENTS.md` | This file |
-| `ARCHITECTURE.md` | Full architecture doc |
+| `AGENTS.md` | This file (v2.2) |
+| `ARCHITECTURE.md` | Full architecture doc (v2.2) |
 | `skill/pipeline-orchestrator/` | Orchestrator skill |
 
 ## v1.x → v2.0 Changes
@@ -117,6 +216,15 @@ hermes plugins enable pipeline
 | Manual delegation routing in skill | Delegation package returned by plugin |
 | Orchestrator guesses delegate vs direct | `directive` field tells orchestrator what to do |
 | `agent_prompt` + `agent_model` call separately | `pipeline_run_agent` returns both + call_args |
+
+### v2.1 → v2.2
+
+| Old | New |
+|-----|-----|
+| `MODEL_MAP` хардкод в `__init__.py` | `models.py` — загрузка из `~/.hermes/config.yaml → pipeline.models` |
+| Менять модели = править код + рестарт | Менять модели = править `config.yaml` без изменения кода |
+| 3 групповых типа (direct/delegate/free) | + per-agent override через `agents.<id>` |
+| Один сценарий на все случаи | Гибкая настройка: defaults + per-agent, 4 примера конфигов |
 
 ## Pitfalls
 
