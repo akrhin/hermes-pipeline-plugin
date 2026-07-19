@@ -19,24 +19,12 @@ import models as models_module
 # Force deterministic tests — игнорировать локальный config.yaml
 mock.patch.object(models_module, "_read_config_section", return_value=None).start()
 
-import __init__ as plugin
+import __init__ as plugin  # noqa: E402 — import after mock for deterministic config
 
 
 class TestHandleModel:
-    def _patch_models(self):
-        """Override loaded config back to BUILTIN for deterministic tests."""
-        import models
-        models_load = models.load_model_config
-        models.load_model_config = lambda: {
-            aid: dict(r) for aid, r in models.BUILTIN_MODEL_MAP.items()
-        }
-        import importlib
-        importlib.reload(plugin)
-        return plugin
-
     def test_known_agent(self):
-        p = self._patch_models()
-        result = json.loads(p.handle_model({"agent_id": "architect"}))
+        result = json.loads(plugin.handle_model({"agent_id": "architect"}))
         assert result["provider"] == "delegate"
         assert result["model"] == "deepseek-v4-pro"
 
