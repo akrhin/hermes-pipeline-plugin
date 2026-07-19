@@ -22,16 +22,13 @@ import logging
 import subprocess
 from typing import Any
 
+# try/except import для совместимости: плагин (.ensemble) vs прямой импорт (ensemble)
 try:
-    from .ensemble import (
-        generate_candidates as ensemble_gen_candidates,
-        judge_candidates as ensemble_judge_candidates,
-    )
+    from .ensemble import generate_candidates as ensemble_gen_candidates
+    from .ensemble import judge_candidates as ensemble_judge_candidates
 except ImportError:
-    from ensemble import (  # noqa: F811
-        generate_candidates as ensemble_gen_candidates,
-        judge_candidates as ensemble_judge_candidates,
-    )
+    from ensemble import generate_candidates as ensemble_gen_candidates  # noqa: F811
+    from ensemble import judge_candidates as ensemble_judge_candidates  # noqa: F811
 
 logger = logging.getLogger(__name__)
 
