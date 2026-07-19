@@ -34,8 +34,12 @@ NEXT_ACTION_STATUSES = {"ready", "todo"}
 
 
 def _kanban(*args: str) -> dict[str, Any]:
-    """Run ``hermes kanban --board <BOARD> <args>``. Returns parsed JSON or {}."""
-    cmd = ["hermes", "kanban", "--board", BOARD, "--json"]
+    """Run ``hermes kanban --board <BOARD> <args>``. Returns parsed JSON or {}.
+    Callers MUST pass ``--json`` as part of *args* when they expect JSON output.
+    ``--json`` is a per-command flag (not global), so placing it in the global
+    prefix is an error — it must be after the subcommand.
+    """
+    cmd = ["hermes", "kanban", "--board", BOARD]
     cmd.extend(args)
     try:
         result = subprocess.run(
@@ -69,7 +73,7 @@ def _kanban(*args: str) -> dict[str, Any]:
 def create_parent(title: str, body: str = "",
                   idempotency_key: str = "") -> str | None:
     """Create the parent pipeline task. Returns task_id or None."""
-    cmd = ["create", "--body", body, "--priority", "1", title]
+    cmd = ["create", "--json", "--body", body, "--priority", "1", title]
     if idempotency_key:
         cmd.extend(["--idempotency-key", idempotency_key])
     result = _kanban(*cmd)
@@ -79,7 +83,7 @@ def create_parent(title: str, body: str = "",
 def create_child(title: str, parent_id: str, body: str = "",
                  idempotency_key: str = "") -> str | None:
     """Create a child task linked to parent. Returns task_id or None."""
-    cmd = ["create", "--body", body, "--parent", parent_id, "--priority", "2"]
+    cmd = ["create", "--json", "--body", body, "--parent", parent_id, "--priority", "2"]
     if idempotency_key:
         cmd.extend(["--idempotency-key", idempotency_key])
     cmd.append(title)
@@ -89,17 +93,17 @@ def create_child(title: str, parent_id: str, body: str = "",
 
 def promote(task_id: str) -> bool:
     """Promote task to `ready` so it can be worked on."""
-    return bool(_kanban("promote", task_id))
+    return bool(_kanban("promote", "--json", task_id))
 
 
 def comment(task_id: str, text: str) -> bool:
-    """Append a comment."""
+    """Append a comment. Returns True if command succeeded."""
     return bool(_kanban("comment", task_id, text))
 
 
 def complete(task_id: str, result_summary: str = "",
              metadata: dict | None = None) -> bool:
-    """Mark task done. Returns success."""
+    """Mark task done. Returns True if command succeeded."""
     cmd = ["complete"]
     if result_summary:
         cmd.extend(["--result", result_summary])
@@ -111,7 +115,7 @@ def complete(task_id: str, result_summary: str = "",
 
 def block_task(task_id: str, reason: str = "",
                kind: str = "needs_input") -> bool:
-    """Block a task for human review."""
+    """Block a task for human review. Returns True if command succeeded."""
     cmd = ["block", "--kind", kind, task_id]
     if reason:
         cmd.append(reason)
@@ -120,14 +124,16 @@ def block_task(task_id: str, reason: str = "",
 
 def unblock(task_id: str) -> bool:
     """Unblock a task (for next convergence round)."""
-    return bool(_kanban("promote", task_id))
+    return bool(_kanban("promote", "--json", task_id))
 
 
-def list_tasks(status: str = "") -> list[dict]:
+def list_tasks(status: str = "", include_archived: bool = False) -> list[dict]:
     """List tasks, optionally filtered by status. Returns list of dicts."""
-    cmd = ["ls", "--all"]
+    cmd = ["ls", "--json"]
     if status:
         cmd.extend(["--status", status])
+    if include_archived:
+        cmd.extend(["--archived"])
     result = _kanban(*cmd)
     if isinstance(result, list):
         return result
@@ -138,14 +144,19 @@ def list_tasks(status: str = "") -> list[dict]:
 
 def show_task(task_id: str) -> dict:
     """Get full task detail (comments, children, etc.)."""
-    result = _kanban("show", task_id)
+    result = _kanban("show", "--json", task_id)
     return result if isinstance(result, dict) else {}
 
 
-def parent_task_id(pipeline: list[str]) -> str:
-    """Compute deterministic idempotency key from pipeline agent list."""
+def parent_task_id(pipeline: list[str], request: str = "") -> str:
+    """Compute deterministic idempotency key from pipeline agent list + request.
+
+    Including request in the hash prevents collision between two pipeline runs
+    that use the same agent list (e.g. two security audits on different projects).
+    """
     agents_str = "_".join(pipeline)
-    return f"pipe:{hashlib.md5(agents_str.encode(), usedforsecurity=False).hexdigest()[:12]}"
+    base = f"{agents_str}:{request.strip()[:40]}"
+    return f"pipe:{hashlib.md5(base.encode(), usedforsecurity=False).hexdigest()[:12]}"
 
 
 def child_id(parent_ikey: str, agent: str, round_num: int = 0) -> str:
@@ -171,7 +182,7 @@ def create_task_tree(state: dict) -> dict:
     category = state.get("category", "")
     pipeline = state.get("pipeline", [])
     agents_str = " → ".join(f"@{a}" for a in pipeline)
-    parent_ikey = parent_task_id(pipeline)
+    parent_ikey = parent_task_id(pipeline, request)
 
     # ── Create parent ────────────────────────────────────────────────────
     title = f"🔷  Пайплайн: {request[:80]}"
@@ -231,6 +242,11 @@ def advance(state: dict, completed_agent: str) -> dict:
     agent_id = task_ids.get(completed_agent)
     if agent_id:
         complete(agent_id, result_summary=f"✅ @{completed_agent} завершён")
+    # Record as completed
+    completed = state.get("completed", [])
+    if completed_agent not in completed:
+        completed.append(completed_agent)
+        state["completed"] = completed
 
     # Promote next
     next_idx = current_idx + 1
@@ -433,8 +449,7 @@ def scan_board() -> dict | None:
     """Scan the pipeline board for an active pipeline run.
 
     Returns state dict reconstructed from kanban tasks, or None if idle.
-
-    Finds: parent tasks with status = running/todo (not done/blocked).
+    Uses list() to find parents, then filters children by parent_task_ids.
     """
     tasks = list_tasks(status="running")
     if not tasks:
@@ -450,14 +465,27 @@ def scan_board() -> dict | None:
             parent_id = t.get("id")
             if not parent_id:
                 continue
-            detail = show_task(parent_id)
-            if not detail:
-                continue
 
-            # Reconstruct state from parent + children
+            # Get all tasks to find children of this parent
+            all_tasks = list_tasks(include_archived=True)
+            children = [
+                c for c in all_tasks
+                if parent_id in (c.get("parent_task_ids") or [])
+            ]
+
             title = t.get("title", "")
             body = t.get("body", "")
-            children = detail.get("children", [])
+            request = title.replace("🔷  Пайплайн: ", "", 1)  # Extract from title if not in body
+
+            # Find request in body
+            if "Запрос: " in body:
+                request = body.split("Запрос: ", 1)[1]
+
+            # Extract category from body
+            category = ""
+            for line in body.split("\n"):
+                if line.startswith("Категория:"):
+                    category = line.split(":", 1)[1].strip()
 
             # Find which child is ready/todo
             current_idx = -1
@@ -479,14 +507,8 @@ def scan_board() -> dict | None:
                 elif cstatus in ("ready", "todo", "running"):
                     current_idx = pipeline.index(agent) if agent in pipeline else -1
 
-            # Extract category from body
-            category = ""
-            for line in body.split("\n"):
-                if line.startswith("Категория:"):
-                    category = line.split(":", 1)[1].strip()
-
             state = {
-                "request": body.split("Запрос: ", 1)[1] if "Запрос: " in body else title,
+                "request": request,
                 "category": category,
                 "pipeline": pipeline,
                 "current_idx": current_idx if current_idx >= 0 else 0,
