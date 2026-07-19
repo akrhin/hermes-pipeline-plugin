@@ -10,15 +10,33 @@ import json
 import os
 import sys
 import tempfile
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+import models as models_module
+
+# Force deterministic tests — игнорировать локальный config.yaml
+mock.patch.object(models_module, "_read_config_section", return_value=None).start()
 
 import __init__ as plugin
 
 
 class TestHandleModel:
+    def _patch_models(self):
+        """Override loaded config back to BUILTIN for deterministic tests."""
+        import models
+        models_load = models.load_model_config
+        models.load_model_config = lambda: {
+            aid: dict(r) for aid, r in models.BUILTIN_MODEL_MAP.items()
+        }
+        import importlib
+        importlib.reload(plugin)
+        return plugin
+
     def test_known_agent(self):
-        result = json.loads(plugin.handle_model({"agent_id": "architect"}))
+        p = self._patch_models()
+        result = json.loads(p.handle_model({"agent_id": "architect"}))
         assert result["provider"] == "delegate"
         assert result["model"] == "deepseek-v4-pro"
 
