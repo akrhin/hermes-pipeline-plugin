@@ -37,17 +37,24 @@ if PLUGIN_DIR not in sys.path:
 import classify
 import kanban as kb
 
-# try/except import для совместимости: плагин (.ensemble) vs прямой импорт (ensemble)
-try:
-    from .ensemble import generate_candidates as ensemble_generate_candidates
-    from .ensemble import judge_candidates as ensemble_judge_candidates
-    from .ensemble import should_use_ensemble
-    from .ensemble import read_ensemble_config
-except ImportError:
-    from ensemble import generate_candidates as ensemble_generate_candidates  # noqa: F811
-    from ensemble import judge_candidates as ensemble_judge_candidates  # noqa: F811
-    from ensemble import should_use_ensemble  # noqa: F811
-    from ensemble import read_ensemble_config  # noqa: F811
+
+def _import_ensemble():
+    """Import ensemble functions — works both as plugin and direct import."""
+    try:
+        from .ensemble import generate_candidates as ec
+        from .ensemble import judge_candidates as ej
+        from .ensemble import should_use_ensemble as se
+        from .ensemble import read_ensemble_config as re
+        return ec, ej, se, re
+    except ImportError:
+        from ensemble import generate_candidates as ec
+        from ensemble import judge_candidates as ej
+        from ensemble import should_use_ensemble as se
+        from ensemble import read_ensemble_config as re
+        return ec, ej, se, re
+
+
+ensemble_generate_candidates, ensemble_judge_candidates, should_use_ensemble, read_ensemble_config = _import_ensemble()
 
 # ── Tool schemas ──────────────────────────────────────────────────────────────
 

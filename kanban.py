@@ -22,13 +22,22 @@ import logging
 import subprocess
 from typing import Any
 
-# try/except import для совместимости: плагин (.ensemble) vs прямой импорт (ensemble)
-try:
-    from .ensemble import generate_candidates as ensemble_gen_candidates
-    from .ensemble import judge_candidates as ensemble_judge_candidates
-except ImportError:
-    from ensemble import generate_candidates as ensemble_gen_candidates  # noqa: F811
-    from ensemble import judge_candidates as ensemble_judge_candidates  # noqa: F811
+
+def _import_ensemble():
+    """Import ensemble functions — works both as plugin and direct import."""
+    try:
+        from .ensemble import generate_candidates as gc
+        from .ensemble import judge_candidates as jc
+        return gc, jc
+    except ImportError:
+        from ensemble import generate_candidates as gc
+        from ensemble import judge_candidates as jc
+        return gc, jc
+
+
+_ensemble_gen, _ensemble_judge = _import_ensemble()
+ensemble_gen_candidates = _ensemble_gen
+ensemble_judge_candidates = _ensemble_judge
 
 logger = logging.getLogger(__name__)
 
