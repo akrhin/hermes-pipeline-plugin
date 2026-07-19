@@ -68,10 +68,10 @@ hermes plugins enable pipeline
 - **`delegate`** (Pro) — я вызываю `delegate_task` с моделью `deepseek-v4-pro`. Дороже, но лучше для задач требующих рассуждений.
 - **`delegate_free`** (Free) — то же делегирование, но через дешёвую модель (OpenRouter free). Для второстепенных задач.
 
-### Настройка через ~/.hermes/config.yaml
+### Настройка через `~/.hermes/plugins/pipeline/config.yaml`
 
-Все модели можно переопределить через конфиг-файл Hermes.
-Для этого добавьте секцию `pipeline.models`:
+Конфиг читается из собственного файла плагина (не из главного `config.yaml` Hermes).
+Если файл отсутствует или секция `models` пуста — используются хардкодные значения из `BUILTIN_MODEL_MAP`.
 
 ```yaml
 pipeline:
