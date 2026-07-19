@@ -555,10 +555,9 @@ def scan_board() -> dict | None:
 
 
 def get_agent_context(state: dict, agent_id: str) -> dict:
-    """Extract agent-specific context from pipeline state.
-
-    Returns context dict with agent-appropriate sections
-    (e.g. @coder gets implementation_context, @reviewer gets quality_context).
+    """⚠️ DEPRECATED v3.0 — kept for backward compat.
+    Use AGENT_CONTEXT_FIELDS in _build_agent_prompt() instead.
+    Selective context routing is now handled in __init__.py._build_agent_prompt().
     """
     ctx = state.get("context", {})
 
