@@ -14,13 +14,13 @@ logger = logging.getLogger(__name__)
 # ── Default variations (temperature + instruction) ──
 
 VARIATIONS = [
-    {"temperature": 0.3, "instruction_extra": "Будь консервативен. Минимальные изменения. Никакого рефакторинга."},
-    {"temperature": 0.5, "instruction_extra": "Пиши чистый код с комментариями и type hints. Следуй best practices."},
-    {"temperature": 0.7, "instruction_extra": "Стандартный production-подход. Баланс читаемости и производительности."},
-    {"temperature": 0.9, "instruction_extra": "Полное решение с тестами, обработкой ошибок, логами. Exhaustive."},
-    {"temperature": 1.1, "instruction_extra": "Нестандартный подход. Оптимизация, инновации, креативное решение."},
-    {"temperature": 0.4, "instruction_extra": "Фокус на безопасности. Проверь все граничные случаи."},
-    {"temperature": 0.8, "instruction_extra": "Минимальная имплементация. KISS. Только то что нужно."},
+    {"temperature": 0.3, "instruction_extra": "Минимальные изменения. Никакого рефакторинга."},
+    {"temperature": 0.5, "instruction_extra": "Чистый код с комментариями и type hints."},
+    {"temperature": 0.7, "instruction_extra": "Стандартный production-подход."},
+    {"temperature": 0.9, "instruction_extra": "Полное решение с тестами и обработкой ошибок."},
+    {"temperature": 1.1, "instruction_extra": "Нестандартный подход. Оптимизации."},
+    {"temperature": 0.4, "instruction_extra": "Фокус на безопасности. Проверь граничные случаи."},
+    {"temperature": 0.8, "instruction_extra": "Минимальная имплементация. KISS."},
 ]
 
 # ── Config reading ──
@@ -109,7 +109,7 @@ def generate_candidates(state: dict, agent_id: str, n: int = 5) -> list[dict]:
 
 def _build_judge_prompt(request: str, candidates: list[dict]) -> str:
     """Build the LLM Judge prompt with all candidates."""
-    lines = [f"Ты — Judge в системе Best-of-N code generation.\n"]
+    lines = ["Ты — Judge в системе Best-of-N code generation.\n"]
     lines.append(f"## Оригинальная задача\n\n{request}\n")
     lines.append("## Кандидаты\n")
     for c in candidates:
