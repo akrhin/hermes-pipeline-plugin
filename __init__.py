@@ -357,25 +357,12 @@ def handle_prompt(args, **kwargs):
         return json.dumps({"error": str(e), "traceback": traceback.format_exc()})
 
 
-MODEL_MAP = {
-    "finder":      {"provider": "direct", "model": "deepseek-v4-flash"},
-    "analyst":     {"provider": "direct", "model": "deepseek-v4-flash"},
-    "planner":     {"provider": "direct", "model": "deepseek-v4-flash"},
-    "coder":       {"provider": "direct", "model": "deepseek-v4-flash"},
-    "editor":      {"provider": "direct", "model": "deepseek-v4-flash"},
-    "fixer":       {"provider": "direct", "model": "deepseek-v4-flash"},
-    "refactorer":  {"provider": "direct", "model": "deepseek-v4-flash"},
-    "tester":      {"provider": "direct", "model": "deepseek-v4-flash"},
-    "debugger":    {"provider": "direct", "model": "deepseek-v4-flash"},
-    "documenter":  {"provider": "direct", "model": "deepseek-v4-flash"},
-    "devops":      {"provider": "direct", "model": "deepseek-v4-flash"},
-    "optimizer":   {"provider": "direct", "model": "deepseek-v4-flash"},
-    "architect":   {"provider": "delegate", "model": "deepseek-v4-pro"},
-    "reviewer":    {"provider": "delegate", "model": "deepseek-v4-pro"},
-    "security":    {"provider": "delegate", "model": "deepseek-v4-pro"},
-    "integration": {"provider": "delegate", "model": "deepseek-v4-pro"},
-    "researcher":  {"provider": "delegate_free", "model": "openrouter/free"},
-}
+try:
+    from .models import load_model_config
+except ImportError:
+    from models import load_model_config  # noqa: F811
+
+MODEL_MAP = load_model_config()
 
 
 def handle_model(args, **kwargs):

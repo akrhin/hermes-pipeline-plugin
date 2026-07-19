@@ -38,9 +38,29 @@ hermes plugins enable pipeline
 
 ## Model Routing
 
-- **Flash** (`direct`): Finder, Analyst, Planner, Coder, Editor, Fixer, Refactorer, Tester, Debugger, Documenter, DevOps, Optimizer
-- **Pro** (`delegate_task`): Architect, Reviewer, Security, Integration
-- **Free** (`delegate_free`, OpenRouter): Researcher
+Модели настраиваются через `~/.hermes/config.yaml` → секция `pipeline.models`.
+Если секция отсутствует — используются значения по умолчанию (ниже).
+
+- **По умолчанию:**
+  - **Flash** (`direct`): Finder, Analyst, Planner, Coder, Editor, Fixer, Refactorer, Tester, Debugger, Documenter, DevOps, Optimizer
+  - **Pro** (`delegate`): Architect, Reviewer, Security, Integration
+  - **Free** (`delegate_free`): Researcher
+
+- **Конфигурация** (опционально, `~/.hermes/config.yaml`):
+  ```yaml
+  pipeline:
+    models:
+      defaults:          # default overrides by provider type
+        direct:
+          model: deepseek-v4-flash
+        delegate:
+          model: deepseek-v4-pro
+        delegate_free:
+          model: openrouter/free
+      agents:            # per-agent overrides (highest priority)
+        coder:
+          model: deepseek-v4-pro
+  ```
 
 ## Delegation Package (via pipeline_run_agent)
 
@@ -70,6 +90,7 @@ hermes plugins enable pipeline
 |------|---------|
 | `plugin.yaml` | Manifest (v2.1.0, 10 tools) |
 | `__init__.py` | Plugin core: 10 tools + register |
+| `models.py` | Model config loader: YAML → merge → MODEL_MAP |
 | `kanban.py` | Kanban API (create_tree, advance, converge, scan_board, resume) |
 | `classify.py` | Keyword-based request classification |
 | `agents/*.prompt` | Prompt templates for each agent |
