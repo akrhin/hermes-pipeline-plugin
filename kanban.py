@@ -47,6 +47,27 @@ KANBAN_TIMEOUT = 15
 MAX_CONVERGENCE_ROUNDS = 3
 NEXT_ACTION_STATUSES = {"ready", "todo"}
 
+# ── Role-specific task descriptions (shown in dashboard per agent) ──
+AGENT_DESCRIPTIONS: dict[str, str] = {
+    "finder":     "Сбор информации, разведка кодовой базы",
+    "analyst":    "Анализ данных, диагностика, поиск корня проблемы",
+    "researcher": "Внешние исследования, поиск best practices",
+    "architect":  "Проектирование решения, архитектура изменений",
+    "planner":    "Разбивка на задачи, составление плана работ",
+    "coder":      "Написание и редактирование кода",
+    "editor":     "Редактирование кода по готовому плану",
+    "fixer":      "Исправление известных багов",
+    "refactorer": "Рефакторинг, улучшение структуры кода",
+    "reviewer":   "Код-ревью, проверка качества",
+    "security":   "Аудит безопасности",
+    "integration":"Проверка консистентности, кросс-файловые связи",
+    "tester":     "Написание и прогон тестов",
+    "debugger":   "Отладка, поиск первопричины ошибки",
+    "documenter": "Документирование, README, комментарии",
+    "devops":     "Инфраструктура, CI/CD, деплой",
+    "optimizer":  "Оптимизация производительности",
+}
+
 
 # ── Kanban CLI helpers ──────────────────────────────────────────────────────┘
 
@@ -272,8 +293,9 @@ def create_task_tree(state: dict) -> dict:
     # ── Create children ──────────────────────────────────────────────────
     for agent in pipeline:
         c_ikey = child_id(parent_ikey, agent)
-        c_title = f"@{agent}: {request[:60]}"
-        c_body = f"Этап: {agent}\nЗапрос: {request}"
+        desc = AGENT_DESCRIPTIONS.get(agent, request[:60])
+        c_title = f"@{agent}: {desc}"
+        c_body = f"Этап: {agent}\nЗадача: {desc}\nЗапрос: {request}"
         child_id_val = create_child(c_title, parent_id,
                                     body=c_body, idempotency_key=c_ikey)
         if child_id_val:
