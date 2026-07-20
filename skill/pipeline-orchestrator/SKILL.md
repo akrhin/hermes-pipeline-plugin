@@ -1,12 +1,12 @@
 ---
 name: pipeline-orchestrator
-description: "Главный оркестратор-скилл for Pipeline Plugin v3.3.3 — kanban.db SSOT, 16 agents, 8 categories, selective context, LLM Judge ensemble, deterministic convergence, hot-reload config."
+description: "Главный оркестратор-скилл for Pipeline Plugin v3.3.4 — kanban.db SSOT, 16 agents, 8 categories, selective context, LLM Judge ensemble, deterministic convergence, hot-reload config, toolsets override docs."
 author: Hermes Agent + Vladimir
 category: hermes
 tags: [pipeline, orchestrator, ensemble, convergence, kanban, retro, master]
 ---
 
-# Pipeline Orchestrator v3.3.3 — Главный оркестратор-скилл
+# Pipeline Orchestrator v3.3.4 — Главный оркестратор-скилл
 
 ## ⚠️ ПРАВИЛА РАБОТЫ С ПРОЕКТОМ (читать ПЕРЕД КАЖДЫМ ПРОГОНОМ)
 
@@ -393,3 +393,4 @@ def fp(findings):
 7. **scan_board parent order** — всегда `ORDER BY created_at DESC LIMIT 1`.
 8. **P1 self-resolve** — исправленный P1 помечай как P2, а то convergence зациклится.
 9. **Kanban bypass** — никогда не bypass через прямой delegate_task.
+10. **Kanban worker toolsets override** — диспатчер (`_default_spawn` в `kanban_db.py:8307-8309`) читает `_get_platform_tools(cfg, "cli")` из профиля воркера и передаёт как `--toolsets a,b,c`. Это **CLI-флаг высшего приоритета** — переопределяет `enabled_toolsets` в профиле. Решение: `agent.disabled_toolsets` в профиле фильтрует тулзы до того, как диспатчер их запакует.

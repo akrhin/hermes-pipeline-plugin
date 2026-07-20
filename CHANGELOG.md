@@ -1,5 +1,34 @@
 # Changelog
 
+## v3.3.4 (2026-07-20)
+
+### README — полная переработка
+- **Секция «Установка» переписана**: 5 шагов вместо устаревших 2 предложений. Убраны мёртвые команды `hermes kanban boards create/switch` — плагин использует собственный SQLite kanban, не Hermes kanban.
+- **Убран `systemctl restart`** — достаточно рестарта сессии (`/new`).
+- **Добавлена проверка**: `hermes plugins list | grep pipeline`
+- **Добавлен `.config.yaml.example`** — шаблон конфига с полными настройками.
+- **Обновлена таблица агентов**: уточнён ensemble для @coder.
+- **Секция инструментов**: обновлена до 12 штук v3.3.3.
+
+### Documentation
+- `README.md`: полный rewrite секции установки (было 2 строки, стало 40+)
+- `skill/pipeline-orchestrator/SKILL.md`: v3.3.4, добавлен pitfall#10 про `disabled_toolsets` для kanban-воркеров
+- `skill/pipeline-audit-checklist/SKILL.md`: v3.3.4, README rewrite в аудит-шагах
+- `CHANGELOG.md`: добавлен разбор архитектуры dispatcher `--toolsets` override
+
+### Kanban Workers — toolsets override
+- **Найден и задокументирован механизм**: `_default_spawn()` в `kanban_db.py` (строка 8307-8309) читает `_get_platform_tools(cfg, "cli")` из профиля воркера и передаёт как `--toolsets a,b,c` — это CLI-флаг высшего приоритета, который **переопределяет** `enabled_toolsets` в профиле.
+- **Решение**: `agent.disabled_toolsets` в профиле воркера (например `tractor`) фильтрует тулзы ДО того как диспатчер запакует их в `--toolsets`. Механизм собственного `_resolve_worker_cli_toolsets()` — резолвит через `_get_platform_tools`, который учитывает `disabled_toolsets`.
+
+```
+# ~/.hermes/profiles/tractor/config.yaml
+agent:
+  disabled_toolsets:
+    - browser
+    - image_gen
+    - spotify
+```
+
 ## v3.3.3 (2026-07-20)
 
 ### LLM Judge — реальное делегирование

@@ -42,7 +42,9 @@
 
 ## Установка
 
-Два компонента: плагин (инструменты) + скилл (оркестрация).
+Два компонента: **плагин** (12 инструментов для Hermes Agent) + **скилл** (оркестрация — мои инструкции).
+
+### Быстрая установка
 
 ```bash
 # 1. Склонировать репозиторий
@@ -53,28 +55,71 @@ git clone https://github.com/akrhin/hermes-pipeline-plugin.git git/hermes-pipeli
 ln -sf ~/git/hermes-pipeline-plugin ~/.hermes/plugins/pipeline
 
 # 3. Подключить скилл-оркестратор
-ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator       ~/.hermes/skills/hermes/pipeline-orchestrator
+ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator \
+      ~/.hermes/skills/hermes/pipeline-orchestrator
 
-# 4. Включить плагин в конфиге ~/.hermes/config.yaml
+# 4. Включить плагин
+hermes plugins enable pipeline
+
+# 5. Создать конфиг (если ещё нет)
+cp ~/git/hermes-pipeline-plugin/pipeline.config.yaml.example \
+   ~/.hermes/plugins/pipeline/config.yaml
 ```
 
-```yaml
-# ~/.hermes/config.yaml
-plugins:
-  enabled:
-    - pipeline
-```
+**Готово.** Плагин автоматически создаёт `kanban.db` при первом запуске пайплайна. Никаких ручных досок.
+
+### Проверка
 
 ```bash
-# 5. Создать kanban-доску (один раз)
-hermes kanban boards create pipeline "Pipeline tasks"
-hermes kanban boards switch pipeline
-
-# 6. Перезагрузить
-systemctl --user restart hermes-gateway
+hermes plugins list | grep pipeline   # должен быть enabled
 ```
 
-Готово. Просто пиши задачи — пайплайн запустится автоматически.
+### Полный конфиг
+
+```yaml
+# ~/.hermes/plugins/pipeline/config.yaml
+pipeline:
+  models:
+    defaults:
+      direct:
+        model: deepseek-v4-flash
+      delegate:
+        provider: direct
+        model: deepseek-v4-flash
+    agents:
+      security:
+        provider: delegate
+        model: deepseek-v4-pro
+
+  ensemble:
+    enabled: true
+    default_n: 5
+    max_n: 10
+    agents:
+      coder:
+        enabled: true
+        n: 5
+        judge_mode: llm
+    judge:
+      model: deepseek-v4-flash
+      provider: polza
+    cost_optimization:
+      disable_on_round_gt: 1
+
+  retro:
+    enabled: true
+    dir: ~/.hermes/plugins/pipeline/retro
+    max_files: 100
+    auto_analyze: false
+```
+
+### Обновление
+
+```bash
+cd ~/git/hermes-pipeline-plugin && git pull
+# Плагин прилинкован через симлинк — новая версия подхватится автоматически.
+# После обновления: рестарт сессии (/new).
+```
 
 ---
 
@@ -87,11 +132,11 @@ systemctl --user restart hermes-gateway
 | **@researcher** | Flash | `direct` | `deepseek-v4-flash` | research | Поиск best practices и документации |
 | **@architect** | Flash | `direct` | `deepseek-v4-flash` | research, planning | Проектирование решения |
 | **@planner** | Flash | `direct` | `deepseek-v4-flash` | planning, infrastructure | Декомпозиция на задачи |
-| **@coder** | Flash | `direct` | `deepseek-v4-flash` | implementation, planning | Написание кода |
+| **@coder** | Flash | `direct` | `deepseek-v4-flash` | implementation, planning | Написание кода с ensemble (5 кандидатов) |
 | **@fixer** | Flash | `direct` | `deepseek-v4-flash` | implementation | Исправление известных багов |
 | **@refactorer** | Flash | `direct` | `deepseek-v4-flash` | implementation | Рефакторинг без изменения поведения |
 | **@reviewer** | Flash | `direct` | `deepseek-v4-flash` | implementation, research | Код-ревью |
-| **@security** | **Pro** | **`delegate`** | **`deepseek-v4-pro`** | implementation, research | Аудит безопасности (только SECURITY_RELATED) |
+| **@security** | **Pro** | **`delegate`** | **`deepseek-v4-pro`** | implementation, research | Аудит безопасности (OWASP Top 10) |
 | **@integration** | Flash | `direct` | `deepseek-v4-flash` | implementation, documentation, infrastructure | Кросс-файловая консистентность |
 | **@tester** | Flash | `direct` | `deepseek-v4-flash` | implementation | Написание и прогон тестов |
 | **@debugger** | Flash | `direct` | `deepseek-v4-flash` | implementation | Отладка (только BUG_UNKNOWN) |
@@ -108,9 +153,9 @@ systemctl --user restart hermes-gateway
 
 ---
 
-## SQLite Kanban (v3.3.0 — @V0rt)
+## SQLite Kanban (v3.3.0)
 
-Начиная с v3.3.0, **kanban.py работает напрямую с SQLite, без CLI-прослойки**.
+Начиная с v3.3.0, **kanban.py работает напрямую с SQLite, без CLI-прослойки**. Это собственный kanban плагина, не путать с `hermes kanban`.
 
 Все 11 функций Kanban API:
 - `create_parent()`, `create_child()` — прямой INSERT
@@ -160,36 +205,6 @@ systemctl --user restart hermes-gateway
 ```
 
 **Hot-reload:** конфиг перечитывается при каждом вызове инструмента (по mtime с наносекундной точностью). Рестарт не нужен.
-
-### Реальный конфиг по умолчанию
-
-```yaml
-# ~/.hermes/plugins/pipeline/config.yaml
-pipeline:
-  models:
-    defaults:
-      delegate:
-        provider: direct
-        model: deepseek-v4-flash
-    agents:
-      security:
-        provider: delegate
-        model: deepseek-v4-pro
-
-  ensemble:
-    enabled: true
-    agents:
-      coder:
-        enabled: true
-        n: 5
-        judge_mode: llm
-
-  retro:
-    enabled: true
-    dir: ~/.hermes/plugins/pipeline/retro
-    max_files: 100
-    auto_analyze: false
-```
 
 ---
 
@@ -242,17 +257,6 @@ for k,v in sorted(cats.items()):
 "
 ```
 
-### Конфиг
-
-```yaml
-pipeline:
-  retro:
-    enabled: true          # вкл/выкл
-    dir: ~/.hermes/plugins/pipeline/retro
-    max_files: 100         # автоочистка старых логов
-    auto_analyze: false    # автоанализ выключен — копим данные
-```
-
 ---
 
 ## Конвергенция
@@ -268,51 +272,15 @@ pipeline:
 
 ## Best-of-N Ensemble
 
-Для @coder доступен режим генерации N кандидатов с разными температурами и выбор лучшего.
-
-```yaml
-pipeline:
-  ensemble:
-    enabled: true
-    agents:
-      coder:
-        enabled: true
-        n: 5
-        judge_mode: llm
-    cost_optimization:
-      disable_on_round_gt: 1
-```
+Для @coder доступен режим генерации N кандидатов с разными температурами и выбор лучшего через LLM Judge.
 
 - **5 кандидатов** (T=0.3, 0.5, 0.7, 0.9, 1.1)
-- **Judge** выбирает: `candidate_3` (T=0.7) — самый стабильный (подтверждено 3 прогонами)
+- **LLM Judge** реально оценивает кандидатов через `delegate_task` (багфикс #3 v3.3.3)
 - На round ≥ 2 ensemble автоматически отключается (экономия токенов)
 
 ---
 
-## Kanban-интеграция
-
-Пайплайн автоматически ведёт доску `pipeline`, используя **прямой SQLite** (v3.3.0):
-
-| Событие | Что на доске |
-|---------|--------------|
-| Старт | Создаётся задача с дочерними тасками для каждого агента |
-| Агент завершён | Статус `done`, промоутится следующий |
-| Конвергенция | Комментарий: «Round N: P0=x, P1=y, P2=z» |
-| Converged | Задача → complete |
-| Stuck | Задача → blocked |
-| Очистка | Задача → complete (Cancelled) |
-
-Статус можно смотреть:
-```bash
-hermes kanban ls          # все задачи
-hermes kanban show <id>   # детали
-```
-
-После рестарта агента (`/new`) — `pipeline_resume()` восстанавливает состояние с доски.
-
----
-
-## Инструменты плагина (v3.3.0)
+## Инструменты плагина (v3.3.3 — 12 штук)
 
 | Инструмент | Что делает |
 |-----------|------------|
@@ -325,9 +293,18 @@ hermes kanban show <id>   # детали
 | `pipeline_convergence(state, findings?)` | Оценка сходимости (детерминированная) |
 | `pipeline_run_agent(state, agent, context?)` | Delegation package для запуска агента |
 | `pipeline_ensemble_run(state, agent, n?)` | Генерация N кандидатов для Best-of-N |
-| `pipeline_ensemble_judge(request, candidates)` | Выбор лучшего кандидата |
+| `pipeline_ensemble_judge(request, candidates)` | Выбор лучшего кандидата (LLM Judge) |
 | `agent_prompt(agent_id, context)` | Собирает промпт для агента из шаблона |
 | `agent_model(agent_id)` | Возвращает провайдера и модель для агента |
+
+---
+
+## Требования
+
+- **Hermes Agent** — любая версия с поддержкой плагинов
+- **Python** ≥ 3.11
+- **sqlite3** — встроенный модуль Python
+- **PyYAML** — для чтения конфига
 
 ---
 
@@ -335,34 +312,9 @@ hermes kanban show <id>   # детали
 
 См. [`CONTRIBUTORS.md`](CONTRIBUTORS.md)
 
----
-
 ## Changelog
 
 См. [`CHANGELOG.md`](CHANGELOG.md)
-
----
-
-## Обновление
-
-```bash
-cd ~/git/hermes-pipeline-plugin
-git pull
-```
-
-Плагин прилинкован через симлинк — новая версия подхватится автоматически.
-После обновления: рестарт сессии (`/new`).
-
----
-
-## Требования
-
-- **Hermes Agent** — любая версия с поддержкой плагинов и Kanban
-- **Python** ≥ 3.11
-- **sqlite3** — встроенный модуль Python (не требует установки)
-- **PyYAML** — для чтения конфига
-
----
 
 ## Лицензия
 

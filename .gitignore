@@ -8,3 +8,10 @@ __pycache__/
 dist/
 *.egg-info/
 .hermes-env/
+audit_snapshot_*.json
+code_review_results.json
+retro/
+hermes-pipeline-plugin
+skill/pipeline-audit-checklist/pipeline-audit-checklist
+skill/pipeline-ensemble/pipeline-ensemble
+skill/pipeline-orchestrator/pipeline-orchestrator
