@@ -26,6 +26,7 @@ Key change from v2.0:
 """
 
 import json
+import logging
 import os
 import sys
 import traceback
@@ -34,8 +35,14 @@ PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 if PLUGIN_DIR not in sys.path:
     sys.path.insert(0, PLUGIN_DIR)
 
+logger = logging.getLogger(__name__)
+
 import classify
 import kanban as kb
+import retro as rt
+
+
+# ── Import ensemble with retro logging ──────────────────────────────────────
 
 
 def _import_ensemble():
@@ -319,7 +326,11 @@ ENSEMBLE_JUDGE_SCHEMA = {
 def handle_classify(args, **kwargs):
     try:
         request = args["request"]
+        retro = rt.get_retro()
+        retro.log("classify", request=request[:80])
         result = classify.classify(request)
+        retro.log("classify_result", category=result.get("category", "?"),
+                  agents=len(result.get("pipeline", [])))
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e), "traceback": traceback.format_exc()})
@@ -338,6 +349,38 @@ def handle_convergence(args, **kwargs):
             })
         result = kb.evaluate_convergence(state, findings)
         kb.on_convergence(state, result)
+
+        # Retro log convergence
+        retro = rt.get_retro()
+        retro.convergence(
+            round=result.get("round", 0),
+            decision=result.get("decision", "?"),
+            p0=result.get("p0_count", 0),
+            p1=result.get("p1_count", 0),
+            p2=result.get("p2_count", 0),
+            fingerprint=state.get("findings_fingerprint", ""),
+            reason=result.get("reason", ""),
+        )
+        if findings:
+            active = [f for f in findings
+                      if f.get("status", "open") not in ("fixed", "accepted", "none")]
+            p0 = len([f for f in active if f["severity"] == "P0"])
+            p1 = len([f for f in active if f["severity"] == "P1"])
+            p2 = len([f for f in findings if f["severity"] == "P2"])
+            fixed = len([f for f in findings if f.get("status") == "fixed"])
+            accepted = len([f for f in findings if f.get("status") == "accepted"])
+            retro.findings_event(p0, p1, p2, fixed=fixed, accepted=accepted)
+            retro.findings_detail(findings)
+
+        # Auto-analysis on maxed_out/stuck
+        decision = result.get("decision", "")
+        if decision in ("maxed_out", "stuck") and rt.DEFAULT_RETRO_CONFIG.get("auto_analyze", True):
+            config = rt._read_retro_config()
+            if config.get("auto_analyze", True):
+                events = rt.get_latest_log(limit=1)
+                analysis = rt.build_analysis_prompt(events)
+                retro.log("auto_analysis", decision=decision, analysis=analysis[:500])
+
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e), "traceback": traceback.format_exc()},
@@ -349,6 +392,14 @@ def handle_save(args, **kwargs):
     try:
         state = args["state"]
         state = kb.create_task_tree(state)
+
+        # Wire retro with the new run_id
+        parent_id = state.get("kanban_parent_id")
+        retro = rt.get_retro(run_id=parent_id or "")
+        retro.log("pipeline_start", category=state.get("category", ""),
+                  agents=len(state.get("pipeline", [])),
+                  request=(state.get("request", "") or "")[:80])
+
         return json.dumps({
             "status": "ok",
             "kanban_parent_id": state.get("kanban_parent_id"),
@@ -363,7 +414,10 @@ def handle_load(args, **kwargs):
     try:
         state = kb.scan_board()
         if state is None:
+            rt.get_retro().log("pipeline_load", found=False)
             return json.dumps(None)
+        rt.get_retro().log("pipeline_load", found=True,
+                           pipeline=state.get("pipeline", []))
         return json.dumps(state, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
@@ -375,6 +429,9 @@ def handle_clear(args, **kwargs):
         state = kb.scan_board()
         if state:
             kb.on_clear(state)
+        retro = rt.get_retro()
+        retro.log("pipeline_clear")
+        rt.reset_retro()
         return json.dumps({"status": "ok"})
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
@@ -397,6 +454,8 @@ def handle_advance(args, **kwargs):
         state = args["state"]
         agent = args["completed_agent"]
         state = kb.advance(state, agent)
+        retro = rt.get_retro()
+        retro.log("agent_done", agent=agent)
         return json.dumps(state, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
@@ -412,7 +471,6 @@ AGENT_CONTEXT_FIELDS = {
     "architect":    ["research", "planning"],
     "planner":      ["planning", "infrastructure"],
     "coder":        ["implementation", "planning"],
-    "editor":       ["implementation", "planning"],
     "fixer":        ["implementation"],
     "refactorer":   ["implementation"],
     "reviewer":     ["implementation", "research"],
@@ -427,7 +485,11 @@ AGENT_CONTEXT_FIELDS = {
 
 
 def _build_agent_prompt(agent_id: str, context: dict, request: str, category: str) -> dict:
-    """Build a prompt for an agent, including only the context sections it needs."""
+    """Build a prompt for an agent, including only the context sections it needs.
+
+    If no .prompt file exists for the agent, generates a default prompt
+    from AGENT_CONTEXT_FIELDS.
+    """
 
     agent_id = os.path.basename(agent_id)
     prompt_path = os.path.join(PLUGIN_DIR, "agents", f"{agent_id}.prompt")
@@ -436,8 +498,25 @@ def _build_agent_prompt(agent_id: str, context: dict, request: str, category: st
     if not resolved.startswith(agents_dir):
         return {"error": f"Unknown agent: {agent_id}"}
 
-    with open(resolved, "r", encoding="utf-8") as f:
-        template = f.read()
+    if os.path.exists(resolved):
+        with open(resolved, "r", encoding="utf-8") as f:
+            template = f.read()
+    else:
+        # Generate default prompt from AGENT_CONTEXT_FIELDS
+        fields = AGENT_CONTEXT_FIELDS.get(agent_id, [])
+        sections = ", ".join(fields) if fields else "full_context"
+        template = (
+            f"Ты — @{agent_id} в пайплайне.\n\n"
+            f"## Задача\n{{request}}\n\n"
+            f"## Контекст\n"
+            f"Твои секции контекста: {sections}\n\n"
+        )
+        for field in fields:
+            template += f"{{{field}_context}}\n\n"
+        if not fields:
+            template += "{full_context}\n\n"
+        template += "Выполни свою задачу на основе контекста."
+        rt.get_retro().log("default_prompt", agent=agent_id, sections=sections)
 
     request_esc = request.replace("{", "{{").replace("}", "}}")
     category_esc = category.replace("{", "{{").replace("}", "}}")
@@ -485,18 +564,47 @@ def handle_prompt(args, **kwargs):
         return json.dumps({"error": str(e), "traceback": traceback.format_exc()})
 
 
-try:
-    from .models import load_model_config
-except ImportError:
-    from models import load_model_config  # noqa: F811
+# ── Model config loader (hot-reload) ─────────────────────────────────────────
 
-MODEL_MAP = load_model_config()
+_MODEL_MAP_CACHE: dict[str, dict[str, str]] = {}
+_CONFIG_MTIME: int = 0
+
+
+def _load_model_map() -> dict[str, dict[str, str]]:
+    """Load model map with hot-reload: checks config.yaml mtime (nanosecond) on each call.
+
+    Uses os.stat().st_mtime_ns for nanosecond-precision mtime comparison,
+    avoiding the 1-second granularity issue of os.path.getmtime() on
+    overlayfs/Docker filesystems.
+    """
+    from models import load_model_config
+
+    config_path = os.path.join(PLUGIN_DIR, "config.yaml")
+    try:
+        stat = os.stat(config_path)
+        current_mtime = stat.st_mtime_ns  # nanosecond precision
+    except OSError:
+        current_mtime = 0
+
+    global _CONFIG_MTIME, _MODEL_MAP_CACHE
+    if current_mtime > _CONFIG_MTIME or not _MODEL_MAP_CACHE:
+        _MODEL_MAP_CACHE = load_model_config()
+        _CONFIG_MTIME = current_mtime
+        logger.info("Loaded MODEL_MAP from config.yaml (%d agents)",
+                     len(_MODEL_MAP_CACHE))
+
+    return _MODEL_MAP_CACHE
+
+
+def get_model_map() -> dict[str, dict[str, str]]:
+    """Get current model map (always fresh)."""
+    return _load_model_map()
 
 
 def handle_model(args, **kwargs):
     try:
         agent_id = args["agent_id"]
-        result = MODEL_MAP.get(agent_id)
+        result = get_model_map().get(agent_id)
         if result is None:
             return json.dumps({"error": f"Unknown agent: {agent_id}"})
         return json.dumps(result)
@@ -522,13 +630,16 @@ def handle_run_agent(args, **kwargs):
         if "pipeline" not in state:
             return json.dumps({"error": "State missing required field: pipeline"})
 
+        retro = rt.get_retro()
+
         # 2. Validate agent_id (path traversal guard — same as handle_prompt)
         agent_id = os.path.basename(agent_id)
-        routing = MODEL_MAP.get(agent_id)
+        routing = get_model_map().get(agent_id)
         if routing is None:
+            retro.log("error", agent=agent_id, error=f"Unknown agent: {agent_id}")
             return json.dumps({"error": f"Unknown agent: {agent_id}"})
 
-        # 3. Determine directive
+        # 3. Determine directive first (used by logging below)
         provider = routing["provider"]
         model = routing["model"]
 
@@ -541,6 +652,17 @@ def handle_run_agent(args, **kwargs):
         else:  # "direct"
             directive = "direct"
             tool_hint = None
+
+        # 4. Log model routing & agent start
+        retro.model_routing(agent_id, effective=f"{provider}/{model}",
+                            configured=f"{provider}/{model}")
+
+        ctx = context_override if context_override is not None else state.get("context", {})
+        tokens_prompt = len(json.dumps(ctx, ensure_ascii=False)) // 4  # rough estimate
+        retro.agent_start(agent_id, directive=directive, model=model,
+                          round=state.get("round", 0), tokens_prompt=tokens_prompt)
+
+        if directive == "direct":
             # Flash agents: return minimal package without prompt file
             return json.dumps({
                 "agent_id": agent_id,
@@ -553,7 +675,7 @@ def handle_run_agent(args, **kwargs):
                 "state": state,
             }, ensure_ascii=False)
 
-        # 4. Resolve context (delegation agents only)
+        # 5. Resolve context (delegation agents only)
         ctx = context_override if context_override is not None else state.get("context", {})
         request = state.get("request", "")
         category = state.get("category", "")
@@ -601,8 +723,12 @@ def handle_ensemble_run(args, **kwargs):
         agent_id = args["agent_id"]
         n = args.get("n", 5)
 
+        retro = rt.get_retro()
+
         # Check if ensemble should be used
         if not should_use_ensemble(state, agent_id):
+            retro.log("ensemble_disabled", agent=agent_id,
+                      reason=f"Round {state.get('round', 0)} > max")
             return json.dumps({
                 "agent_id": agent_id,
                 "n": 1,
@@ -613,6 +739,10 @@ def handle_ensemble_run(args, **kwargs):
             }, ensure_ascii=False)
 
         candidates = ensemble_generate_candidates(state, agent_id, n)
+
+        # Retro log
+        temps = [c.get("temperature", 0) for c in candidates]
+        retro.ensemble_gen(agent_id, n=len(candidates), temperatures=temps)
 
         # Create kanban sub-tasks for visibility
         kb.create_ensemble_subtasks(state, agent_id, candidates)
@@ -640,6 +770,13 @@ def handle_ensemble_judge(args, **kwargs):
 
         config = read_ensemble_config()
         result = ensemble_judge_candidates(request, candidates, judge_mode, config)
+
+        retro = rt.get_retro()
+        retro.ensemble_judge(
+            winner=result.get("winner_id", "?"),
+            mode=result.get("mode", judge_mode),
+            rationale=result.get("rationale", ""),
+        )
 
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:

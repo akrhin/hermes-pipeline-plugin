@@ -1,6 +1,6 @@
 name: pipeline
-version: 3.1.1
-description: "Pipeline Plugin v3.1.1 — Kanban-native. Selective context (AGENT_CONTEXT_FIELDS). Best-of-N ensemble (12 tools: +pipeline_ensemble_run, +pipeline_ensemble_judge). Ensemble: config-driven, LLM Judge, kanban subtasks."
+version: 3.2.0
+description: "Pipeline Plugin v3.2.0 — Kanban-native. Selective context. Best-of-N ensemble. Retrospective logging + auto-analysis. Convergence fixed (status filter). Hot-reload MODEL_MAP. Default prompt fallback."
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify

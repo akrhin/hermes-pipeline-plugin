@@ -39,18 +39,18 @@
 
 ВЕРНИ СТРОГО JSON (без markdown-обёртки):
 
-{{
+{{{{
   "status": "PASS",
   "summary": "краткое резюме аудита",
   "findings": [
-    {{"severity": "critical|high|medium|low", "file": "path/to/file", "line": 42, "cwe": "CWE-89", "description": "описание уязвимости", "remediation": "как исправить"}}
+    {{{{"severity": "critical|high|medium|low", "file": "path/to/file", "line": 42, "cwe": "CWE-89", "description": "описание уязвимости", "remediation": "как исправить"}}}}
   ],
   "critical_count": 0,
   "high_count": 0,
   "medium_count": 0,
   "low_count": 0,
   "blocked": false
-}}
+}}}}
 
 Статусы:
 - PASS — уязвимостей нет (или только low)

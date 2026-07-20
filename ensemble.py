@@ -85,6 +85,10 @@ def generate_candidates(state: dict, agent_id: str, n: int = 5) -> list[dict]:
     agent_config = read_ensemble_config()
     agent_cfg = agent_config.get("agents", {}).get(agent_id, {})
     n = min(n, agent_cfg.get("n", 5), agent_config.get("max_n", 10), len(VARIATIONS))
+    if n < agent_cfg.get("n", 5) and n == len(VARIATIONS):
+        logger.warning("Ensemble n=%d capped to %d (only %d variations available). "
+                       "Add more entries to VARIATIONS in ensemble.py.",
+                       agent_cfg.get("n", 5), n, len(VARIATIONS))
 
     candidates = []
     for i in range(n):

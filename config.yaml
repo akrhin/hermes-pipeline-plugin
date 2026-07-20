@@ -1,23 +1,21 @@
-# Pipeline Plugin Config v3.0
-# Модели для агентов пайплайна.
-# Читается из ~/.hermes/plugins/pipeline/config.yaml
+# Pipeline Plugin Config v3.2.0
+# Flash по умолчанию, security на Pro-делегации.
 # Приоритет: agents > defaults > BUILTIN_MODEL_MAP (models.py)
 
 pipeline:
   models:
-    # defaults — групповое переопределение по типу провайдера
     defaults:
       delegate:
-        model: deepseek-v4-flash     # все Pro → Flash
-      delegate_free:
-        model: openrouter/free
-    # agents — точечное переопределение (высший приоритет)
-    agents:
-      coder:                          # coder на delegate + flash
-        provider: delegate
+        provider: direct
         model: deepseek-v4-flash
+      delegate_free:
+        provider: direct
+        model: deepseek-v4-flash
+    agents:
+      security:
+        provider: delegate
+        model: deepseek-v4-pro
 
-  # ── Best-of-N Ensemble configuration ──
   ensemble:
     enabled: true
     default_n: 5
@@ -27,16 +25,15 @@ pipeline:
         enabled: true
         n: 5
         judge_mode: llm
-      planner:
-        enabled: false
-        n: 3
-        judge_mode: deterministic
-      tester:
-        enabled: false
-        n: 3
-        judge_mode: deterministic
     judge:
       model: deepseek-v4-flash
       provider: polza
     cost_optimization:
       disable_on_round_gt: 1
+
+  # ── Retrospective (v3.2.0) ──
+  retro:
+    enabled: true                # вкл/выкл запись JSONL-лога
+    dir: "~/.hermes/plugins/pipeline/retro"
+    max_files: 100               # автоочистка старых логов
+    auto_analyze: false          # автоанализ выключен — копим данные для саморефлексии

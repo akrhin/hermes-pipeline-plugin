@@ -217,8 +217,9 @@ def create_task_tree(state: dict) -> dict:
     state["kanban_task_ids"] = {}  # agent → task_id
 
     # ── Create children ──────────────────────────────────────────────────
+    round_num = state.get("round", 0)
     for agent in pipeline:
-        c_ikey = child_id(parent_ikey, agent)
+        c_ikey = child_id(parent_ikey, agent, round_num)
         c_title = f"@{agent}: {request[:60]}"
         c_body = f"Этап: {agent}\nЗапрос: {request}"
         child_id_val = create_child(c_title, parent_id,
@@ -298,6 +299,8 @@ def evaluate_convergence(state: dict, findings: list | None = None) -> dict:
     """Evaluate pipeline convergence deterministically (no LLM).
 
     Mutates state with round/findings metadata.
+    Only findings with status=open (or no status) count toward P0/P1.
+    Findings with status='fixed', 'accepted', 'none' are ignored.
     Returns dict with decision/reason/counts.
     """
     if findings is not None:
@@ -306,7 +309,8 @@ def evaluate_convergence(state: dict, findings: list | None = None) -> dict:
         curr_fp = state.get("findings_fingerprint", "")
         state["findings"] = findings
         state["findings_fingerprint"] = _compute_fingerprint(
-            [f for f in findings if f.get("severity") in ("P0", "P1")]
+            [f for f in findings if f.get("severity") in ("P0", "P1")
+             and f.get("status", "open") not in ("fixed", "accepted", "none")]
         )
         state["prev_findings_fingerprint"] = curr_fp
         state["round"] = state.get("round", 0) + 1
@@ -315,8 +319,13 @@ def evaluate_convergence(state: dict, findings: list | None = None) -> dict:
     round_num = state.get("round", 0)
     max_rounds = state.get("max_rounds", MAX_CONVERGENCE_ROUNDS)
 
-    p0 = [f for f in active_findings if f.get("severity") == "P0"]
-    p1 = [f for f in active_findings if f.get("severity") == "P1"]
+    # Filter: only count findings that are actually open
+    open_findings = [
+        f for f in active_findings
+        if f.get("status", "open") not in ("fixed", "accepted", "none")
+    ]
+    p0 = [f for f in open_findings if f.get("severity") == "P0"]
+    p1 = [f for f in open_findings if f.get("severity") == "P1"]
     p2 = [f for f in active_findings if f.get("severity") == "P2"]
     p0p1 = list(p0) + list(p1)
 

@@ -31,12 +31,12 @@
 
 ВЕРНИ СТРОГО JSON (без markdown-обёртки):
 
-{{
+{{{{
   "status": "PASS",
   "findings": [
-    {{"topic": "название", "source": "URL или описание источника", "summary": "кратко что нашли", "relevance": "high|medium|low"}}
+    {{{{"topic": "название", "source": "URL или описание источника", "summary": "кратко что нашли", "relevance": "high|medium|low"}}}}
   ],
   "recommendations": ["конкретная рекомендация 1", "конкретная рекомендация 2"],
   "pitfalls": ["что avoid"],
   "references": ["полезные ссылки"]
-}}
+}}}}

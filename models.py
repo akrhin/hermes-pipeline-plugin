@@ -20,7 +20,6 @@ BUILTIN_MODEL_MAP: dict[str, dict[str, str]] = {
     "analyst":     {"provider": "direct", "model": "deepseek-v4-flash"},
     "planner":     {"provider": "direct", "model": "deepseek-v4-flash"},
     "coder":       {"provider": "direct", "model": "deepseek-v4-flash"},
-    "editor":      {"provider": "direct", "model": "deepseek-v4-flash"},
     "fixer":       {"provider": "direct", "model": "deepseek-v4-flash"},
     "refactorer":  {"provider": "direct", "model": "deepseek-v4-flash"},
     "tester":      {"provider": "direct", "model": "deepseek-v4-flash"},

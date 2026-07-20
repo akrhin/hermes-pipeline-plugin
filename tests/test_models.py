@@ -128,8 +128,9 @@ class TestLoadModelConfig:
             result = models.load_model_config()
 
         # All direct agents changed
-        for agent_id in ["finder", "analyst", "planner", "coder", "editor", "fixer",
-                          "refactorer", "tester", "debugger", "documenter", "devops", "optimizer"]:
+        for agent_id in ["finder", "analyst", "planner", "coder",
+                          "fixer", "refactorer", "tester", "debugger",
+                          "documenter", "devops", "optimizer"]:
             assert result[agent_id]["model"] == "new-flash"
         # Non-direct agents untouched
         assert result["architect"]["model"] == "deepseek-v4-pro"

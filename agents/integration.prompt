@@ -43,16 +43,16 @@
 
 ВЕРНИ СТРОГО JSON (без markdown-обёртки):
 
-{{
+{{{{
   "status": "PASS",
   "summary": "краткое резюме интеграционного аудита",
   "findings": [
-    {{"severity": "P0|P1|P2", "file": "path/to/file", "category": "integration|stale_ref|dead_link|tool_mismatch", "description": "что не так", "fix": "как исправить"}}
+    {{{{"severity": "P0|P1|P2", "file": "path/to/file", "category": "integration|stale_ref|dead_link|tool_mismatch", "description": "что не так", "fix": "как исправить"}}}}
   ],
   "p0_count": 0,
   "p1_count": 0,
   "p2_count": 0
-}}
+}}}}
 
 Статусы:
 - PASS — интеграционных проблем нет (только P2)

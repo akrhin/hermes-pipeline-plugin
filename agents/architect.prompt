@@ -40,9 +40,9 @@
 
 ВЕРНИ СТРОГО JSON (без markdown-обёртки):
 
-{{
+{{{{
   "components": [
-    {{"name": "ComponentName", "responsibility": "что делает", "file": "path/to/file", "deps": ["dep1"]}}
+    {{{{"name": "ComponentName", "responsibility": "что делает", "file": "path/to/file", "deps": ["dep1"]}}}}
   ],
   "interfaces": "textual description with signatures",
   "integration": "how this fits into existing code",
@@ -51,4 +51,4 @@
   "files_to_modify": ["path/to/existing/file.go"],
   "implementation_notes": ["important note for coder"],
   "risks": ["risk description or 'none'"]
-}}
+}}}}

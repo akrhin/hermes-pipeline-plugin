@@ -23,9 +23,8 @@
   │
   ▼
 Каждый агент делает свою часть работы.
-  ├─ Flash-агенты (finder, coder, tester…) — выполняются прямо в контексте агента
-  ├─ Pro-агенты (architect, reviewer, security, integration) — делегируются сабагентам
-  └─ Free-агент (researcher) — делегируется через OpenRouter free
+  ├─ Flash (direct) — в моём контексте: finder, coder, tester… (15 из 16)
+  └─ Pro (delegate) — через сабагента: только security (deepseek-v4-pro)
   │
   ▼
 Конвергенция: reviewer/security/tester находят баги → coder исправляет → повтор
@@ -80,32 +79,33 @@ systemctl --user restart hermes-gateway
 
 ---
 
-## Все 17 агентов и их модели
+## Все 16 агентов и их модели
 
-| Агент | Тип | Как выполняется | Дефолтная модель | Что делает |
-|-------|-----|----------------|------------------|------------|
-| **@finder** | Flash | В контексте | `deepseek-v4-flash` | Разведка: ищет файлы, структуру, зависимости |
-| **@analyst** | Flash | В контексте | `deepseek-v4-flash` | Диагностика: что сломалось, где корень |
-| **@researcher** | Free | `delegate_task` | `openrouter/free` | Ищет best practices, документацию |
-| **@architect** | Pro | `delegate_task` | `deepseek-v4-pro` | Проектирует решение |
-| **@planner** | Flash | В контексте | `deepseek-v4-flash` | Декомпозирует на задачи |
-| **@coder** | Flash | В контексте | `deepseek-v4-flash` | Пишет код |
-| **@editor** | Flash | В контексте | `deepseek-v4-flash` | Редактирует (не во всех пайплайнах) |
-| **@fixer** | Flash | В контексте | `deepseek-v4-flash` | Чинит известные баги |
-| **@refactorer** | Flash | В контексте | `deepseek-v4-flash` | Рефакторит |
-| **@reviewer** | Pro | `delegate_task` | `deepseek-v4-pro` | Код-ревью с качественной оценкой |
-| **@security** | Pro | `delegate_task` | `deepseek-v4-pro` | Аудит безопасности |
-| **@integration** | Pro | `delegate_task` | `deepseek-v4-pro` | Проверяет кросс-файловую консистентность |
-| **@tester** | Flash | В контексте | `deepseek-v4-flash` | Пишет и гоняет тесты |
-| **@debugger** | Flash | В контексте | `deepseek-v4-flash` | Отладка (только BUG_UNKNOWN) |
-| **@documenter** | Flash | В контексте | `deepseek-v4-flash` | Пишет документацию |
-| **@devops** | Flash | В контексте | `deepseek-v4-flash` | Инфраструктура (только INFRASTRUCTURE) |
-| **@optimizer** | Flash | В контексте | `deepseek-v4-flash` | Оптимизация (только PERFORMANCE) |
+| Агент | Тип | Режим | Дефолтная модель | Что делает |
+|-------|-----|-------|-----------------|------------|
+| **@finder** | Flash | `direct` | `deepseek-v4-flash` | Разведка: структура, файлы, зависимости |
+| **@analyst** | Flash | `direct` | `deepseek-v4-flash` | Диагностика: корень проблемы, логические ошибки |
+| **@researcher** | Flash | `direct` | `deepseek-v4-flash` | Поиск best practices и документации |
+| **@architect** | Flash | `direct` | `deepseek-v4-flash` | Проектирование решения |
+| **@planner** | Flash | `direct` | `deepseek-v4-flash` | Декомпозиция на задачи |
+| **@coder** | Flash | `direct` | `deepseek-v4-flash` | Написание кода |
+| **@fixer** | Flash | `direct` | `deepseek-v4-flash` | Исправление известных багов |
+| **@refactorer** | Flash | `direct` | `deepseek-v4-flash` | Рефакторинг без изменения поведения |
+| **@reviewer** | Flash | `direct` | `deepseek-v4-flash` | Код-ревью |
+| **@security** | **Pro** | **`delegate`** | **`deepseek-v4-pro`** | Аудит безопасности (только SECURITY_RELATED) |
+| **@integration** | Flash | `direct` | `deepseek-v4-flash` | Кросс-файловая консистентность |
+| **@tester** | Flash | `direct` | `deepseek-v4-flash` | Написание и прогон тестов |
+| **@debugger** | Flash | `direct` | `deepseek-v4-flash` | Отладка (только BUG_UNKNOWN) |
+| **@documenter** | Flash | `direct` | `deepseek-v4-flash` | Документация |
+| **@devops** | Flash | `direct` | `deepseek-v4-flash` | Инфраструктура (только INFRASTRUCTURE) |
+| **@optimizer** | Flash | `direct` | `deepseek-v4-flash` | Оптимизация (только PERFORMANCE) |
 
-**Три типа выполнения:**
+**Два режима выполнения:**
 - **Flash** (`direct`) — агент работает прямо в моём контексте. Быстро, дёшево. Подходит для механической работы.
-- **Pro** (`delegate`) — я поручаю задачу сабагенту через `delegate_task`. Дороже, но качественнее. Нужно для задач требующих рассуждений и оценки.
-- **Free** (`delegate_free`) — то же делегирование, но через бесплатную модель (OpenRouter free). Для второстепенных задач вроде внешних исследований.
+- **Pro** (`delegate`) — я поручаю задачу сабагенту через `delegate_task`. Дороже, но качественнее. Используется только для security-аудита.
+
+> **Примечание:** по умолчанию все агенты — Flash. Security переведён на Pro через конфиг (см. ниже).
+> Файлы `.prompt` есть для всех 16 агентов. Без файла — генерируется default prompt из AGENT_CONTEXT_FIELDS.
 
 ---
 
@@ -140,47 +140,30 @@ systemctl --user restart hermes-gateway
 
 Если секция `models` отсутствует или файла нет — используется хардкод.
 
-### Полный пример конфига
+**Hot-reload:** конфиг перечитывается при каждом вызове инструмента (по mtime с наносекундной точностью). Рестарт не нужен — просто измени config.yaml и следующий вызов подхватит новые настройки.
+
+### Реальный конфиг по умолчанию
 
 ```yaml
 # ~/.hermes/plugins/pipeline/config.yaml
 pipeline:
   models:
-
-    # ── Групповые настройки ──
-    # Применяются ко всем агентам соответствующего типа
     defaults:
-      direct:                          # Flash-агенты
+      delegate:
+        provider: direct            # все Pro → Flash
         model: deepseek-v4-flash
-      delegate:                        # Pro-агенты (architect, reviewer, security, integration)
-        model: deepseek-v4-pro
-      delegate_free:                   # Free-агент (researcher)
-        model: openrouter/free
-
-    # ── Точечные настройки ──
-    # Переопределяют defaults и BUILTIN для конкретного агента
+      delegate_free:
+        provider: direct            # researcher → Flash
+        model: deepseek-v4-flash
     agents:
-      # Можно переопределить только модель
-      coder:
-        model: deepseek-v4-pro
-
-      # Можно переопределить провайдер (способ выполнения)
-      tester:
-        provider: delegate
-        model: deepseek-v4-pro
-
-      # Можно переопределить и то, и другое
-      architect:
-        provider: direct
-        model: deepseek-v4-flash
-
       security:
+        provider: delegate          # только security на Pro
         model: deepseek-v4-pro
 ```
 
 ### Примеры сценариев
 
-**Экономия — все Pro перевести во Flash (ноль дорогих вызовов):**
+**Все Pro перевести во Flash (ноль дорогих вызовов):**
 
 ```yaml
 pipeline:
@@ -189,24 +172,10 @@ pipeline:
       delegate:
         provider: direct
         model: deepseek-v4-flash
+    agents: {}                      # убрать security override
 ```
 
-**Только безопасность на Pro, всё остальное Flash:**
-
-```yaml
-pipeline:
-  models:
-    defaults:
-      delegate:
-        provider: direct
-        model: deepseek-v4-flash
-    agents:
-      security:
-        provider: delegate
-        model: deepseek-v4-pro
-```
-
-**Coder на Claude Sonnet:**
+**Coder на самую мощную модель:**
 
 ```yaml
 pipeline:
@@ -217,29 +186,64 @@ pipeline:
         model: openrouter/anthropic/claude-sonnet-4
 ```
 
-**Researcher на другую free-модель:**
+---
+
+## Retrospective (v3.2.0)
+
+Плагин пишет структурированный JSONL-лог работы для последующего анализа.
+
+**Где хранится:** `~/.hermes/plugins/pipeline/retro/pipe_<id>.jsonl`
+
+**События (на каждый handler):**
+- `pipeline_start` — категория, список агентов
+- `agent_start` — агент, модель, размер контекста
+- `model_routing` — effective/configured модель
+- `convergence` — round, decision, P0/P1/P2 counts, fingerprint
+- `findings` — сводка: сколько P0/P1/P2, сколько fixed
+- `ensemble_gen/judge` — N, temperatures, winner, mode
+- `error` — ошибки с описанием
+- `pipeline_clear` — завершение
+
+Конфиг ретроспективы:
 
 ```yaml
 pipeline:
-  models:
-    defaults:
-      delegate_free:
-        model: perplexity/sonar-pro
+  retro:
+    enabled: true                  # вкл/выкл
+    dir: ~/.hermes/plugins/pipeline/retro
+    max_files: 100                 # автоочистка
+    auto_analyze: false            # выключен — копим данные
 ```
-
-**После изменения конфига** — нужен рестарт сессии (`/new` или `systemctl --user restart hermes-gateway`).
 
 ---
 
-## Обновление
+## Конвергенция (v3.2.0)
 
-```bash
-cd ~/git/hermes-pipeline-plugin
-git pull
+Оценка сходимости — детерминированная, без LLM.
+
+**Что нового в v3.2.0:**
+- ✅ Фильтр `status: fixed` — findings со статусом `fixed`, `accepted`, `none` не считаются
+- ✅ Fingerprint только по открытым P0/P1
+- ✅ Максимум 3 раунда (P0/P1 → continue → fix → continue → fix → converged/maxed_out)
+
+---
+
+## Best-of-N Ensemble
+
+Для @coder доступен режим генерации N кандидатов с разными температурами и выбор лучшего.
+
+```yaml
+pipeline:
+  ensemble:
+    enabled: true
+    agents:
+      coder:
+        enabled: true
+        n: 5
+        judge_mode: llm
+    cost_optimization:
+      disable_on_round_gt: 1
 ```
-
-Плагин прилинкован через симлинк — новая версия подхватится автоматически.
-После обновления: рестарт gateway или сессии.
 
 ---
 
@@ -268,20 +272,34 @@ hermes kanban stats       # статистика доски
 
 ---
 
-## Инструменты плагина (v2.2)
+## Инструменты плагина (v3.2.0)
 
 | Инструмент | Что делает |
 |-----------|------------|
 | `pipeline_classify(request)` | Определяет категорию и список агентов |
-| `pipeline_save(state)` | Создаёт дерево задач на доске |
+| `pipeline_save(state)` | Создаёт дерево задач на доске (идемпотентно) |
 | `pipeline_load()` | Читает состояние с доски |
 | `pipeline_resume()` | Ищет активный пайплайн после рестарта |
 | `pipeline_advance(state, agent)` | Отмечает агента завершённым, промоутит следующего |
 | `pipeline_clear()` | Закрывает все задачи |
-| `pipeline_convergence(state, findings)` | Оценка сходимости (детерминированная, без LLM) |
+| `pipeline_convergence(state, findings?)` | Оценка сходимости (детерминированная) |
+| `pipeline_run_agent(state, agent, context?)` | Delegation package для запуска агента |
+| `pipeline_ensemble_run(state, agent, n?)` | Генерация N кандидатов для Best-of-N |
+| `pipeline_ensemble_judge(request, candidates)` | Выбор лучшего кандидата |
 | `agent_prompt(agent_id, context)` | Собирает промпт для агента из шаблона |
 | `agent_model(agent_id)` | Возвращает провайдера и модель для агента |
-| `pipeline_run_agent(state, agent_id, context?)` | Возвращает delegation package — инструкцию для запуска агента |
+
+---
+
+## Обновление
+
+```bash
+cd ~/git/hermes-pipeline-plugin
+git pull
+```
+
+Плагин прилинкован через симлинк — новая версия подхватится автоматически.
+После обновления: рестарт сессии (`/new`).
 
 ---
 
@@ -289,8 +307,7 @@ hermes kanban stats       # статистика доски
 
 - **Hermes Agent** — любая версия с поддержкой `register_tool`, `delegate_task` и канального плагина
 - **Python** ≥ 3.11
-- **Для Pro-агентов** — настроенный провайдер делегации (deepseek-v4-pro или аналог)
-- **Для Free-агента** (researcher) — `OPENROUTER_API_KEY` в `.env` (опционально)
+- **PyYAML** — для чтения конфига
 
 ---
 
