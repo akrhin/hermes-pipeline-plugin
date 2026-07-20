@@ -1,6 +1,22 @@
 # Changelog
 
-## v3.5.1 (2026-07-20)
+## v3.6.0 (2026-07-20)
+
+### code-review-graph integration
+- **@reviewer и @security агенты** — обновлены промпты: используют MCP-инструменты code-review-graph для получения blast radius, risk score, test gaps и affected flows.
+- **MCP-сервер CRG** — зарегистрирован в `config.addon.yaml` с `--auto-watch`. Граф собирается один раз и обновляется инкрементально.
+- **Экономия токенов** — 38–528× на больших проектах, подтверждено бенчмарками CRG.
+
+### Документация
+- **README.md**: новая секция «Интеграция с code-review-graph» — установка, настройка, таблица MCP-инструментов.
+- **AGENTS.md**: v3.6.0, упоминание CRG в описании агентов @reviewer/@security.
+- **pipeline-orchestrator skill**: v3.6.0, добавлены MCP-инструменты CRG в таблицу тулзов, pitfall про зависимость от `/new`.
+- **pipeline-audit-checklist**: CRG-проверки добавлены в аудит-шаги.
+
+### Verification
+- CRG установлен (v2.3.7, 263 nodes, 2025 edges для плагина)
+- Промпты обновлены и синхронизированы с ~/.hermes/plugins/pipeline/agents/
+- Требуется `/new` для подхвата MCP-сервера
 
 ### Retro logging fixes
 - **agent_done теперь пишет duration_s, tokens_response, status** — вместо пустого `{agent: "finder"}`. `handle_advance()` принимает новые опциональные поля из `ADVANCE_SCHEMA`.

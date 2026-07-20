@@ -157,6 +157,52 @@ cd ~/git/hermes-pipeline-plugin && git pull
 
 ---
 
+## Интеграция с code-review-graph (v3.6.0)
+
+[**code-review-graph**](https://github.com/tirth8205/code-review-graph) (22.7k ★) — локальный граф кода на Tree-sitter + SQLite. Строит карту зависимостей, вычисляет blast radius изменений, риск-скоринг и test gaps.
+
+### Для чего
+
+Агенты **@reviewer** и **@security** теперь используют CRG вместо сканирования всего репозитория. Граф даёт им точный набор файлов и функций для проверки — экономия токенов **38–528×** на больших кодовых базах.
+
+### Как установить
+
+```bash
+# Установить CRG (через uv/pipx)
+pip install code-review-graph
+# или
+uv tool install code-review-graph
+
+# Собрать граф для проекта
+cd ~/git/your-project
+code-review-graph build
+
+# Включить как MCP-сервер Hermes
+# → прописать в ~/.hermes/config.addon.yaml:
+#   code-review-graph:
+#     command: /home/sintez/.local/bin/code-review-graph
+#     args: [mcp, --repo, /home/sintez/git/your-project, --auto-watch]
+#     enabled: true
+```
+
+После рестарта Hermes (`/new`) инструменты CRG появляются как `mcp_code_review_graph_*` и автоматически используются агентами @reviewer и @security.
+
+### MCP-инструменты CRG, доступные в пайплайне
+
+| Инструмент | Что даёт |
+|-----------|----------|
+| `get_review_context_tool` | Полный контекст для ревью: blast radius, risk score, affected flows, test gaps |
+| `get_impact_radius_tool` | Детальный разбор затронутых функций по графу |
+| `query_graph_tool` | Точечный запрос: callers_of, callees_of, tests_for, file_summary |
+| `list_graph_stats_tool` | Статистика графа (узлы, рёбра, файлы, языки) |
+| `build_or_update_graph_tool` | Пересборка графа (полная или инкрементальная) |
+
+### Конфигурация
+
+Граф собирается один раз и обновляется автоматически (`--auto-watch`). Для смены проекта — измени `--repo` в MCP-конфиге и сделай `/new`.
+
+---
+
 ## Retro logging (v3.5.1)
 Начиная с v3.5.1, **ретро-логирование фиксирует полные метаданные**: agent_done пишет duration_s/tokens_response/status, tokens_prompt считается от реального промпта, pipeline_resume логирует категорию/round/агентов.
 

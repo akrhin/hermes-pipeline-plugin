@@ -1,6 +1,6 @@
 name: pipeline
-version: 3.5.1
-description: "Pipeline Plugin v3.5.1 — retro logging fixes: agent_done now writes duration_s/tokens_response/status, tokens_prompt counted from real prompt, pipeline_resume logs metadata, ADVANCE_SCHEMA extended with optional fields."
+version: 3.6.0
+description: "Pipeline Plugin v3.6.0 — code-review-graph integration: agents @reviewer and @security use MCP-powered graph for blast radius, risk scoring, and test gap detection. 38-528× token savings on code review."
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify

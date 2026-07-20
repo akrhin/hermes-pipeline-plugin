@@ -1,11 +1,10 @@
-# AGENTS.md — Pipeline Plugin (v3.3.3, SQLite-native)
+# AGENTS.md — Pipeline Plugin (v3.6.0, SQLite-native + code-review-graph)
 
 ## What This Is
 
 Плагин-оркестратор multi-agent пайплайнов для Hermes Agent.
 **Variant C:** `state.json` удалён. `kanban.db` — единое состояние.
-**v3.3.3:** всё пофикшено. `judge_candidates(mode='llm')` возвращает `judge_call_args`, **оркестратор вызывает `delegate_task`** — LLM реально оценивает кандидатов.
-После рестарта: `pipeline_resume()` сканирует доску.
+**v3.6.0:** интеграция с **code-review-graph (CRG)** — локальный граф кода на Tree-sitter. @reviewer и @security используют MCP-инструменты CRG (blast radius, risk score, test gaps) вместо сканирования всего кода. Экономия токенов 38–528×.
 
 ## Quick Start
 

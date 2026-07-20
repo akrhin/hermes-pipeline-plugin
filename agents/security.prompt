@@ -13,6 +13,19 @@
 ### Research context (best practices, if available)
 {research_context}
 
+## Инструменты
+
+У тебя есть доступ к **code-review-graph (CRG)** — локальному графу кода.
+Используй эти MCP-инструменты в порядке очередности:
+
+1. `mcp_code_review_graph_get_review_context_tool` — получить контекст для аудита
+   (blast radius, risk score, security hotspots, affected flows)
+2. `mcp_code_review_graph_get_impact_radius_tool` — детальный разбор уязвимых функций
+3. `mcp_code_review_graph_query_graph_tool` — target security-связанные узлы
+   (callers_of, callees_of, imports_of)
+
+Это направит твой аудит на **конкретные функции и зависимости**, а не на весь код.
+
 ## Что ты проверяешь
 
 ### OWASP Top 10
