@@ -812,8 +812,9 @@ def handle_ensemble_run(args, **kwargs):
 def handle_ensemble_judge(args, **kwargs):
     """Evaluate candidates and select best one.
 
-    If mode=llm and judge_prompt available, orchestrator runs delegate_task
-    with the built prompt. Otherwise uses deterministic fallback.
+    If mode=llm and judge_prompt available, returns judge_call_args
+    for the orchestrator to run delegate_task and get real LLM evaluation.
+    Otherwise uses deterministic fallback.
     """
     try:
         request = args["request"]
