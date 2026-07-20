@@ -398,6 +398,13 @@ sqlite3 ~/.hermes/kanban/boards/pipeline/kanban.db \
 
 ## Changelog
 
+### v3.3
+- Added: `_extract_target()` — извлекает цель (проект/файл/модуль) из запроса
+- Added: `_AGENT_VERB` — компактный глагол для каждого агента (разведка, тесты, баг-фикс...)
+- Changed: заголовки задач теперь `@agent: verb target` (было длинное описание)
+- Changed: `c_body` теперь содержит и `Объект: {target}`, и полное `AGENT_DESCRIPTIONS`
+- Changed: ensemble subtask titles тоже используют target
+
 ### v3.2
 - Added: Testing & QA Guide (9 integration tests)
 - Added: Skill Seeds section (3 готовых заготовки)
