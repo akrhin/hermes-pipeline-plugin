@@ -25,6 +25,7 @@ import time
 import uuid
 
 from convergence import _compute_fingerprint, evaluate_convergence
+from ensemble import generate_candidates as ensemble_gen_candidates, judge_candidates as ensemble_judge_candidates
 
 
 logger = logging.getLogger(__name__)

@@ -151,7 +151,9 @@ class TestSummary:
         assert abs(s.agents["finder"]["dur_s"] - 15.0) < 1.0
 
     def test_convergence(self) -> None:
-        events = [_event("convergence", round=1, decision="converged", p0=0, p1=0, p2=2, reason="OK")]
+        events = [
+            _event("convergence", round=1, decision="converged", p0=0, p1=0, p2=2, reason="OK")
+        ]
         s = rs.Summary(events)
         assert len(s.convergences) == 1
         assert s.convergences[0]["decision"] == "converged"
@@ -286,17 +288,70 @@ class TestCLI:
 class TestIntegration:
     def test_full_pipeline_run(self, tmp_path: Path) -> None:
         events = [
-            _event("pipeline_start", category="FEATURE", agents=5, request="full integration test", ts="2026-07-20T13:00:00+00:00"),
-            _event("agent_start", agent="finder", directive="direct", model="flash", ts="2026-07-20T13:00:05+00:00"),
+            _event(
+                "pipeline_start",
+                category="FEATURE",
+                agents=5,
+                request="full integration test",
+                ts="2026-07-20T13:00:00+00:00",
+            ),
+            _event(
+                "agent_start",
+                agent="finder",
+                directive="direct",
+                model="flash",
+                ts="2026-07-20T13:00:05+00:00",
+            ),
             _event("agent_done", agent="finder", ts="2026-07-20T13:00:20+00:00"),
-            _event("agent_start", agent="analyst", directive="direct", model="flash", ts="2026-07-20T13:00:22+00:00"),
+            _event(
+                "agent_start",
+                agent="analyst",
+                directive="direct",
+                model="flash",
+                ts="2026-07-20T13:00:22+00:00",
+            ),
             _event("agent_done", agent="analyst", ts="2026-07-20T13:00:35+00:00"),
-            _event("agent_start", agent="coder", directive="direct", model="flash", ts="2026-07-20T13:00:37+00:00"),
-            _event("ensemble_gen", agent="coder", n=3, temperatures=[0.3, 0.5, 0.7], ts="2026-07-20T13:00:40+00:00"),
-            _event("ensemble_judge", winner="candidate_1", mode="llm", rationale="best pick", ts="2026-07-20T13:01:00+00:00"),
-            _event("convergence", round=1, decision="converged", p0=0, p1=0, p2=1, reason="all good", ts="2026-07-20T13:01:30+00:00"),
-            _event("findings", p0=0, p1=0, p2=1, fixed=0, accepted=0, ts="2026-07-20T13:01:30+00:00"),
-            _event("error", agent="tester", error="timeout", resolution="retried", ts="2026-07-20T13:02:00+00:00"),
+            _event(
+                "agent_start",
+                agent="coder",
+                directive="direct",
+                model="flash",
+                ts="2026-07-20T13:00:37+00:00",
+            ),
+            _event(
+                "ensemble_gen",
+                agent="coder",
+                n=3,
+                temperatures=[0.3, 0.5, 0.7],
+                ts="2026-07-20T13:00:40+00:00",
+            ),
+            _event(
+                "ensemble_judge",
+                winner="candidate_1",
+                mode="llm",
+                rationale="best pick",
+                ts="2026-07-20T13:01:00+00:00",
+            ),
+            _event(
+                "convergence",
+                round=1,
+                decision="converged",
+                p0=0,
+                p1=0,
+                p2=1,
+                reason="all good",
+                ts="2026-07-20T13:01:30+00:00",
+            ),
+            _event(
+                "findings", p0=0, p1=0, p2=1, fixed=0, accepted=0, ts="2026-07-20T13:01:30+00:00"
+            ),
+            _event(
+                "error",
+                agent="tester",
+                error="timeout",
+                resolution="retried",
+                ts="2026-07-20T13:02:00+00:00",
+            ),
             _event("pipeline_clear", ts="2026-07-20T13:02:05+00:00"),
         ]
 
@@ -333,7 +388,14 @@ class TestIntegration:
         assert d["event_count"] == 12
 
     def test_unicode_roundtrip(self, tmp_path: Path) -> None:
-        events = [_event("pipeline_start", category="FEATURE", agents=1, request="\u0434\u043e\u0431\u0430\u0432\u044c \u043a\u043e\u043c\u0430\u043d\u0434\u0443")]
+        events = [
+            _event(
+                "pipeline_start",
+                category="FEATURE",
+                agents=1,
+                request="\u0434\u043e\u0431\u0430\u0432\u044c \u043a\u043e\u043c\u0430\u043d\u0434\u0443",
+            )
+        ]
         f = _write_jsonl(tmp_path / "pipe_unicode.jsonl", events)
         s = rs.Summary(rs._load(f))
         assert "\u0434\u043e\u0431\u0430\u0432\u044c" in s.render()
