@@ -1,6 +1,6 @@
 name: pipeline
-version: 3.3.4
-description: "Pipeline Plugin v3.3.4 — README rewrite + toolsets override docs for kanban workers."
+version: 3.4.0
+description: "Pipeline Plugin v3.4.0 — README rewrite (5-step install), toolsets override docs for kanban workers, disabled_toolsets pitfall."
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify

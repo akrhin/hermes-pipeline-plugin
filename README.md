@@ -54,9 +54,13 @@ git clone https://github.com/akrhin/hermes-pipeline-plugin.git git/hermes-pipeli
 # 2. Подключить плагин (симлинк)
 ln -sf ~/git/hermes-pipeline-plugin ~/.hermes/plugins/pipeline
 
-# 3. Подключить скилл-оркестратор
+# 3. Подключить скиллы (симлинки)
 ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator \
       ~/.hermes/skills/hermes/pipeline-orchestrator
+ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-ensemble \
+      ~/.hermes/skills/pipeline-ensemble
+ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-audit-checklist \
+      ~/.hermes/skills/verification/pipeline-audit-checklist
 
 # 4. Включить плагин
 hermes plugins enable pipeline

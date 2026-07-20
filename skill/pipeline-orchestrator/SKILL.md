@@ -1,12 +1,12 @@
 ---
 name: pipeline-orchestrator
-description: "Главный оркестратор-скилл for Pipeline Plugin v3.3.4 — kanban.db SSOT, 16 agents, 8 categories, selective context, LLM Judge ensemble, deterministic convergence, hot-reload config, toolsets override docs."
+description: "Главный оркестратор-скилл for Pipeline Plugin v3.4.0 — kanban.db SSOT, 16 agents, 8 categories, selective context, LLM Judge ensemble, deterministic convergence, hot-reload config, toolsets override docs."
 author: Hermes Agent + Vladimir
 category: hermes
 tags: [pipeline, orchestrator, ensemble, convergence, kanban, retro, master]
 ---
 
-# Pipeline Orchestrator v3.3.4 — Главный оркестратор-скилл
+# Pipeline Orchestrator v3.4.0 — Главный оркестратор-скилл
 
 ## ⚠️ ПРАВИЛА РАБОТЫ С ПРОЕКТОМ (читать ПЕРЕД КАЖДЫМ ПРОГОНОМ)
 

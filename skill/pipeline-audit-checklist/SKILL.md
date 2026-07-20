@@ -6,7 +6,7 @@ category: verification
 tags: [pipeline, audit, verification, quality, ensemble, master]
 ---
 
-# Pipeline Audit Checklist (v3.3.4)
+# Pipeline Audit Checklist (v3.4.0)
 
 ## Preconditions
 - [ ] Load `pipeline-orchestrator` skill (`skill_view('pipeline-orchestrator')`)
@@ -14,7 +14,7 @@ tags: [pipeline, audit, verification, quality, ensemble, master]
 - [ ] `~/.hermes/plugins/pipeline/config.yaml` — валидный конфиг
 - [ ] 79/79 тестов проходят (`pytest tests/ -q`)
 
-## Known Bugfixes (v3.3.4 — 28 total)
+## Known Bugfixes (v3.4.0 — 28 total)
 
 | ID | Sev | File | Баг | Статус |
 |----|-----|------|-----|--------|
@@ -27,7 +27,7 @@ tags: [pipeline, audit, verification, quality, ensemble, master]
 | #20 | P2 | kanban.py | scan_board без LIMIT 1 | ✅ |
 | v3.3.2 | — | classify.py | RU keywords, word-boundary, priority | ✅ |
 | v3.3.3 | — | orchestration | LLM Judge: delegate_task с judge_call_args | ✅ |
-| **v3.3.4** | — | **README** | **Установка: устаревшие 2 строки, мёртвые kanban CLI команды** | ✅ |
+| **v3.4.0** | — | **README** | **Установка: устаревшие 2 строки, мёртвые kanban CLI команды + не хватало 2 скиллов** | ✅ |
 
 ## Audit Steps
 
@@ -46,11 +46,11 @@ tags: [pipeline, audit, verification, quality, ensemble, master]
 - [ ] Hot-reload config
 
 ### 4. Documentation
-- [ ] **README.md** — v3.3.4, установка в 5 шагов, без мёртвых kanban CLI команд
+- [ ] **README.md** — v3.4.0, установка в 5 шагов, без мёртвых kanban CLI команд
 - [ ] **AGENTS.md** — v3.3.3, all 16 agents, per-category table
 - [ ] **ARCHITECTURE.md** — migration history includes v3.3.3
-- [ ] **plugin.yaml** — version: 3.3.4
-- [ ] **CHANGELOG.md** — все версии, включая v3.3.4
+- [ ] **plugin.yaml** — version: 3.4.0
+- [ ] **CHANGELOG.md** — все версии, включая v3.4.0
 - [ ] **CODE_OF_CONDUCT.md** — существует
 - [ ] **CONTRIBUTING.md** — существует
 - [ ] **SECURITY.md** — существует
