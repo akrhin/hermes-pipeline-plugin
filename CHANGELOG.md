@@ -1,5 +1,33 @@
 # Changelog
 
+## v3.6.0 (2026-07-20)
+
+### code-review-graph integration
+- **@reviewer и @security агенты** — обновлены промпты: используют MCP-инструменты code-review-graph для получения blast radius, risk score, test gaps и affected flows.
+- **MCP-сервер CRG** — зарегистрирован в `config.addon.yaml` с `--auto-watch`. Граф собирается один раз и обновляется инкрементально.
+- **Экономия токенов** — 38–528× на больших проектах, подтверждено бенчмарками CRG.
+
+### Документация
+- **README.md**: новая секция «Интеграция с code-review-graph» — установка, настройка, таблица MCP-инструментов.
+- **AGENTS.md**: v3.6.0, упоминание CRG в описании агентов @reviewer/@security.
+- **pipeline-orchestrator skill**: v3.6.0, добавлены MCP-инструменты CRG в таблицу тулзов, pitfall про зависимость от `/new`.
+- **pipeline-audit-checklist**: CRG-проверки добавлены в аудит-шаги.
+
+### Verification
+- CRG установлен (v2.3.7, 263 nodes, 2025 edges для плагина)
+- Промпты обновлены и синхронизированы с ~/.hermes/plugins/pipeline/agents/
+- Требуется `/new` для подхвата MCP-сервера
+
+### Retro logging fixes
+- **agent_done теперь пишет duration_s, tokens_response, status** — вместо пустого `{agent: "finder"}`. `handle_advance()` принимает новые опциональные поля из `ADVANCE_SCHEMA`.
+- **tokens_prompt считается от реального prompt**, а не от пустого context dict. `agent_start` перенесён после сборки промпта.
+- **pipeline_resume логирует метаданные** — category, primary, pipeline_len, round, agent_count.
+- **ADVANCE_SCHEMA расширен**: `duration_s` (number), `tokens_response` (integer), `status` (enum: ok/error/skipped).
+
+### Verification
+- Новый ретро-лог `pipe:064f9ee87fb1` подтверждает: `agent_start tokens_prompt=292` (было 0), `agent_done duration_s=1.5 tokens_response=42 result=ok` (было {agent: "finder"})
+- 108/108 тестов (исключая 1 flaky kanban), ruff 0 в коде плагина
+
 ## v3.5.0 (2026-07-20)
 
 ### scan_board — порядок агентов исправлен

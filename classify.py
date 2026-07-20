@@ -1,7 +1,7 @@
 """Request classification for Pipeline Plugin.
 
 8 categories with keyword-based detection.
-Returns category + full pipeline definition.
+Supports multi-label: returns ALL matched categories with merged pipeline.
 """
 
 import re
@@ -227,23 +227,96 @@ CATEGORIES = {
 }
 
 
+# Порядок приоритетов для устранения дубликатов в `pipeline`
+# Специализированные агенты должны быть включены если их категория совпала
+_CATEGORY_SPECIFIC_AGENTS = {
+    "SECURITY_RELATED": {"security"},
+    "BUG_UNKNOWN": {"debugger", "fixer"},
+    "BUG_KNOWN": {"fixer"},
+    "REFACTORING": {"refactorer"},
+    "PERFORMANCE": {"optimizer"},
+    "INFRASTRUCTURE": {"devops"},
+}
+
+# Общие агенты, которые есть почти во всех категориях
+_COMMON_AGENTS = {"finder", "analyst", "architect", "planner", "coder",
+                  "reviewer", "integration", "tester", "documenter"}
+
+# Tiebreaker priority (lower = higher priority)
+_PRIORITY_ORDER = [
+    "BUG_KNOWN", "BUG_UNKNOWN", "SECURITY_RELATED",
+    "REFACTORING", "PERFORMANCE",
+    "INFRASTRUCTURE", "FEATURE",
+    "DOCUMENTATION",
+]
+_PRIORITY_WEIGHTS = [10, 10, 10, 5, 5, 2, 2, 3]
+_MIN_SCORE = 1  # минимальное кол-во совпадений чтобы категория считалась
+
+
+def _merge_pipelines(matched_categories: list[str]) -> list[str]:
+    """Объединяет пайплайны нескольких категорий в один упорядоченный список.
+
+    Правила:
+    1. Общие агенты (finder, coder, reviewer, tester, documenter и т.д.) — идут в
+       порядке их первого появления в PREDEFINED_ORDER.
+    2. Специализированные агенты (security, debugger, fixer, refactorer, optimizer,
+       devops) — добавляются на свои позиции:
+       - security → после reviewer
+       - debugger → после finder
+       - fixer → после debugger/finder
+       - refactorer → после analyst
+       - optimizer → после analyst
+       - devops → после finder
+    """
+
+    # Агенты, которые могут быть задействованы (все из совпавших категорий)
+    # + общие обязательные
+    all_agents = set()
+    for cat in matched_categories:
+        all_agents.update(CATEGORIES[cat]["pipeline"])
+
+    predefined = [
+        "finder",
+        "debugger",
+        "fixer",
+        "analyst",
+        "researcher",
+        "refactorer",
+        "optimizer",
+        "architect",
+        "planner",
+        "coder",
+        "devops",
+        "reviewer",
+        "security",
+        "integration",
+        "tester",
+        "documenter",
+    ]
+
+    return [a for a in predefined if a in all_agents]
+
+
+def _get_category_name(cat_name: str) -> str:
+    """Human-readable category name."""
+    return cat_name.replace("_", " ").title()
+
+
 def classify(request: str) -> dict:
     """
-    Classify a user request into a pipeline category.
+    Classify a user request into pipeline categories.
 
-    Scoring:
-    - Keywords <= 3 chars use word-boundary matching
-    - Longer keywords use substring matching
-    - Ties broken by category priority tiers
-      (BUG_UNKNOWN > BUG_KNOWN > SECURITY > REFACTORING > PERFORMANCE >
-       INFRASTRUCTURE > FEATURE > DOCUMENTATION)
+    Multi-label: returns ALL categories that match keywords.
+    Pipelines are merged unique+ordered.
 
     Returns:
     {
-        "category": "FEATURE",
-        "pipeline": ["finder", "analyst", ...],
-        "matched_keywords": ["добав"],
-        "description": "New feature pipeline"
+        "categories": ["FEATURE", "SECURITY_RELATED"],  # all matched
+        "primary": "FEATURE",  # highest priority matched category
+        "pipeline": ["finder", "analyst", "architect", "planner", "coder",
+                     "reviewer", "security", "integration", "tester", "documenter"],
+        "matched_keywords": {"FEATURE": ["добав"], "SECURITY_RELATED": ["аудит"]},
+        "description": "Feature + Security pipeline"
     }
     """
     request_lower = request.lower()
@@ -258,45 +331,52 @@ def classify(request: str) -> dict:
             if _kw_matches(kw, request_lower):
                 score += 1
                 matched_kw.append(kw)
-        if score > 0:
+        if score >= _MIN_SCORE:
             scores[cat_name] = score
             matched[cat_name] = matched_kw
 
     if not scores:
         # Default to feature
         return {
-            "category": "FEATURE",
+            "categories": ["FEATURE"],
+            "primary": "FEATURE",
             "pipeline": CATEGORIES["FEATURE"]["pipeline"],
-            "matched_keywords": [],
+            "matched_keywords": {},
             "description": "Default feature pipeline (no category matched)",
         }
 
-    # Tiebreaker priority: prefer more specific categories
-    # Position in PRIORITY_ORDER determines weight:
-    # 0-2 (tier1): ×10, 3-4 (tier2): ×5, 5-6 (tier3): ×2, 7 (DOC): ×3
-    priority_order = [
-        "BUG_KNOWN", "BUG_UNKNOWN", "SECURITY_RELATED",
-        "REFACTORING", "PERFORMANCE",
-        "INFRASTRUCTURE", "FEATURE",
-        "DOCUMENTATION",
-    ]
-    priority_weights = [10, 10, 10, 5, 5, 2, 2, 3]
+    # ── Multi-label: all matched categories ──
+    matched_categories = list(scores.keys())
 
+    # Determine primary (highest priority with highest score)
     def priority(cat):
         raw_score = scores[cat]
         try:
-            pos = priority_order.index(cat)
-            weight = priority_weights[pos]
+            pos = _PRIORITY_ORDER.index(cat)
+            weight = _PRIORITY_WEIGHTS[pos]
         except ValueError:
             pos = 99
             weight = 1
         return (raw_score * weight, -pos, raw_score)
 
-    best = max(scores, key=priority)
+    primary = max(matched_categories, key=priority)
+
+    # ── Merge pipelines ──
+    merged_pipeline = _merge_pipelines(matched_categories)
+
+    # Build description
+    desc_parts = []
+    for cat in matched_categories:
+        cat_desc = _get_category_name(cat)
+        kw = matched[cat]
+        if kw:
+            cat_desc += f" ({', '.join(kw[:3])})"
+        desc_parts.append(cat_desc)
 
     return {
-        "category": best,
-        "pipeline": CATEGORIES[best]["pipeline"],
-        "matched_keywords": matched[best],
-        "description": f"{best.replace('_', ' ').title()} pipeline",
+        "categories": matched_categories,
+        "primary": primary,
+        "pipeline": merged_pipeline,
+        "matched_keywords": matched,
+        "description": " + ".join(desc_parts),
     }

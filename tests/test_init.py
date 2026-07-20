@@ -268,7 +268,7 @@ class TestHandleClassify:
                 }
             )
         )
-        assert result["category"] == "SECURITY_RELATED"
+        assert result["primary"] == "SECURITY_RELATED"
 
     def test_classify_feature_default(self):
         result = json.loads(
@@ -278,7 +278,7 @@ class TestHandleClassify:
                 }
             )
         )
-        assert result["category"] == "FEATURE"
+        assert result["primary"] == "FEATURE"
 
     def test_classify_bug(self):
         result = json.loads(
@@ -288,7 +288,7 @@ class TestHandleClassify:
                 }
             )
         )
-        assert result["category"] == "BUG_UNKNOWN"
+        assert result["primary"] == "BUG_UNKNOWN"
 
 
 # ── pipeline_run_agent tests ───────────────────────────────────────────────

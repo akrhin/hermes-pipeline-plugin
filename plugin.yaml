@@ -1,6 +1,6 @@
 name: pipeline
-version: 3.5.0
-description: "Pipeline Plugin v3.5.0 — scan_board() now preserves agent order (parsed from parent body instead of ORDER BY), ensemble judge gets real candidate output (not just descriptions), judge config passthrough fixed, pipeline.config.yaml.example added."
+version: 3.6.0
+description: "Pipeline Plugin v3.6.0 — code-review-graph integration: agents @reviewer and @security use MCP-powered graph for blast radius, risk scoring, and test gap detection. 38-528× token savings on code review."
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify

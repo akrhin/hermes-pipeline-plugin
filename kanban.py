@@ -442,6 +442,27 @@ def _claim_and_assign(task_id: str, assignee: str) -> bool:
     )
 
 
+def _update_parent_body(parent_id: str, state: dict) -> bool:
+    """Update parent task body with current findings."""
+    import json
+    from sqlite3 import connect
+    findings_json = "[]"
+    if state.get("findings"):
+        findings_json = json.dumps(state["findings"], ensure_ascii=False)
+    try:
+        conn = connect(_db_path())
+        # Append findings to existing body
+        conn.execute(
+            "UPDATE tasks SET body = COALESCE(body, '') || ? WHERE id=?",
+            (f"\nFindings:{findings_json}", parent_id),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
 def _update_parent_status(parent_id: str | None, status: str):
     """Update parent task status directly via SQLite."""
     if not parent_id:
@@ -673,6 +694,9 @@ def on_convergence(state: dict, convergence_result: dict) -> None:
 
     comment(parent_id, summary)
 
+    # Persist findings in parent body for resume recovery
+    _update_parent_body(parent_id, state)
+
     if decision == "converged":
         metadata = {
             "decision": "converged",
@@ -813,11 +837,27 @@ def scan_board() -> dict | None:
     if "Запрос: " in body:
         request = body.split("Запрос: ", 1)[1]
 
-    # Extract category from body
-    category = ""
+    # ══ Parse categories from body (now supports multiple) ══════════════
+    categories = []
+    # Single line: "Категория: FEATURE"
     for line in body.split("\n"):
         if line.startswith("Категория:"):
-            category = line.split(":", 1)[1].strip()
+            cat = line.split(":", 1)[1].strip()
+            if cat:
+                categories.append(cat)
+    # Multi-line: "Категории: FEATURE, SECURITY_RELATED"
+    for line in body.split("\n"):
+        if line.startswith("Категории:"):
+            cats_part = line.split(":", 1)[1].strip()
+            for c in cats_part.split(","):
+                c = c.strip()
+                if c:
+                    categories.append(c)
+    if not categories:
+        category = ""
+    else:
+        # Primary is the first listed category
+        category = categories[0]
 
     # ══ ПРАВИЛЬНЫЙ ПОРЯДОК — из родительского body, не из ORDER BY ═══════
     # Все дети создаются за ~миллисекунды, их created_at одинаков —
@@ -878,9 +918,29 @@ def scan_board() -> dict | None:
         "kanban_parent_id": parent_id,
         "kanban_task_ids": task_ids,
         "round": 0,
-        "findings": [],
+        "findings": _restore_findings_from_body(body),
     }
     return state
+
+
+def _restore_findings_from_body(body: str) -> list[dict]:
+    """Parse findings from kanban parent body.
+
+    Если в body есть блок `#Findings:`, парсим findings из него.
+    Это позволяет восстанавливать findings при pipeline_resume().
+    """
+    import json
+    for line in body.split("\n"):
+        line = line.strip()
+        if line.startswith("#Findings:") or line.startswith("Findings:"):
+            payload = line.split(":", 1)[1].strip()
+            try:
+                parsed = json.loads(payload)
+                if isinstance(parsed, list):
+                    return parsed
+            except (json.JSONDecodeError, TypeError):
+                pass
+    return []
 
 
 def get_agent_context(state: dict, agent_id: str) -> dict:
