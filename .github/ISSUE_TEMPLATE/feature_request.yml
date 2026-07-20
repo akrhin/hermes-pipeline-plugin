@@ -1,0 +1,34 @@
+name: Feature Request
+description: Предложить новую фичу
+title: "[FEATURE] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Проблема
+      description: Какая проблема решается?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Предлагаемое решение
+      description: Как должно работать?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Альтернативы
+      description: Какие ещё варианты рассматривал?
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Область
+      options:
+        - Новый агент / категория
+        - Интеграция / API
+        - Производительность
+        - Документация
+        - Другое

@@ -1,0 +1,47 @@
+name: Bug Report
+description: "Сообщить об ошибке в плагине"
+title: "[BUG] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо, что сообщаешь об ошибке! Заполни форму ниже.
+  - type: input
+    id: version
+    attributes:
+      label: Версия плагина
+      description: "Из plugin.yaml"
+      placeholder: v3.3.3
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Описание
+      description: "Что произошло, что ожидалось"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги воспроизведения
+      description: "Как повторить баг"
+      placeholder: |
+        1. Запускаю pipeline с ...
+        2. ...
+        3. Вижу ошибку ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: "Логи / retro-лог"
+      description: "cat ~/.hermes/plugins/pipeline/retro/pipe_*.jsonl | tail -20"
+      render: shell
+  - type: input
+    id: tests
+    attributes:
+      label: "Тесты проходят?"
+      description: "pytest tests/ -q"
+      placeholder: "79/79"

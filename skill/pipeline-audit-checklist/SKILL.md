@@ -49,6 +49,11 @@ tags: [pipeline, audit, verification, quality, ensemble, master]
 - [ ] **ARCHITECTURE.md** — migration history includes v3.3.3
 - [ ] **plugin.yaml** — version: 3.3.3
 - [ ] **CHANGELOG.md** — все версии
+- [ ] **CODE_OF_CONDUCT.md** — существует
+- [ ] **CONTRIBUTING.md** — существует
+- [ ] **SECURITY.md** — существует
+- [ ] .github/ISSUE_TEMPLATE/ — bug_report.yml + feature_request.yml
+- [ ] .github/PULL_REQUEST_TEMPLATE.md — существует
 
 ### 5. Tests
 - [ ] 79/79 passed

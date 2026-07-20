@@ -10,7 +10,21 @@
 ### Documentation
 - `AGENTS.md`: обновлено описание LLM Judge — теперь работает
 - `ARCHITECTURE.md`: миграция v3.3.3
-- Обновлён `pipeline-audit-checklist` skill
+- `skill/pipeline-orchestrator/SKILL.md`: rewritten как главный оркестратор-скилл (14 секций)
+- `skill/pipeline-ensemble/SKILL.md`: compact reference → pipeline-orchestrator
+- `skill/pipeline-audit-checklist/SKILL.md`: updated to v3.3.3
+
+### Community
+- `CODE_OF_CONDUCT.md`: добавлен (Contributor Covenant v2.1)
+- `CONTRIBUTING.md`: гайд для контрибьюторов (код-стайл, тесты, PR, доки)
+- `SECURITY.md`: политика безопасности, контакты для уязвимостей
+- `.github/ISSUE_TEMPLATE/bug_report.yml`: шаблон баг-репорта
+- `.github/ISSUE_TEMPLATE/feature_request.yml`: шаблон фичи
+- `.github/PULL_REQUEST_TEMPLATE.md`: шаблон PR с чеклистом
+
+### Skills refactoring
+- Deleted 8 stale/duplicate skills, content absorbed into pipeline-orchestrator
+- Symlinks in ~/.hermes/skills/ now point to repo skill/ directories
 
 ### classify fixes
 - **RU keywords**: `крашит`, `краш`, `упал`, `валит`, `сломано` — BUG_UNKNOWN теперь ловит русские «крашится», «упал сервер»
