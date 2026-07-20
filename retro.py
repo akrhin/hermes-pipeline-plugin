@@ -310,53 +310,51 @@ def get_latest_log(limit: int = 1) -> list[dict]:
     return events
 
 
-def build_analysis_prompt(events: list[dict], run_context: dict | None = None) -> str:
-    """Build a structured analysis prompt from retro events for LLM consumption.
-
-    The output is a text summary that an LLM can analyze to find
-    pipeline issues, anti-patterns, and improvement suggestions.
-    """
-    if not events:
-        return "No retro events to analyze."
-
-    # Extract key metrics
-    agents_run = []
-    durations = {}
-    errors = []
-    convergences = []
-    routings = []
-    ensembles = []
-    findings_events = []
-    events_by_type = {}
-
+def _classify_events(events: list[dict]) -> dict:
+    """Classify retro events into categories for analysis."""
+    result = {
+        "agents_run": [],
+        "durations": {},
+        "errors": [],
+        "convergences": [],
+        "routings": [],
+        "ensembles": [],
+        "findings_events": [],
+        "events_by_type": {},
+    }
     for e in events:
         evt = e.get("event", "")
-        events_by_type.setdefault(evt, 0)
-        events_by_type[evt] += 1
+        result["events_by_type"].setdefault(evt, 0)
+        result["events_by_type"][evt] += 1
 
         if evt == "agent_start":
-            agents_run.append(e.get("agent", "?"))
+            result["agents_run"].append(e.get("agent", "?"))
         elif evt == "agent_done":
             agent = e.get("agent", "?")
-            durations[agent] = e.get("duration_s", 0)
+            result["durations"][agent] = e.get("duration_s", 0)
         elif evt == "error":
-            errors.append(e)
+            result["errors"].append(e)
         elif evt == "convergence":
-            convergences.append(e)
+            result["convergences"].append(e)
         elif evt == "model_routing":
-            routings.append(e)
+            result["routings"].append(e)
         elif evt == "ensemble_gen":
-            ensembles.append(e)
+            result["ensembles"].append(e)
         elif evt == "findings":
-            findings_events.append(e)
+            result["findings_events"].append(e)
+    return result
 
-    # Build the analysis text
-    lines = [
-        "## Pipeline Retrospective Analysis",
-        "",
-        f"Event types: {json.dumps(events_by_type, ensure_ascii=False, indent=2)}",
-        "",
-    ]
+
+def _build_metrics_sections(classed: dict) -> list[str]:
+    """Build metric sections from classified events."""
+    lines = []
+    agents_run = classed["agents_run"]
+    durations = classed["durations"]
+    convergences = classed["convergences"]
+    routings = classed["routings"]
+    ensembles = classed["ensembles"]
+    errors = classed["errors"]
+    findings_events = classed["findings_events"]
 
     if agents_run:
         agents_str = " → ".join(agents_run)
@@ -419,11 +417,17 @@ def build_analysis_prompt(events: list[dict], run_context: dict | None = None) -
                 f"fixed={f.get('fixed', 0)} accepted={f.get('accepted', 0)}"
             )
         lines.append("")
+    return lines
 
-    # Detect patterns and anti-patterns
+
+def _detect_patterns(events: list[dict], classed: dict) -> list[str]:
+    """Detect pipeline anti-patterns from classified events."""
     patterns = []
+    durations = classed["durations"]
+    convergences = classed["convergences"]
+    routings = classed["routings"]
+    errors = classed["errors"]
 
-    # 1. Convergence always maxed_out
     if convergences:
         last_decision = convergences[-1].get("decision", "")
         if last_decision == "maxed_out":
@@ -439,7 +443,6 @@ def build_analysis_prompt(events: list[dict], run_context: dict | None = None) -
         elif last_decision == "converged":
             patterns.append("✅ Convergence: converged — all P0/P1 resolved.")
 
-    # 2. Ensemble always deterministic
     ensemble_judge_events = [e for e in events if e.get("event") == "ensemble_judge"]
     if ensemble_judge_events:
         all_deterministic = all(e.get("mode") == "deterministic" for e in ensemble_judge_events)
@@ -449,7 +452,6 @@ def build_analysis_prompt(events: list[dict], run_context: dict | None = None) -
                 "LLM Judge was never invoked. Check model availability."
             )
 
-    # 3. Routing warnings
     if routings:
         stale_routes = [r for r in routings if "stale" in r.get("warning", "").lower()]
         if stale_routes:
@@ -461,29 +463,23 @@ def build_analysis_prompt(events: list[dict], run_context: dict | None = None) -
                 "Config change was not picked up — add hot-reload."
             )
 
-    # 4. Errors
     if errors:
         patterns.append(f"❌ {len(errors)} error(s) during pipeline run — review above.")
 
-    # 5. Long-running agents
     slow_agents = [(a, d) for a, d in durations.items() if d > 30]
     if slow_agents:
         agents_str = ", ".join(f"{a} ({d:.0f}s)" for a, d in slow_agents)
         patterns.append(f"🐢 Slow agents: {agents_str}. Check if selective context is optimal.")
+    return patterns
 
-    if patterns:
-        lines.append("### Detected patterns & suggestions")
-        for p in patterns:
-            lines.append(f"  {p}")
-        lines.append("")
 
-    lines.append("### Raw events")
-    lines.append(f"  {len(events)} total events")
+def _build_raw_events_section(events: list[dict]) -> list[str]:
+    """Build the raw events listing section."""
+    lines = ["### Raw events", f"  {len(events)} total events"]
     for i, e in enumerate(events):
         if i >= 50:
             lines.append(f"  ... and {len(events) - 50} more events")
             break
-        # Compact one-line summary
         evt = e.get("event", "?")
         agent = e.get("agent", e.get("decision", ""))
         extra = ""
@@ -501,5 +497,32 @@ def build_analysis_prompt(events: list[dict], run_context: dict | None = None) -
             extra = f" {agent}: {e.get('error', '?')[:60]}"
         line = f"  [{e.get('ts', '?')[-12:-7]}] {evt:20s}{extra}"
         lines.append(line)
+    return lines
 
+
+def build_analysis_prompt(events: list[dict], run_context: dict | None = None) -> str:
+    """Build a structured analysis prompt from retro events for LLM consumption.
+
+    The output is a text summary that an LLM can analyze to find
+    pipeline issues, anti-patterns, and improvement suggestions.
+    """
+    if not events:
+        return "No retro events to analyze."
+
+    # Delegate to sub-functions
+    classed = _classify_events(events)
+    lines = [
+        "## Pipeline Retrospective Analysis",
+        "",
+        f"Event types: {json.dumps(classed['events_by_type'], ensure_ascii=False, indent=2)}",
+        "",
+    ]
+    lines += _build_metrics_sections(classed)
+    patterns = _detect_patterns(events, classed)
+    if patterns:
+        lines.append("### Detected patterns & suggestions")
+        for p in patterns:
+            lines.append(f"  {p}")
+        lines.append("")
+    lines += _build_raw_events_section(events)
     return "\n".join(lines)
