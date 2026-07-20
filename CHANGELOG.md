@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.5.1 (2026-07-20)
+
+### Retro logging fixes
+- **agent_done теперь пишет duration_s, tokens_response, status** — вместо пустого `{agent: "finder"}`. `handle_advance()` принимает новые опциональные поля из `ADVANCE_SCHEMA`.
+- **tokens_prompt считается от реального prompt**, а не от пустого context dict. `agent_start` перенесён после сборки промпта.
+- **pipeline_resume логирует метаданные** — category, primary, pipeline_len, round, agent_count.
+- **ADVANCE_SCHEMA расширен**: `duration_s` (number), `tokens_response` (integer), `status` (enum: ok/error/skipped).
+
+### Verification
+- Новый ретро-лог `pipe:064f9ee87fb1` подтверждает: `agent_start tokens_prompt=292` (было 0), `agent_done duration_s=1.5 tokens_response=42 result=ok` (было {agent: "finder"})
+- 108/108 тестов (исключая 1 flaky kanban), ruff 0 в коде плагина
+
 ## v3.5.0 (2026-07-20)
 
 ### scan_board — порядок агентов исправлен

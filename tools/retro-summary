@@ -1,0 +1,571 @@
+#!/usr/bin/env python3
+"""
+retro-summary — optimized CLI for pipeline retro JSONL logs.
+
+Reads pipe_*.jsonl from ~/.hermes/plugins/pipeline/retro/ and prints a
+structured summary: convergence decision, agent sequence, durations,
+findings, errors, ensemble info.
+
+Optimizations over v1:
+  • mmap-based reading for zero-copy scans of large JSONL files
+  • --since N  filter: keep only logs/events from the last N hours
+  • --json     machine-readable JSON output (unchanged)
+  • --verbose  event timeline
+
+Usage:
+    retro-summary                    # latest run
+    retro-summary --last 2           # second-to-last run
+    retro-summary --all              # all retro logs
+    retro-summary --since 24         # last 24 hours only
+    retro-summary --verbose          # include event timeline
+    retro-summary --json             # JSON output for scripting
+    retro-summary -v --since 6       # verbose, last 6 hours
+    retro-summary --dir /custom/path
+    retro-summary --no-color
+    retro-summary --help
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import mmap
+import os
+import sys
+import textwrap
+from collections import OrderedDict
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
+
+logging.basicConfig(level=logging.WARNING,
+                    format="%(levelname)s: %(message)s", stream=sys.stderr)
+logger = logging.getLogger("retro-summary")
+
+# ── ANSI ────────────────────────────────────────────────────────────────────────
+
+class C:
+    _enabled = True
+    RESET = "\033[0m"; BOLD = "\033[1m"; DIM = "\033[2m"
+    RED = "\033[31m"; GREEN = "\033[32m"; YELLOW = "\033[33m"
+    BLUE = "\033[34m"; MAGENTA = "\033[35m"; CYAN = "\033[36m"
+    GRAY = "\033[90m"
+    BRIGHT_RED = "\033[91m"; BRIGHT_GREEN = "\033[92m"
+    BRIGHT_YELLOW = "\033[93m"; BRIGHT_BLUE = "\033[94m"
+    BRIGHT_MAGENTA = "\033[95m"; BRIGHT_CYAN = "\033[96m"
+    BG_RED = "\033[41m"; BG_GREEN = "\033[42m"
+    BG_YELLOW = "\033[43m"; BG_DARK_GRAY = "\033[100m"
+
+    @classmethod
+    def disable(cls):
+        cls._enabled = False
+        for a in dir(cls):
+            if a.startswith("_") or a in ("disable",): continue
+            v = getattr(cls, a)
+            if isinstance(v, str) and v.startswith("\033"):
+                setattr(cls, a, "")
+
+
+# ── Helpers ─────────────────────────────────────────────────────────────────────
+
+def _pts(s: str | None) -> datetime | None:
+    """Parse ISO-8601 timestamp, return timezone-aware datetime."""
+    if not s: return None
+    try: return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except (ValueError, TypeError): return None
+
+def _fts(s: str | None) -> str:
+    """Format timestamp to local readable string."""
+    d = _pts(s)
+    return d.astimezone().strftime("%Y-%m-%d %H:%M:%S") if d else "–"
+
+def _fdur(s: str | None, e: str | None) -> str:
+    """Human-readable duration between two ISO timestamps."""
+    a, b = _pts(s), _pts(e)
+    if not a or not b: return "–"
+    delta = (b - a).total_seconds()
+    if delta < 1: return "<1s"
+    if delta < 60: return f"{delta:.1f}s"
+    m, s = divmod(int(delta), 60)
+    if m < 60: return f"{m}m {s}s"
+    h, m = divmod(m, 60)
+    return f"{h}h {m}m"
+
+def _trunc(t: str, n: int = 80) -> str:
+    return t if len(t) <= n else t[:n-3] + "..."
+
+DEFAULT_DIR = os.path.expanduser("~/.hermes/plugins/pipeline/retro")
+
+
+# ── Mmap-based JSONL reader ─────────────────────────────────────────────────────
+
+def _load_lines_mmap(path: Path) -> list[str]:
+    """
+    Read all non-empty lines from a JSONL file using mmap.
+    Zero-copy for the file-backed portion; lines are still decoded
+    to Python strings but the raw I/O is a single mmap view.
+    Falls back to regular file I/O if mmap is unavailable.
+    """
+    lines: list[str] = []
+    try:
+        with path.open("rb") as f:
+            with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as m:
+                # mmap supports simple line iteration: iterate over
+                # memoryview splits on newline with zero copy from disk
+                for raw in iter(m.readline, b""):
+                    line = raw.decode("utf-8", errors="replace").strip()
+                    if line:
+                        lines.append(line)
+    except (OSError, ValueError) as e:
+        # mmap can fail on empty files or exotic platforms — fallback
+        logger.debug("mmap fallback for %s: %s", path, e)
+        try:
+            with path.open("r", encoding="utf-8") as fh:
+                for raw in fh:
+                    line = raw.strip()
+                    if line:
+                        lines.append(line)
+        except OSError as e2:
+            logger.error("Cannot read %s: %s", path, e2)
+    return lines
+
+
+# ── Load ────────────────────────────────────────────────────────────────────────
+
+def _discover(dir: str) -> list[Path]:
+    d = Path(dir)
+    if not d.is_dir():
+        logger.warning("Retro dir not found: %s", dir)
+        return []
+    return sorted(d.glob("pipe_*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+
+def _load(path: Path) -> list[dict[str, Any]]:
+    """Load JSONL events from a file using mmap-based reading."""
+    events: list[dict[str, Any]] = []
+    lines = _load_lines_mmap(path)
+    for n, line in enumerate(lines, 1):
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError as e:
+            logger.warning("Malformed JSON at %s line %d: %s", path.name, n, e)
+    return events
+
+
+# ── Summary ─────────────────────────────────────────────────────────────────────
+
+class Summary:
+    def __init__(self, events: list[dict[str, Any]], path: Path | None = None):
+        self.events = events
+        self.path = path
+        self.run_id = ""
+        self.category = ""
+        self.request = ""
+        self.agent_count = 0
+        self.timeline: list[dict] = []
+        self.agents: OrderedDict[str, dict] = OrderedDict()
+        self.convergences: list[dict] = []
+        self.errors: list[dict] = []
+        self.ensembles: list[dict] = []
+        self.findings: list[dict] = []
+        self.duration_s = 0.0
+        self._analyze()
+
+    def _analyze(self):
+        if not self.events:
+            return
+
+        f = self.events[0]
+        if f.get("event") == "pipeline_start":
+            self.run_id = f.get("run", "")
+            self.category = f.get("category", "")
+            self.request = f.get("request", "")
+            self.agent_count = f.get("agents", 0)
+
+        order: list[str] = []
+        starts: dict[str, str] = {}
+        ends: dict[str, str] = {}
+        models: dict[str, str] = {}
+        dirs: dict[str, str] = {}
+
+        for e in self.events:
+            evt = e.get("event", "")
+            ts = e.get("ts", "")
+            if evt == "agent_start":
+                a = e.get("agent", "?")
+                if a not in order:
+                    order.append(a)
+                starts[a] = ts
+                models[a] = e.get("model", "?")
+                dirs[a] = e.get("directive", "?")
+                self.timeline.append({
+                    "ts": ts, "type": "agent_start", "agent": a,
+                    "detail": f"round={e.get('round', 0)}"
+                })
+            elif evt == "agent_done":
+                a = e.get("agent", "?")
+                ends[a] = ts
+                self.timeline.append({
+                    "ts": ts, "type": "agent_done", "agent": a, "detail": ""
+                })
+            elif evt == "convergence":
+                self.convergences.append(e)
+                self.timeline.append({
+                    "ts": ts, "type": "convergence", "agent": "",
+                    "detail": f"round={e.get('round', '?')} {e.get('decision', '?')}"
+                })
+            elif evt == "error":
+                self.errors.append(e)
+                self.timeline.append({
+                    "ts": ts, "type": "error", "agent": e.get("agent", "?"),
+                    "detail": _trunc(e.get("error", "?"), 70)
+                })
+            elif evt == "ensemble_gen":
+                self.ensembles.append(e)
+                self.timeline.append({
+                    "ts": ts, "type": "ensemble_gen", "agent": e.get("agent", "?"),
+                    "detail": f"N={e.get('n', 0)}"
+                })
+            elif evt == "ensemble_judge":
+                self.timeline.append({
+                    "ts": ts, "type": "ensemble_judge", "agent": "",
+                    "detail": f"winner={e.get('winner')} mode={e.get('mode', '?')}"
+                })
+            elif evt == "findings":
+                self.findings.append(e)
+                self.timeline.append({
+                    "ts": ts, "type": "findings", "agent": "",
+                    "detail": f"P0={e.get('p0', 0)} P1={e.get('p1', 0)} P2={e.get('p2', 0)}"
+                })
+
+        for a in order:
+            s, e = starts.get(a, ""), ends.get(a, "")
+            sd, ed = _pts(s), _pts(e)
+            ds = (ed - sd).total_seconds() if sd and ed else 0.0
+            self.agents[a] = {
+                "start": s, "end": e, "dur_s": ds, "dur": _fdur(s, e),
+                "model": models.get(a, "?"), "directive": dirs.get(a, "?")
+            }
+
+        s, e = self.events[0].get("ts"), self.events[-1].get("ts")
+        sd, ed = _pts(s), _pts(e)
+        if sd and ed:
+            self.duration_s = (ed - sd).total_seconds()
+
+    # ── render ──────────────────────────────────────────────────────────────
+
+    def render(self, verbose: bool = False) -> str:
+        lines: list[str] = []
+        if not self.events:
+            return f"{C.RED}No events.{C.RESET}"
+
+        lines.append(f"{C.BOLD}{C.BRIGHT_CYAN}╔══════════════════════════════════════════════════════════╗{C.RESET}")
+        lines.append(f"{C.BOLD}{C.BRIGHT_CYAN}║  Pipeline Retro Summary                                ║{C.RESET}")
+        lines.append(f"{C.BOLD}{C.BRIGHT_CYAN}╚══════════════════════════════════════════════════════════╝{C.RESET}")
+
+        lines.append(f"\n{C.BOLD}Run ID:{C.RESET}        {C.BRIGHT_YELLOW}{self.run_id}{C.RESET}")
+        if self.request:
+            lines.append(f"{C.BOLD}Request:{C.RESET}       {_trunc(self.request, 90)}")
+        if self.category:
+            lines.append(f"{C.BOLD}Category:{C.RESET}      {C.BRIGHT_BLUE}{self.category}{C.RESET}")
+        if self.path:
+            lines.append(f"{C.BOLD}Log file:{C.RESET}       {C.DIM}{self.path}{C.RESET}")
+        lines.append(f"{C.BOLD}Started:{C.RESET}        {_fts(self.events[0].get('ts'))}")
+        lines.append(f"{C.BOLD}Finished:{C.RESET}       {_fts(self.events[-1].get('ts'))}")
+        lines.append(f"{C.BOLD}Duration:{C.RESET}        {C.BRIGHT_GREEN}{_fdur(self.events[0].get('ts'), self.events[-1].get('ts'))}{C.RESET}  {C.DIM}({self.duration_s:.1f}s){C.RESET}")
+        lines.append(f"{C.BOLD}Events:{C.RESET}         {len(self.events)}")
+
+        # Agents
+        lines.append(f"\n{C.BOLD}{C.BRIGHT_CYAN}── Agent Sequence ({len(self.agents)} agents) {'─' * max(0, 43 - len(str(len(self.agents))))}{C.RESET}")
+        for i, (n, v) in enumerate(self.agents.items(), 1):
+            tag = {"direct": f"{C.DIM}⚡direct{C.RESET}",
+                   "delegate": f"{C.YELLOW}🔗delegate{C.RESET}"}.get(v["directive"], v["directive"])
+            if v["dur"] == "–":
+                lines.append(f"  {C.DIM}{i:>2}.{C.RESET} {C.BRIGHT_MAGENTA}{n:<16}{C.RESET} {tag}  {C.GRAY}{v['model']}{C.RESET}  {C.YELLOW}⟳ running…{C.RESET}")
+            else:
+                lines.append(f"  {C.DIM}{i:>2}.{C.RESET} {C.BRIGHT_MAGENTA}{n:<16}{C.RESET} {tag}  {C.GRAY}{v['model']}{C.RESET}  {C.GREEN}{v['dur']:>8}{C.RESET}")
+
+        # Convergence
+        lines.append(f"\n{C.BOLD}{C.BRIGHT_CYAN}── Convergence ────────────────────────────────────────────{C.RESET}")
+        if self.convergences:
+            for c in self.convergences:
+                d = c.get("decision", "?")
+                rnd = c.get("round", "?")
+                badge = {
+                    "converged": f"{C.BG_GREEN}{C.BOLD} CONVERGED {C.RESET}",
+                    "maxed_out": f"{C.BG_RED}{C.BOLD} MAXED OUT {C.RESET}",
+                    "stuck": f"{C.BG_YELLOW}{C.CYAN}{C.BOLD} STUCK {C.RESET}"
+                }.get(d, f"{C.BG_DARK_GRAY}{C.BOLD} {d.upper()} {C.RESET}")
+                lines.append(f"  Round {C.BOLD}{rnd}{C.RESET}: {badge}  {C.RED}P0={c.get('p0', 0)}{C.RESET}  {C.YELLOW}P1={c.get('p1', 0)}{C.RESET}  {C.DIM}P2={c.get('p2', 0)}{C.RESET}")
+                if c.get("reason"):
+                    lines.append(f"    {C.DIM}↳ {c['reason']}{C.RESET}")
+        else:
+            lines.append(f"  {C.DIM}No convergence check.{C.RESET}")
+
+        # Errors
+        if self.errors:
+            lines.append(f"\n{C.BOLD}{C.BRIGHT_RED}── Errors ({len(self.errors)}) {'─' * max(0, 52 - len(str(len(self.errors))))}{C.RESET}")
+            for e in self.errors:
+                lines.append(f"  {C.RED}✗{C.RESET} {C.BRIGHT_RED}{e.get('agent', '?')}{C.RESET}: {C.RED}{_trunc(e.get('error', '?'), 80)}{C.RESET}")
+                if e.get("resolution"):
+                    lines.append(f"    {C.GREEN}↳ {e['resolution']}{C.RESET}")
+
+        # Findings
+        if self.findings:
+            lines.append(f"\n{C.BOLD}{C.BRIGHT_YELLOW}── Findings Summary {'─' * 39}{C.RESET}")
+            for f in self.findings:
+                parts = []
+                if f.get("p0"): parts.append(f"{C.RED}P0={f['p0']}{C.RESET}")
+                if f.get("p1"): parts.append(f"{C.YELLOW}P1={f['p1']}{C.RESET}")
+                if f.get("p2"): parts.append(f"{C.DIM}P2={f['p2']}{C.RESET}")
+                if f.get("fixed"): parts.append(f"{C.GREEN}fixed={f['fixed']}{C.RESET}")
+                if f.get("accepted"): parts.append(f"{C.GREEN}accepted={f['accepted']}{C.RESET}")
+                lines.append(f"  {'  '.join(parts)}")
+
+        # Ensembles (verbose)
+        if verbose and self.ensembles:
+            lines.append(f"\n{C.BOLD}{C.BRIGHT_CYAN}── Ensemble Runs ──────────────────────────────────────────{C.RESET}")
+            for e in self.ensembles:
+                t = ", ".join(f"{x:.1f}" for x in e.get("temperatures", [])) if e.get("temperatures") else "–"
+                lines.append(f"  {C.BRIGHT_MAGENTA}{e.get('agent', '?')}{C.RESET}: {C.BOLD}N={e.get('n', 0)}{C.RESET}  temps=[{t}]")
+
+        # Timeline (verbose)
+        if verbose and self.timeline:
+            icons = {
+                "agent_start": f"{C.GREEN}▶{C.RESET}",
+                "agent_done": f"{C.CYAN}■{C.RESET}",
+                "convergence": f"{C.BRIGHT_YELLOW}◆{C.RESET}",
+                "error": f"{C.RED}✗{C.RESET}",
+                "ensemble_gen": f"{C.MAGENTA}⊕{C.RESET}",
+                "ensemble_judge": f"{C.BRIGHT_CYAN}★{C.RESET}",
+                "findings": f"{C.YELLOW}◈{C.RESET}"
+            }
+            lines.append(f"\n{C.BOLD}{C.BRIGHT_CYAN}── Event Timeline {'─' * 38}{C.RESET}")
+            for t in self.timeline:
+                ic = icons.get(t["type"], f"{C.DIM}·{C.RESET}")
+                af = f"{C.BRIGHT_MAGENTA}{t['agent']}{C.RESET}" if t.get("agent") else ""
+                lines.append(f"  {C.DIM}{_fts(t.get('ts'))}{C.RESET} {ic} {C.DIM}{t['type']:<20}{C.RESET} {af} {t.get('detail', '')}")
+
+        lines.append(f"\n{C.BOLD}{C.GREEN}✓{C.RESET} {C.DIM}retro-summary — {len(self.events)} events{C.RESET}")
+        return "\n".join(lines)
+
+    def to_dict(self) -> dict:
+        return {
+            "run_id": self.run_id,
+            "category": self.category,
+            "request": self.request,
+            "agent_count": self.agent_count,
+            "convergence_decision": (
+                self.convergences[-1].get("decision", "?")
+                if self.convergences else "no_check"
+            ),
+            "total_duration_s": round(self.duration_s, 2),
+            "total_duration": _fdur(
+                self.events[0].get("ts") if self.events else None,
+                self.events[-1].get("ts") if self.events else None
+            ),
+            "agents": [
+                {
+                    "name": n,
+                    "duration_s": round(v["dur_s"], 2),
+                    "duration": v["dur"],
+                    "model": v["model"],
+                    "directive": v["directive"]
+                }
+                for n, v in self.agents.items()
+            ],
+            "convergences": [
+                {
+                    "round": c.get("round"),
+                    "decision": c.get("decision"),
+                    "p0": c.get("p0", 0),
+                    "p1": c.get("p1", 0),
+                    "p2": c.get("p2", 0),
+                    "reason": c.get("reason", "")
+                }
+                for c in self.convergences
+            ],
+            "errors": [
+                {
+                    "agent": e.get("agent"),
+                    "error": e.get("error"),
+                    "resolution": e.get("resolution", "")
+                }
+                for e in self.errors
+            ],
+            "ensembles": [
+                {
+                    "agent": e.get("agent"),
+                    "n": e.get("n", 0),
+                    "temperatures": e.get("temperatures", [])
+                }
+                for e in self.ensembles
+            ],
+            "findings": [
+                {
+                    "p0": f.get("p0", 0),
+                    "p1": f.get("p1", 0),
+                    "p2": f.get("p2", 0),
+                    "fixed": f.get("fixed", 0),
+                    "accepted": f.get("accepted", 0)
+                }
+                for f in self.findings
+            ],
+            "event_count": len(self.events),
+            "log_file": str(self.path) if self.path else None
+        }
+
+
+# ── Since filter ────────────────────────────────────────────────────────────────
+
+def _since_cutoff(hours: int) -> datetime:
+    """Return a timezone-aware cutoff datetime (N hours ago in UTC)."""
+    return datetime.now(timezone.utc) - timedelta(hours=hours)
+
+
+def _filter_by_since(
+    logs: list[Path],
+    hours: int,
+    dir: str,
+) -> list[Path]:
+    """
+    Filter retro log files to only those whose mtime is within the last N hours.
+    If no log file is new enough, also try filtering events inside each log
+    by inspecting the first event's timestamp (pipeline_start).
+    """
+    cutoff = _since_cutoff(hours)
+    filtered: list[Path] = []
+
+    for p in logs:
+        mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
+        if mtime >= cutoff:
+            filtered.append(p)
+            continue
+
+        # File may be old but contain recent events (unusual but possible)
+        # — check the first event timestamp as a secondary gate
+        try:
+            lines = _load_lines_mmap(p)
+            if not lines:
+                continue
+            first = json.loads(lines[0])
+            ts = first.get("ts", "")
+            evt_ts = _pts(ts)
+            if evt_ts and evt_ts >= cutoff:
+                filtered.append(p)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+    return filtered
+
+
+def _filter_events_by_since(
+    events: list[dict[str, Any]],
+    hours: int,
+) -> list[dict[str, Any]]:
+    """
+    Filter events within a log to only those from the last N hours.
+    Uses event-level 'ts' field for granular filtering.
+    """
+    if hours <= 0:
+        return events
+    cutoff = _since_cutoff(hours)
+    return [e for e in events
+            if (ts := _pts(e.get("ts", ""))) is not None and ts >= cutoff]
+
+
+# ── CLI ─────────────────────────────────────────────────────────────────────────
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        description="Pipeline retro log summary (optimized, mmap-based).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent("""\
+            Examples:
+              retro-summary              latest run
+              retro-summary --last 2      second-to-last
+              retro-summary --all         all logs
+              retro-summary --since 24    last 24 hours only
+              retro-summary -v            verbose (with event timeline)
+              retro-summary --json        JSON output
+              retro-summary --since 6 -v  last 6 hours with timeline"""))
+    p.add_argument("--dir", default=DEFAULT_DIR,
+                   help=f"Retro dir (default: {DEFAULT_DIR})")
+    p.add_argument("--last", type=int, default=1,
+                   help="Which most recent log (1=latest)")
+    p.add_argument("--all", action="store_true",
+                   help="Show all retro logs")
+    p.add_argument("--since", type=int, default=0, metavar="HOURS",
+                   help="Only include logs/events from the last N hours")
+    p.add_argument("-v", "--verbose", action="store_true",
+                   help="Include event timeline")
+    p.add_argument("--json", action="store_true",
+                   help="Output as JSON (machine-readable)")
+    p.add_argument("--no-color", action="store_true",
+                   help="Disable ANSI colours")
+    return p.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    if args.no_color or os.environ.get("NO_COLOR") or not sys.stdout.isatty():
+        C.disable()
+
+    logs = _discover(args.dir)
+    if not logs:
+        logger.error("No retro logs in %s", args.dir)
+        print(f"{C.RED}No retro logs found.{C.RESET}", file=sys.stderr)
+        return 1
+
+    # --since file-level filter
+    if args.since > 0:
+        logs = _filter_by_since(logs, args.since, args.dir)
+
+    if not logs:
+        logger.error("No retro logs within the last %d hour(s) in %s",
+                     args.since, args.dir)
+        print(f"{C.RED}No retro logs within --since={args.since}h.{C.RESET}",
+              file=sys.stderr)
+        return 1
+
+    if args.all:
+        selected = logs
+    else:
+        idx = args.last - 1
+        if idx >= len(logs):
+            logger.error("Requested log #%d but only %d exist (after --since filtering).",
+                         args.last, len(logs))
+            print(f"{C.RED}Requested log #{args.last} but only {len(logs)} exist(s).{C.RESET}",
+                  file=sys.stderr)
+            return 1
+        selected = [logs[idx]]
+
+    outs: list[str] = []
+    for lp in selected:
+        events = _load(lp)
+        if not events:
+            continue
+
+        # --since event-level filter (granular within a log)
+        if args.since > 0:
+            events = _filter_events_by_since(events, args.since)
+            if not events:
+                continue
+
+        s = Summary(events, path=lp)
+        if args.json:
+            outs.append(json.dumps(s.to_dict(), ensure_ascii=False, indent=2))
+        else:
+            outs.append(s.render(verbose=args.verbose))
+
+    if outs:
+        if args.all and not args.json:
+            print("\n\n".join(outs))
+        else:
+            print(outs[0])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

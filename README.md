@@ -157,7 +157,8 @@ cd ~/git/hermes-pipeline-plugin && git pull
 
 ---
 
-## SQLite Kanban (v3.3.0)
+## Retro logging (v3.5.1)
+Начиная с v3.5.1, **ретро-логирование фиксирует полные метаданные**: agent_done пишет duration_s/tokens_response/status, tokens_prompt считается от реального промпта, pipeline_resume логирует категорию/round/агентов.
 
 Начиная с v3.3.0, **kanban.py работает напрямую с SQLite, без CLI-прослойки**. Это собственный kanban плагина, не путать с `hermes kanban`.
 

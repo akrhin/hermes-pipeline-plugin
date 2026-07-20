@@ -186,6 +186,19 @@ ADVANCE_SCHEMA = {
                 "type": "string",
                 "description": "Agent id that just completed (e.g. 'finder', 'analyst', 'coder').",
             },
+            "duration_s": {
+                "type": "number",
+                "description": "Optional agent execution time in seconds.",
+            },
+            "tokens_response": {
+                "type": "integer",
+                "description": "Optional response token count.",
+            },
+            "status": {
+                "type": "string",
+                "description": "Optional completion status (ok, error, skipped).",
+                "enum": ["ok", "error", "skipped"],
+            },
         },
         "required": ["state", "completed_agent"],
     },
@@ -463,6 +476,15 @@ def handle_resume(args, **kwargs):
         state = kb.scan_board()
         if state is None:
             return json.dumps(None)
+        retro = rt.get_retro()
+        retro.log(
+            "pipeline_resume",
+            category=state.get("category", ""),
+            primary=state.get("primary", ""),
+            pipeline_len=len(state.get("pipeline", [])),
+            round=state.get("round", 0),
+            agent_count=len(state.get("pipeline", [])),
+        )
         return json.dumps(state, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
@@ -475,7 +497,12 @@ def handle_advance(args, **kwargs):
         agent = args["completed_agent"]
         state = kb.advance(state, agent)
         retro = rt.get_retro()
-        retro.log("agent_done", agent=agent)
+        retro.agent_done(
+            agent,
+            duration_s=args.get("duration_s", 0),
+            tokens_response=args.get("tokens_response"),
+            result=args.get("status", "ok"),
+        )
         return json.dumps(state, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
@@ -681,19 +708,9 @@ def handle_run_agent(args, **kwargs):
             directive = "direct"
             tool_hint = None
 
-        # 4. Log model routing & agent start
+        # 4. Log model routing
         retro.model_routing(
             agent_id, effective=f"{provider}/{model}", configured=f"{provider}/{model}"
-        )
-
-        ctx = context_override if context_override is not None else state.get("context", {})
-        tokens_prompt = len(json.dumps(ctx, ensure_ascii=False)) // 4  # rough estimate
-        retro.agent_start(
-            agent_id,
-            directive=directive,
-            model=model,
-            round=state.get("round", 0),
-            tokens_prompt=tokens_prompt,
         )
 
         # 5. Build prompt for ALL agents (Flash + Pro)
@@ -706,6 +723,16 @@ def handle_run_agent(args, **kwargs):
         if "error" in prompt_result:
             return json.dumps(prompt_result)
         prompt = prompt_result["prompt"]
+
+        # 5b. Log agent_start with real prompt token estimate
+        tokens_prompt = len(prompt) // 4  # rough estimate from actual prompt text
+        retro.agent_start(
+            agent_id,
+            directive=directive,
+            model=model,
+            round=state.get("round", 0),
+            tokens_prompt=tokens_prompt,
+        )
 
         if directive == "direct":
             # Flash agents: return package with prompt

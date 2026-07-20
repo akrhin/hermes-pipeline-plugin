@@ -1,6 +1,6 @@
 name: pipeline
-version: 3.5.0
-description: "Pipeline Plugin v3.5.0 — scan_board() now preserves agent order (parsed from parent body instead of ORDER BY), ensemble judge gets real candidate output (not just descriptions), judge config passthrough fixed, pipeline.config.yaml.example added."
+version: 3.5.1
+description: "Pipeline Plugin v3.5.1 — retro logging fixes: agent_done now writes duration_s/tokens_response/status, tokens_prompt counted from real prompt, pipeline_resume logs metadata, ADVANCE_SCHEMA extended with optional fields."
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify
