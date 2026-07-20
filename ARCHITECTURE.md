@@ -221,15 +221,19 @@ pipeline:
 
 | File | Purpose |
 |------|---------|
-| `plugin.yaml` | Manifest (v3.1.1, 12 tools) |
-| `__init__.py` | Plugin core: 12 tools + register + AGENT_CONTEXT_FIELDS |
-| `models.py` | v2.2 Model config loader: YAML → merge → MODEL_MAP |
-| `kanban.py` | Kanban API (create_tree, advance, converge, scan_board, resume) + create_ensemble_subtasks |
-| `ensemble.py` | **NEW v3.0** Best-of-N core: generate_candidates (7 T-variations), judge_candidates (det + LLM), should_use_ensemble, read_ensemble_config |
+| `plugin.yaml` | Manifest (v3.3.0, 12 tools) |
+| `__init__.py` | Plugin core: 12 tools + hot-reload MODEL_MAP + default prompt + AGENT_CONTEXT_FIELDS |
+| `models.py` | v3.2.0 Model config loader: YAML → merge → MODEL_MAP |
+| `kanban.py` | **Kanban API — прямой SQLite** (create_tree, advance, converge, scan_board, resume, reopen) + ensemble |
+| `retro.py` | Retrospective logging + auto-analysis |
+| `ensemble.py` | Best-of-N core: generate_candidates (7 T-variations), judge_candidates (det + LLM), should_use_ensemble |
 | `classify.py` | Keyword-based request classification (8 categories) |
-| `agents/*.prompt` | Prompt templates for each agent + judge.prompt (LLM Judge) |
-| `config.yaml` | Pipeline config (models + ensemble section) |
-| `AGENTS.md` | This file (v3.1, agent documentation) |
+| `agents/*.prompt` | Prompt templates for 16 agents |
+| `config.yaml` | Pipeline config (models + ensemble + retro) |
+| `AGENTS.md` | Agent documentation (v3.3.0) |
+| `ARCHITECTURE-FIXES.md` | Code review report — 20 bugs found and resolved |
+| `CONTRIBUTORS.md` | Список контрибуторов |
+| `CHANGELOG.md` | История изменений |
 | `skill/pipeline-orchestrator/` | Orchestrator skill |
 
 ## Migration History
@@ -242,5 +246,8 @@ pipeline:
 | v2.1 | pipeline_run_agent — 10th tool. Delegation package pattern |
 | v2.2 | config.yaml вынос MODEL_MAP. models.py merge logic |
 | v2.3 | **Selective context** (AGENT_CONTEXT_FIELDS). full_context удалён |
-| v3.0 | **Best-of-N skeleton**: pipeline_ensemble_run, pipeline_ensemble_judge, judge.prompt |
+| v3.0 | **Best-of-N skeleton**: pipeline_ensemble_run, pipeline_ensemble_judge |
 | v3.1 | **Ensemble production**: ensemble.py, config-driven, LLM Judge, kanban subtasks |
+| **v3.2** | **Retrospective logging**, hot-reload MODEL_MAP, default prompt fallback, convergence status:fixed filter. 16 agents, 12 tools |
+| **v3.3** | **SQLite-native kanban** (PR#1 от @V0rt). Прямой SQLite без CLI. 20 bugfixes (4 P0 + 7 P1 + 9 P2). reopen(), AGENT_VERB, _extract_target(), try/finally resource leak fix |
+

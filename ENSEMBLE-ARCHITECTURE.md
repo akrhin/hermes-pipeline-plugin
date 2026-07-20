@@ -1,6 +1,10 @@
 # Ensemble / Best-of-N — Архитектура и план реализации
 
-**Pipeline Plugin v3.0 (proposed)**
+**✅ РЕАЛИЗОВАНО** — см. [`AGENTS.md`](AGENTS.md) (секция Ensemble) и [`ARCHITECTURE.md`](ARCHITECTURE.md).
+Pipeline Plugin **v3.3.0**: Best-of-N для @coder, 5 кандидатов (T=0.3..1.1), LLM Judge.
+Детерминизм подтверждён 3 независимыми прогонами — всегда выбирается candidate_3.
+
+*Этот файл — исторический дизайн-документ от v3.0 (proposed). Сохранён для референса.*
 
 ---
 

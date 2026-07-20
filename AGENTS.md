@@ -1,9 +1,10 @@
-# AGENTS.md — Pipeline Plugin (v3.2.0, Kanban-native)
+# AGENTS.md — Pipeline Plugin (v3.3.0, SQLite-native)
 
 ## What This Is
 
 Плагин-оркестратор multi-agent пайплайнов для Hermes Agent.
 **Variant C:** `state.json` удалён. `kanban.db` — единое состояние.
+**v3.3.0:** прямой SQLite вместо CLI-прослойки (см. SQLite Kanban).
 После рестарта: `pipeline_resume()` сканирует доску.
 
 ## Quick Start
@@ -16,24 +17,29 @@ hermes plugins enable pipeline
 
 ## How It Works
 
-Плагин регистрирует **12 инструментов**. Состояние — в kanban.board:
+Плагин регистрирует **12 инструментов**. Состояние — в `kanban.board` (прямой SQLite, без CLI):
+
 - Parent task «🔷 Пайплайн: ...» с дочерними тасками для каждого агента
 - Статус агента: `ready` → `running` → `done`
 - `promote` следующего агента при завершении предыдущего
 
-**v3.2.0 новые фичи:**
-- **Retrospective logging** — структурированный JSONL-лог работы каждого handler'а
+**v3.3.0 новые фичи:**
+- **SQLite Kanban** — все 11 функций Kanban API напрямую через sqlite3, без `hermes kanban` CLI. Никаких молчаливых ошибок.
+- **20 багов пофикшено** — см. `ARCHITECTURE-FIXES.md` (4 P0 + 7 P1 + 9 P2)
+- **reopen()** — переоткрытие done-задач для convergence-циклов
+- **AGENT_VERB + _extract_target()** — компактные заголовки задач вида `@coder: пишет powerfail-shutdown`
+- **retro-логи** — JSONL-лог каждого прогона
 - **Hot-reload MODEL_MAP** — конфиг перечитывается по наносекундному mtime
 - **Default prompt fallback** — для агентов без `.prompt` генерируется промпт из `AGENT_CONTEXT_FIELDS`
 - **Convergence фильтрует status:fixed** — находит только открытые findings
 
-## Tools (v3.2.0)
+## Tools (v3.3.0)
 
 | Tool | Purpose |
 |------|---------|
 | `pipeline_classify(request)` | Classify → category + agent list |
 | `pipeline_convergence(state, findings?)` | Evaluate convergence (deterministic) |
-| `pipeline_save(state)` | Create/update kanban task tree (idempotent) |
+| `pipeline_save(state)` | Create/update kanban task tree (idempotent) — прямой INSERT в SQLite |
 | `pipeline_load()` | Reconstruct state from board → None if idle |
 | `pipeline_resume()` | Scan board for active run → state or None |
 | `pipeline_advance(state, agent)` | Mark agent done, promote next |
@@ -41,12 +47,12 @@ hermes plugins enable pipeline
 | `agent_prompt(agent_id, context)` | Build agent prompt from template |
 | `agent_model(agent_id)` | Get provider + model for agent |
 | `pipeline_run_agent(state, agent_id, context?)` | Build delegation package — returns prompt, model routing, and directive |
-| `pipeline_ensemble_run(state, agent_id, n?)` | Generate N candidate packages for Best-of-N ensemble. Checks config (round ≤ max_round), creates kanban subtasks |
-| `pipeline_ensemble_judge(request, candidates, judge_mode?)` | Evaluate N candidates and select best one. Modes: deterministic (MVP middle pick) or llm (generates judge prompt for delegation) |
+| `pipeline_ensemble_run(state, agent_id, n?)` | Generate N candidate packages for Best-of-N ensemble |
+| `pipeline_ensemble_judge(request, candidates, judge_mode?)` | Evaluate N candidates and select best one |
 
 ## Model Routing
 
-### Полная таблица агентов и моделей (v3.2.0)
+### Полная таблица агентов и моделей (v3.3.0)
 
 | Агент | Тип | Провайдер | Дефолтная модель | Контекстные секции | Описание |
 |-------|-----|-----------|-----------------|-------------------|----------|
@@ -85,15 +91,12 @@ hermes plugins enable pipeline
 ```yaml
 pipeline:
   models:
-    # ── Defaults: применяются ко всем агентам данного типа ──
     defaults:
       direct:
         model: deepseek-v4-flash
       delegate:
-        provider: direct            # все Pro → Flash
+        provider: direct
         model: deepseek-v4-flash
-
-    # ── Per-agent (высший приоритет) ──
     agents:
       security:
         provider: delegate
@@ -116,7 +119,7 @@ BUILTIN_MODEL_MAP        ← низший (хардкод в models.py)
 
 Каждый агент имеет `.prompt` файл в `agents/`. Если файл отсутствует — генерируется default prompt из `AGENT_CONTEXT_FIELDS`.
 
-Файлы с промптами: `architect`, `coder`, `integration`, `researcher`, `reviewer`, `security` и все 10 Flash-агентов (finder, analyst, planner, fixer, refactorer, tester, debugger, documenter, devops, optimizer).
+16 файлов с промптами: `architect`, `coder`, `integration`, `researcher`, `reviewer`, `security` + 10 Flash-агентов.
 
 ## Delegation Package (via pipeline_run_agent)
 
@@ -139,17 +142,40 @@ BUILTIN_MODEL_MAP        ← низший (хардкод в models.py)
 
 (для SECURITY_RELATED — 11 агентов. Другие категории используют подмножество.)
 
-## Retrospective (v3.2.0)
+## SQLite Kanban (v3.3.0)
+
+Все 11 функций Kanban API работают напрямую с `kanban.db` через `_sqlite_select()` / `_sqlite_update()`:
+
+- `create_parent()`, `create_child()` — INSERT
+- `comment()` — INSERT в task_comments
+- `block_task()` — UPDATE
+- `list_tasks()` — SELECT
+- `show_task()` — SELECT с JOIN
+- `scan_board()` — SELECT (ядро load/resume/clear)
+- `promote()`, `complete()` — UPDATE
+
+**Что это даёт:**
+- ✅ Нет молчаливых ошибок от `_kanban()` (возвращала `{}` при любом сбое)
+- ✅ Нет зависимости от `hermes kanban` CLI
+- ✅ Работает без daemon
+- ✅ Быстрее: SQLite вместо subprocess
+
+## Retrospective (v3.3.0)
 
 Пишется JSONL-лог в `~/.hermes/plugins/pipeline/retro/pipe_<id>.jsonl`.
 
-События: pipeline_start, agent_start, agent_done, model_routing, convergence, findings, findings_detail, ensemble_gen, ensemble_judge, error, pipeline_clear, default_prompt.
+**События:** pipeline_start, agent_start, agent_done, model_routing, convergence, findings, findings_detail, ensemble_gen, ensemble_judge, error, pipeline_clear, default_prompt.
 
-Выключение:
+**Для чего:** диагностика прогонов, анализ convergence, детерминизм ensemble, производительность агентов, саморефлексия.
+
+**Конфиг:**
 ```yaml
 pipeline:
   retro:
-    enabled: false
+    enabled: true
+    dir: ~/.hermes/plugins/pipeline/retro
+    max_files: 100
+    auto_analyze: false
 ```
 
 ## Key Files
@@ -157,11 +183,11 @@ pipeline:
 | File | Purpose |
 |------|---------|
 | `plugin.yaml` | Manifest (v3.3.0, 12 tools) |
-| `__init__.py` | Plugin core: 12 tools + register + hot-reload MODEL_MAP + default prompt |
-| `models.py` | v3.2.0 Model config loader: YAML → merge → MODEL_MAP |
-| `kanban.py` | **Kanban API — прямой SQLite** (create_tree, advance, converge, scan_board, resume, reopen) + ensemble |
-| `retro.py` | v3.2.0 Retrospective logging + auto-analysis — JSONL-лог каждого прогона |
-| `ensemble.py` | Best-of-N ensemble: candidate generation + LLM/deterministic judge |
+| `__init__.py` | Plugin core: 12 tools + hot-reload MODEL_MAP + default prompt |
+| `models.py` | Model config loader: YAML → merge → MODEL_MAP |
+| `kanban.py` | **Прямой SQLite** (create_tree, advance, converge, scan_board, resume, reopen) + ensemble |
+| `retro.py` | Retrospective logging + auto-analysis |
+| `ensemble.py` | Best-of-N: candidate generation + LLM/deterministic judge |
 | `classify.py` | Request classification → 8 категорий |
 | `agents/*.prompt` | Prompt templates for 16 agents |
 | `AGENTS.md` | This file (v3.3.0) |
@@ -172,213 +198,27 @@ pipeline:
 | `CHANGELOG.md` | История изменений |
 | `skill/pipeline-orchestrator/` | Orchestrator skill |
 
-## v1.x → v2.0 Changes
-
-| Old | New (Variant C) |
-|-----|----------------|
-| `state.py` + `state.json` | **Removed.** Convergence logic in `kanban.py` |
-| `pstate.save` → JSON file | `pipeline_save` → kanban task tree |
-| `pstate.load` → read JSON | `pipeline_load` → scan_board() |
-| Manual resume | `pipeline_resume()` — scans board |
-| No advance tool | `pipeline_advance(state, agent)` |
-| 7 tools | **9 tools** (+ resume + advance) |
-
-### v2.0 → v2.1
-
-| Old | New |
-|-----|-----|
-| 9 tools | **10 tools** (+ pipeline_run_agent) |
-| Manual delegation routing in skill | Delegation package returned by plugin |
-| Orchestrator guesses delegate vs direct | `directive` field tells orchestrator what to do |
-| `agent_prompt` + `agent_model` call separately | `pipeline_run_agent` returns both + call_args |
-
-### v2.1 → v2.2
-
-| Old | New |
-|-----|-----|
-| `MODEL_MAP` хардкод в `__init__.py` | `models.py` — загрузка из `~/.hermes/config.yaml → pipeline.models` |
-| Менять модели = править код + рестарт | Менять модели = править `config.yaml` без изменения кода |
-| 3 групповых типа (direct/delegate/free) | + per-agent override через `agents.<id>` |
-| Один сценарий на все случаи | Гибкая настройка: defaults + per-agent, 4 примера конфигов |
-
-## Pitfalls
-
-- Плагин не содержит логики пайплайна — её несёт скилл-оркестратор
-- После правки плагина нужен `hermes plugins reload` или рестарт сессии
-- `kanban --json` парсится — если формат Hermes изменится, сломается
-- `scan_board()` работает только с доской `pipeline`
-- `--parent` в `create` не заполняет `parent_task_ids` в JSON, но `show` видит детей по `child_task_ids`
-
----
-
 ## Testing & QA Guide
 
-### Integration Test Suite
-
-Файл: `test_integration.py` (в корне pipeline-dashboard, не в плагине).
-
-Проверяет 9 сценариев:
-
-| # | Тест | Что проверяет |
-|---|------|---------------|
-| 1 | GET /api/tasks | Сервер отвечает списком задач |
-| 2 | Parent structure | Родительский пайплайн с N детьми |
-| 3 | SSE streaming | `/api/events` отдаёт `full_update` события |
-| 4 | DB timestamps | started_at ≤ completed_at |
-| 5 | Assignees | running/done задачи имеют assignee |
-| 6 | Rerun & archive | POST /api/tasks/{id}/rerun и /archive |
-| 7 | Dashboard ↔ DB | Статусы совпадают между API и SQLite |
-| 8 | SSE race | N конкурентных SSE-клиентов получают данные |
+### Unit tests
 
 ```bash
-# Прогнать все тесты (требуется запущенный дашборд на :8800)
-cd ~/git/pipeline-dashboard && python3 test_integration.py
+# Все тесты
+pytest tests/ -v
+
+# По модулям
+pytest tests/test_classify.py
+pytest tests/test_models.py
+pytest tests/test_kanban_convergence.py
+pytest tests/test_kanban_integration.py
+pytest tests/test_init.py
 ```
 
-### Тестирование плагина (без Hermes)
+### CI
 
-```python
-from kanban import _sqlite_select, _sqlite_update, promote, complete, advance
-
-# Прямой вызов SQLite (обход CLI)
-_sqlite_update("UPDATE tasks SET status='done' WHERE id=?", ("task:1234",))
-
-# Проверка promote
-rows = _sqlite_select("SELECT id, status FROM tasks WHERE id=?", ("task:1234",))
-assert rows[0]["status"] == "done"
-```
-
-### Нагрузочное тестирование SSE
-
-```bash
-# Открыть 5 параллельных SSE-соединений
-for i in $(seq 1 5); do
-  curl -sN http://127.0.0.1:8800/api/events > /tmp/sse_$i.log &
-done
-# Вызвать изменение (rerun)
-curl -s -X POST http://127.0.0.1:8800/api/tasks/test_pipeline_01/rerun
-# Все 5 логов должны содержать "full_update"
-grep -l "full_update" /tmp/sse_*.log | wc -l
-# Ожидается: 5
-```
-
----
-
-## Skill Seeds для агента-пользователя
-
-Ниже — готовые заготовки навыков (`skill/`). Агент, использующий этот проект, может скопировать их в `~/.hermes/skills/` и настроить под себя.
-
-### 1. `skill/pipeline-orchestrator/SKILL.md` — Оркестратор пайплайнов
-
-**Уже есть** в репозитории. Линкуется:
-```bash
-ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator ~/.hermes/skills/hermes/pipeline-orchestrator
-```
-
-Содержит: полный цикл pipeline_classify → pipeline_save → pipeline_run_agent → pipeline_advance с SQLite-синхронизацией.
-
-### 2. `skill/pipeline-dashboard/SKILL.md` — Дашборд пайплайнов
-
-Система реального времени (SSE + SQLite) для контроля пайплайнов.
-
-**Установка:**
-```bash
-cd ~/git && git clone <ваш-форк>/pipeline-dashboard.git
-cd pipeline-dashboard && python3 server.py &
-# Открыть: http://localhost:8800
-```
-
-**Возможности:**
-- Live-индикатор агентов: running/ready/blocked/todo/done
-- SSE — мгновенное обновление (не polling)
-- Grouped view по статусу
-- Auto-collapse done задач
-- Action-кнопки: rerun, archive
-
-### 3. `skill/pipeline-testing/SKILL.md` — Тестирование плагина/дашборда
-
-```markdown
-# Pipeline Testing
-
-Тестирование связки pipeline-plugin + dashboard.
-
-## Быстрый старт
-```bash
-# 1. Запустить дашборд
-cd ~/git/pipeline-dashboard && python3 server.py &
-
-# 2. Создать тестовый пайплайн
-pipeline_classify(request="test: finder → fixer → tester")
-pipeline_save(state)
-
-# 3. Прогнать тесты
-python3 test_integration.py
-
-# 4. Проверить БД вручную
-sqlite3 ~/.hermes/kanban/boards/pipeline/kanban.db \
-  "SELECT id, status, assignee FROM tasks"
-```
-
-## Инструменты агента
-| Инструмент | Назначение |
-|------------|------------|
-| sqlite3 CLI | Прямой доступ к kanban.db (обход CLI плагина) |
-| curl | Проверка API дашборда (GET/POST /api/tasks) |
-| test_integration.py | 9 тестов для регрессии |
-| pipeline_classify | Классификация запроса |
-| pipeline_save | Создание дерева задач |
-| pipeline_advance | Продвижение агента (только memory!) |
-```
-
----
-
-## Как агенту создать свой скил на основе AGENTS.md
-
-1. **Прочитай этот файл** — пойми инструменты (12 тулов), их параметры, модель роутинг.
-2. **Создай SKILL.md** в `~/.hermes/skills/<категория>/<имя>/`:
-   - Скопируй секцию Tools (таблицу)
-   - Скопируй секцию Pipeline Agents (порядок)
-   - Скопируй Pitfalls (это сэкономит часы)
-   - Добавь свои примеры вызовов
-3. **Добавь тесты** — используй секцию Testing & QA Guide выше как шаблон.
-4. **Подключи дашборд** — каждое изменение kanban.db автоматически видно на :8800.
-
-Пример готового скила-зародыша (сохрани как `~/.hermes/skills/pipeline/my-pipeline-skill/SKILL.md`):
-```markdown
-# My Pipeline Skill
-
-Использую pipeline-plugin для оркестрации.
-
-## Инструменты (наследовано от плагина)
-- pipeline_classify(request)
-- pipeline_save(state)
-- pipeline_advance(state, agent)
-- pipeline_run_agent(state, agent_id)
-- agent_prompt(agent_id, context)
-
-## Мой пайплайн (как я работаю)
-1. pipeline_classify → получаю список агентов
-2. pipeline_save → создаю дерево в kanban
-3. Для каждого агента:
-   a. pipeline_run_agent → получаю prompt + directive
-   b. Выполняю (direct) или делегирую (delegate)
-   c. pipeline_advance → продвигаю
-   d. sqlite3 UPDATE tasks SET status='done'
-4. В конце: parent → done
-```
-
-## Changelog
-
-### v3.3
-- Added: `_extract_target()` — извлекает цель (проект/файл/модуль) из запроса
-- Added: `_AGENT_VERB` — компактный глагол для каждого агента (разведка, тесты, баг-фикс...)
-- Changed: заголовки задач теперь `@agent: verb target` (было длинное описание)
-- Changed: `c_body` теперь содержит и `Объект: {target}`, и полное `AGENT_DESCRIPTIONS`
-- Changed: ensemble subtask titles тоже используют target
-
-### v3.2
-- Added: Testing & QA Guide (9 integration tests)
-- Added: Skill Seeds section (3 готовых заготовки)
-- Added: Agent Skill Creation Guide
-- Fixed: Role-specific task descriptions (AGENT_DESCRIPTIONS заменён на request[:60])
-- Fixed: Ensemble subtask titles unique (было request[:40], стало "candidate T=X")
+GitHub Actions в `.github/workflows/test.yml`:
+- ruff lint
+- bandit SAST
+- compile check
+- unit tests (pytest)
+- **76/76 тестов** (последняя проверка)
