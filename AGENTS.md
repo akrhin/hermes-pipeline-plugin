@@ -237,3 +237,171 @@ BUILTIN_MODEL_MAP        ← низший (хардкод в models.py)
 - `kanban --json` парсится — если формат Hermes изменится, сломается
 - `scan_board()` работает только с доской `pipeline`
 - `--parent` в `create` не заполняет `parent_task_ids` в JSON, но `show` видит детей по `child_task_ids`
+
+---
+
+## Testing & QA Guide
+
+### Integration Test Suite
+
+Файл: `test_integration.py` (в корне pipeline-dashboard, не в плагине).
+
+Проверяет 9 сценариев:
+
+| # | Тест | Что проверяет |
+|---|------|---------------|
+| 1 | GET /api/tasks | Сервер отвечает списком задач |
+| 2 | Parent structure | Родительский пайплайн с N детьми |
+| 3 | SSE streaming | `/api/events` отдаёт `full_update` события |
+| 4 | DB timestamps | started_at ≤ completed_at |
+| 5 | Assignees | running/done задачи имеют assignee |
+| 6 | Rerun & archive | POST /api/tasks/{id}/rerun и /archive |
+| 7 | Dashboard ↔ DB | Статусы совпадают между API и SQLite |
+| 8 | SSE race | N конкурентных SSE-клиентов получают данные |
+
+```bash
+# Прогнать все тесты (требуется запущенный дашборд на :8800)
+cd ~/git/pipeline-dashboard && python3 test_integration.py
+```
+
+### Тестирование плагина (без Hermes)
+
+```python
+from kanban import _sqlite_select, _sqlite_update, promote, complete, advance
+
+# Прямой вызов SQLite (обход CLI)
+_sqlite_update("UPDATE tasks SET status='done' WHERE id=?", ("task:1234",))
+
+# Проверка promote
+rows = _sqlite_select("SELECT id, status FROM tasks WHERE id=?", ("task:1234",))
+assert rows[0]["status"] == "done"
+```
+
+### Нагрузочное тестирование SSE
+
+```bash
+# Открыть 5 параллельных SSE-соединений
+for i in $(seq 1 5); do
+  curl -sN http://127.0.0.1:8800/api/events > /tmp/sse_$i.log &
+done
+# Вызвать изменение (rerun)
+curl -s -X POST http://127.0.0.1:8800/api/tasks/test_pipeline_01/rerun
+# Все 5 логов должны содержать "full_update"
+grep -l "full_update" /tmp/sse_*.log | wc -l
+# Ожидается: 5
+```
+
+---
+
+## Skill Seeds для агента-пользователя
+
+Ниже — готовые заготовки навыков (`skill/`). Агент, использующий этот проект, может скопировать их в `~/.hermes/skills/` и настроить под себя.
+
+### 1. `skill/pipeline-orchestrator/SKILL.md` — Оркестратор пайплайнов
+
+**Уже есть** в репозитории. Линкуется:
+```bash
+ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator ~/.hermes/skills/hermes/pipeline-orchestrator
+```
+
+Содержит: полный цикл pipeline_classify → pipeline_save → pipeline_run_agent → pipeline_advance с SQLite-синхронизацией.
+
+### 2. `skill/pipeline-dashboard/SKILL.md` — Дашборд пайплайнов
+
+Система реального времени (SSE + SQLite) для контроля пайплайнов.
+
+**Установка:**
+```bash
+cd ~/git && git clone <ваш-форк>/pipeline-dashboard.git
+cd pipeline-dashboard && python3 server.py &
+# Открыть: http://localhost:8800
+```
+
+**Возможности:**
+- Live-индикатор агентов: running/ready/blocked/todo/done
+- SSE — мгновенное обновление (не polling)
+- Grouped view по статусу
+- Auto-collapse done задач
+- Action-кнопки: rerun, archive
+
+### 3. `skill/pipeline-testing/SKILL.md` — Тестирование плагина/дашборда
+
+```markdown
+# Pipeline Testing
+
+Тестирование связки pipeline-plugin + dashboard.
+
+## Быстрый старт
+```bash
+# 1. Запустить дашборд
+cd ~/git/pipeline-dashboard && python3 server.py &
+
+# 2. Создать тестовый пайплайн
+pipeline_classify(request="test: finder → fixer → tester")
+pipeline_save(state)
+
+# 3. Прогнать тесты
+python3 test_integration.py
+
+# 4. Проверить БД вручную
+sqlite3 ~/.hermes/kanban/boards/pipeline/kanban.db \
+  "SELECT id, status, assignee FROM tasks"
+```
+
+## Инструменты агента
+| Инструмент | Назначение |
+|------------|------------|
+| sqlite3 CLI | Прямой доступ к kanban.db (обход CLI плагина) |
+| curl | Проверка API дашборда (GET/POST /api/tasks) |
+| test_integration.py | 9 тестов для регрессии |
+| pipeline_classify | Классификация запроса |
+| pipeline_save | Создание дерева задач |
+| pipeline_advance | Продвижение агента (только memory!) |
+```
+
+---
+
+## Как агенту создать свой скил на основе AGENTS.md
+
+1. **Прочитай этот файл** — пойми инструменты (12 тулов), их параметры, модель роутинг.
+2. **Создай SKILL.md** в `~/.hermes/skills/<категория>/<имя>/`:
+   - Скопируй секцию Tools (таблицу)
+   - Скопируй секцию Pipeline Agents (порядок)
+   - Скопируй Pitfalls (это сэкономит часы)
+   - Добавь свои примеры вызовов
+3. **Добавь тесты** — используй секцию Testing & QA Guide выше как шаблон.
+4. **Подключи дашборд** — каждое изменение kanban.db автоматически видно на :8800.
+
+Пример готового скила-зародыша (сохрани как `~/.hermes/skills/pipeline/my-pipeline-skill/SKILL.md`):
+```markdown
+# My Pipeline Skill
+
+Использую pipeline-plugin для оркестрации.
+
+## Инструменты (наследовано от плагина)
+- pipeline_classify(request)
+- pipeline_save(state)
+- pipeline_advance(state, agent)
+- pipeline_run_agent(state, agent_id)
+- agent_prompt(agent_id, context)
+
+## Мой пайплайн (как я работаю)
+1. pipeline_classify → получаю список агентов
+2. pipeline_save → создаю дерево в kanban
+3. Для каждого агента:
+   a. pipeline_run_agent → получаю prompt + directive
+   b. Выполняю (direct) или делегирую (delegate)
+   c. pipeline_advance → продвигаю
+   d. sqlite3 UPDATE tasks SET status='done'
+4. В конце: parent → done
+```
+
+## Changelog
+
+### v3.2
+- Added: Testing & QA Guide (9 integration tests)
+- Added: Skill Seeds section (3 готовых заготовки)
+- Added: Agent Skill Creation Guide
+- Fixed: Role-specific task descriptions (AGENT_DESCRIPTIONS заменён на request[:60])
+- Fixed: Ensemble subtask titles unique (было request[:40], стало "candidate T=X")
+
