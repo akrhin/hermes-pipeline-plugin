@@ -6,11 +6,42 @@ category: hermes
 tags: [pipeline, orchestrator, ensemble, convergence, kanban, retro, master]
 ---
 
-# Pipeline Orchestrator v3.3.3 — Master Skill
+# Pipeline Orchestrator v3.3.3 — Главный оркестратор-скилл
 
-**Единая точка входа для работы с pipeline plugin.** Загружай этот скилл ПЕРЕД каждым прогоном.
+## ⚠️ ПРАВИЛА РАБОТЫ С ПРОЕКТОМ (читать ПЕРЕД КАЖДЫМ ПРОГОНОМ)
 
-**Источник правды:** `~/git/hermes-pipeline-plugin` (репозиторий). Не используй память — здесь всё.
+**Этот раздел — закон. Не пропускай ни один пункт, не говори «потом», не оставляй todo в ответах.**
+
+### Фаза 1: Получение задачи → Декомпозиция
+1. Прочитай README.md, AGENTS.md, ARCHITECTURE.md, CHANGELOG.md, plugin.yaml
+2. Узнай текущую версию, что уже сделано, кто авторы
+3. Разбей задачу на шаги. Запиши в todo. Не начинай исполнение без плана.
+
+### Фаза 2: Исполнение
+4. Работай через pipeline: classify → save → load/resume → advance
+5. Не bypass kanban — ни одного прямого delegate_task вне пайплайна
+6. Каждые 5-7 вызовов инструментов — промежуточный вердикт: что сделано, что дальше
+
+### Фаза 3: Документация (В КОНЦЕ ПРОГОНА, ПЕРЕД ПУШЕМ)
+**Обновить ВСЕ эти файлы, если задача их затрагивает:**
+- [ ] **plugin.yaml** — версия, описание
+- [ ] **CHANGELOG.md** — новая запись с датой, список изменений (что, почему, кем)
+- [ ] **AGENTS.md** — агенты, промпты, таблица категорий
+- [ ] **ARCHITECTURE.md** — миграция v?.?.? в таблице истории
+- [ ] **ARCHITECTURE-FIXES.md** — если фиксил баги
+- [ ] **CONTRIBUTORS.md** — если работал с чужим PR
+- [ ] **README.md** — если изменился quick start, установка, требования
+
+### Фаза 4: Скиллы и инструменты (В КОНЦЕ ПРОГОНА)
+- [ ] **skill/pipeline-orchestrator/SKILL.md** — если изменилась оркестрация, агенты, конфиг, баги
+- [ ] **skill/pipeline-ensemble/SKILL.md** — если ensemble изменился
+- [ ] **skill/pipeline-audit-checklist/SKILL.md** — если добавились баги или проверки
+- [ ] Синхронизировать symlinks: `~/.hermes/skills/` → `~/git/hermes-pipeline-plugin/skill/`
+
+### Фаза 5: Пуш
+- [ ] `git add -A && git commit -m "v?.?.?:"` — осмысленное сообщение
+- [ ] `git push origin main`
+- [ ] Верификация: `pytest tests/ -q` (79/79), `ruff check .` (0 errors)
 
 ---
 
