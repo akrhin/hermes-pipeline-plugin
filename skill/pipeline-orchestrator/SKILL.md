@@ -243,7 +243,101 @@ pipeline:
 
 ---
 
-## 9. Bugfix History
+## 10. ⚠️ CRITICAL: Kanban Bypass Rule
+
+**Когда pipeline task существует на доске — НИКОГДА не запускай агентов вручную.**
+Не делай `delegate_task` напрямую. Оркестратор:
+
+```
+pipeline_classify → pipeline_save → pipeline_load/pipeline_resume → pipeline_advance(state, agent)
+```
+
+Последствия ручного запуска:
+- Агент не в пайплайне — теряется sequencing
+- Состояние расходится: kanban.db говорит `ready`, а агент уже отработал
+- Convergence не видит результаты — бесконечный цикл или ложный `converged`
+- Retro-логи не пишутся
+
+## 11. Python Plugin Gotchas (удалён pipeline-testing-gotchas)
+
+### Ruff I001 на try/except
+Не используй многострочные `from .x import (...)` внутри try/except:
+```python
+# ❌ Ломает ruff I001
+try:
+    from .ensemble import (generate_candidates, judge_candidates)
+except ImportError:
+    from ensemble import (generate_candidates, judge_candidates)
+
+# ✅ Одна строка на импорт
+try:
+    from .ensemble import generate_candidates, judge_candidates
+except ImportError:
+    from ensemble import generate_candidates, judge_candidates
+```
+
+### scan_board picks wrong parent
+Если несколько pipeline parent-ов (мусор от старых прогонов):
+```python
+# Всегда: фильтр child_task_ids + sort by created_at DESC
+rows = cursor.execute("SELECT * FROM tasks WHERE status IN ('ready','todo','running') ORDER BY created_at DESC LIMIT 5").fetchall()
+```
+
+### P1 findings — self-resolve
+Если нашёл и исправил P1 в том же раунде — **помечай как P2**, а не P1. Иначе:
+- severity=P1 → convergence видит «1 P1 остался» → continue
+- severity=P2 → convergence видит 0 P0/P1 → converged
+
+### Context-mode для анализа больших кодбаз
+Не тащи 10+ файлов `read_file` + reasoning в контекст. Используй `execute_code()`:
+```python
+from hermes_tools import terminal, read_file, search_files
+r = terminal("cd ~/project && grep -rn 'TODO' --include='*.py' . | head -20")
+# Анализ в sandbox, не в контексте агента
+```
+
+## 12. Retro Log Analysis (удалён Pipeline Self-Analysis & Retro)
+
+Ретро-логи: `~/.hermes/plugins/pipeline/retro/pipe_*.jsonl`
+
+```bash
+# Сводка convergence по всем прогонам
+cat ~/.hermes/plugins/pipeline/retro/pipe_*.jsonl | python3 -c "
+import sys,json
+for line in sys.stdin:
+    e = json.loads(line)
+    if e.get('event') == 'convergence':
+        print(e.get('run','')[:20], e['decision'], e.get('p0',0), e.get('p1',0))
+"
+
+# Дельта-анализ: сравнить findings между двумя прогонами
+python3 -c "
+import json, glob
+def load(run_prefix):
+    evts = []
+    for f in glob.glob('$HOME/.hermes/plugins/pipeline/retro/*.jsonl'):
+        for line in open(f):
+            e = json.loads(line)
+            if e.get('run','').startswith(run_prefix):
+                evts.append(e)
+    return evts
+v1 = load('pipe:f3c9')
+v2 = load('pipe:af9d')
+for v in [v1,v2]:
+    conv = [e for e in v if e['event']=='convergence']
+    if conv: print(conv[-1]['run'][:20], conv[-1]['decision'])
+"
+
+# Fingerprint analysis
+python3 -c "
+import hashlib
+def fp(findings):
+    items = sorted(f\"{f.get('severity','')}:{f.get('file','')}:{f.get('category','')}:{(f.get('description') or '')[:80]}\" for f in findings)
+    return hashlib.md5('|'.join(items).encode(), usedforsecurity=False).hexdigest()[:12]
+"
+```
+
+## 13. Bugfix History
 
 | ID | Sev | File | Баг | Статус |
 |----|-----|------|-----|--------|
@@ -257,12 +351,14 @@ pipeline:
 | v3.3.2 | — | classify.py | RU keywords, word-boundary, priority | ✅ |
 | **v3.3.3** | — | _orchestration_ | **LLM Judge: delegate_task с judge_call_args** | ✅ |
 
----
+## 14. Pitfalls
 
-## 10. Pitfalls
-
-1. **Состояние** — в kanban.db. После рестарта — `pipeline_resume()`.
-2. **Ensemble только на round=0/1.** На round 2+ single pass.
+1. **Состояние** — в kanban.db. После рестарта — `pipeline_resume()`. state.json НЕ СУЩЕСТВУЕТ.
+2. **Ensemble только на round=0/1.** На round 2+ single pass (экономия).
 3. **LLM Judge оркестрация** — загружать этот скилл перед каждым ensemble-прогоном. Не из памяти.
-4. **judge.prompt удалён** — промпты генерируются программно.
+4. **judge.prompt удалён** — промпты генерируются программно в `_build_judge_prompt()`.
 5. **classify word-boundary** — `len(kw) < 5`, не `<= 5`. Иначе `crash` не матчит `crashes`.
+6. **Ruff I001 в try/except** — одна строка на импорт, не многострочный.
+7. **scan_board parent order** — всегда `ORDER BY created_at DESC LIMIT 1`.
+8. **P1 self-resolve** — исправленный P1 помечай как P2, а то convergence зациклится.
+9. **Kanban bypass** — никогда не bypass через прямой delegate_task.
