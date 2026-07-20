@@ -1,6 +1,6 @@
 # 🔱 Hermes Pipeline Plugin
 
-> Multi-agent orchestrator for [Hermes Agent](https://github.com/NousResearch/hermes-agent).
+> Multi-agent pipeline orchestrator for Hermes Agent — 8 pipeline categories, quality gates, model routing
 > Автоматически разбивает сложные задачи на этапы, запускает специализированных агентов, проверяет качество — и так до 3 раундов, пока не сойдётся.
 
 [![Tests](https://github.com/akrhin/hermes-pipeline-plugin/actions/workflows/test.yml/badge.svg)](https://github.com/akrhin/hermes-pipeline-plugin/actions)

@@ -1,6 +1,6 @@
 name: pipeline
-version: 3.4.0
-description: "Pipeline Plugin v3.4.0 — README rewrite (5-step install), toolsets override docs for kanban workers, disabled_toolsets pitfall."
+version: 3.5.0
+description: "Pipeline Plugin v3.5.0 — scan_board() now preserves agent order (parsed from parent body instead of ORDER BY), ensemble judge gets real candidate output (not just descriptions), judge config passthrough fixed, pipeline.config.yaml.example added."
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify

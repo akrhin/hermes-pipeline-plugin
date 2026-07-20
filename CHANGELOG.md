@@ -1,5 +1,23 @@
 # Changelog
 
+## v3.5.0 (2026-07-20)
+
+### scan_board — порядок агентов исправлен
+- **scan_board()** больше не использует `ORDER BY created_at ASC` для восстановления порядка агентов — все дети создаются за миллисекунды с одинаковым timestamp, что давало недетерминированный порядок.
+- **Фикс:** парсит pipeline из родительского `body` («Агенты: @finder → @analyst → ...»), потом индексирует детей по имени агента.
+- Теперь `pipeline_resume()` возвращает правильный порядок: `finder → analyst → architect → planner → coder → reviewer → integration → tester → documenter`.
+
+### Ensemble Judge — реальный код вместо описаний
+- `_build_judge_prompt()`: лимит вывода кандидата увеличен с 2000 до 8000 символов — Judge получает реальный код для оценки, а не только описания стратегий.
+- **Чинит проблему оркестрации:** кандидаты сначала выполняются (пишут код), потом их код передаётся Judge.
+
+### Judge config passthrough
+- `handle_ensemble_judge`: передача полного config в `judge_candidates()` вместо только `judge` секции — исправлено на `judge_cfg`.
+
+### Infrastructure
+- `pipeline.config.yaml.example` — добавлен шаблон конфига (806 байт), на который ссылается README.
+- README: обновлён `About` (8 pipeline categories, quality gates, model routing).
+
 ## v3.4.0 (2026-07-20)
 
 ### README — полная переработка

@@ -126,7 +126,7 @@ def _build_judge_prompt(request: str, candidates: list[dict]) -> str:
         lines.append(
             f"### {c['id']} (T={c.get('temperature', '?')})\n"
             f"Стиль: {c.get('instruction_extra', 'стандартный')}\n"
-            f"```\n{output[:2000]}\n```\n"
+            f"```\n{output[:8000]}\n```\n"
         )
 
     lines.append("""Оцени каждого кандидата по 4 критериям (0-10):

@@ -1,12 +1,12 @@
 ---
 name: pipeline-orchestrator
-description: "Главный оркестратор-скилл for Pipeline Plugin v3.4.0 — kanban.db SSOT, 16 agents, 8 categories, selective context, LLM Judge ensemble, deterministic convergence, hot-reload config, toolsets override docs."
+description: "Главный оркестратор-скилл for Pipeline Plugin v3.5.0 — kanban.db SSOT, 16 agents, 8 categories, selective context, LLM Judge ensemble (execute-then-judge), deterministic convergence, hot-reload config, forced findings collection."
 author: Hermes Agent + Vladimir
 category: hermes
 tags: [pipeline, orchestrator, ensemble, convergence, kanban, retro, master]
 ---
 
-# Pipeline Orchestrator v3.4.0 — Главный оркестратор-скилл
+# Pipeline Orchestrator v3.5.0 — Главный оркестратор-скилл
 
 ## ⚠️ ПРАВИЛА РАБОТЫ С ПРОЕКТОМ (читать ПЕРЕД КАЖДЫМ ПРОГОНОМ)
 
@@ -62,6 +62,11 @@ User request → pipeline_classify → pipeline_save (создаёт дерев�
               pipeline_run_agent(state, agent_id) → delegation package
               pipeline_advance(state, agent) → promote next
                       ↓
+              ╔══════════════════════════════════╗
+              ║ СБОР FINDINGS после каждого      ║
+              ║ reviewer/tester → push в findings ║
+              ╚══════════════════════════════════╝
+                      ↓
               pipeline_convergence(state, findings) → decision
                       ↓
          converged? → pipeline_clear()
@@ -112,83 +117,162 @@ User request → pipeline_classify → pipeline_save (создаёт дерев�
 
 ---
 
-## 3. Pipeline Loop (execution order)
+## 3. Pipeline Loop (псевдокод — точный порядок действий)
 
-```python
+```
 state = pipeline_resume() or pipeline_save({category, request, pipeline})
 
-for idx, agent in enumerate(state["pipeline"]):
+for each agent in state["pipeline"]:
+    state = pipeline_advance(state, current_agent)
+
     if agent == "coder" and state["round"] <= 1 and ensemble_enabled:
-        # === ENSEMBLE FLOW ===
+        # ═══ ENSEMBLE FLOW (FIXED v3.5.0) ═══════════════════════
+        # 1. Генерация кандидатов (описания)
         candidates = pipeline_ensemble_run(state, "coder", n=5)
+        
+        # 2. ВЫПОЛНЕНИЕ кандидатов ДО judge
         for c in candidates:
             result = delegate_task(goal=c["task"], context=c["context"])
-            c["result"] = result
+            c["output"] = result["summary"]  # реальный код
         
-        judge_result = pipeline_ensemble_judge(request, candidates, judge_mode="llm")
+        # 3. ТЕПЕРЬ judge оценивает КОД (не описания)
+        judge_result = pipeline_ensemble_judge({
+            "request": request,
+            "candidates": candidates,  # ← с полем output!
+            "judge_mode": "llm"
+        })
         
-        # ⚠️ CRITICAL: call delegate_task with judge_call_args
-        llm_response = delegate_task(**judge_result["judge_call_args"])
-        parsed = json.loads(llm_response)
-        winner_id = parsed.get("winner_id", "candidate_3")
+        # 4. Вызов LLM Judge
+        if judge_result.get("judge_call_args"):
+            llm_response = delegate_task(**judge_result["judge_call_args"])
+            parsed = json.loads(llm_response)
+            winner_id = parsed.get("winner_id", "candidate_3")
     else:
         # === SINGLE PASS ===
         pkg = pipeline_run_agent(state, agent)
         if pkg["directive"] == "delegate":
             result = delegate_task(**pkg["call_args"])
-        else:  # direct
-            result = <orchestrator executes prompt directly>
+        else:
+            result = <execute prompt directly in context>
     
-    state = pipeline_advance(state, agent)
+    # ═══ СБОР FINDINGS ═══════════════════════
+    findings = state.get("findings", [])
+    if agent in ("reviewer", "tester", "security", "integration"):
+        # Парсим вывод агента на предмет [P0], [P1], [P2]
+        new_findings = extract_findings_from_output(result)
+        if new_findings:
+            findings.extend(new_findings)
+            state["findings"] = findings
+
+# После цикла — конвергенция
+if findings:
+    conv = pipeline_convergence(state, findings)
 ```
+
+**Ключевое:** после каждого `reviewer`/`tester`/`security` ПАРСИТЬ их вывод на предмет findings. Иначе convergence не увидит ничего и решит converged.
 
 ---
 
-## 4. LLM Judge Orchestration (CRITICAL — FROM THIS SKILL, NOT MEMORY)
+## 4. LLM Judge Orchestration (v3.5.0 — execute-then-judge)
 
-**Баг #3 был в том, что оркестратор НЕ вызывал delegate_task с judge_call_args. Фикс ниже.**
-
-### Шаги после pipeline_ensemble_judge:
+### Правильная последовательность
 
 ```python
-judge_result = json.loads(handle_ensemble_judge({
-    "request": request,
-    "candidates": candidates, 
-    "judge_mode": "llm"
-}))
+# ШАГ 1: Генерация кандидатов
+candidates_result = pipeline_ensemble_run({
+    "state": state,
+    "agent_id": "coder",
+    "n": 5
+})
+candidates = candidates_result["candidates"]
 
+# ШАГ 2: Исполнение КАЖДОГО кандидата до judge
+for c in candidates:
+    c["output"] = delegate_task(
+        goal=c["task"],
+        context=c.get("context", {})
+    )["summary"]
+
+# ШАГ 3: Оценка judge с реальным кодом
+judge_result = pipeline_ensemble_judge({
+    "request": state["request"],
+    "candidates": candidates,   # содержит output[]
+    "judge_mode": "llm"
+})
+
+# ШАГ 4: Если LLM mode — делегировать судье
 if judge_result.get("judge_call_args"):
     llm_response = delegate_task(**judge_result["judge_call_args"])
-    
-    try:
-        parsed = json.loads(llm_response)
-        winner_id = parsed.get("winner_id", "candidate_3")
-        rationale = parsed.get("rationale", "")
-        scores = parsed.get("scores", [])
-    except (json.JSONDecodeError, TypeError):
-        winner_id = judge_result.get("winner_id", "candidate_3")
-        rationale = "LLM Judge returned non-JSON — fallback"
-        scores = []
+    parsed = json.loads(llm_response)
+    winner_id = parsed.get("winner_id", "candidate_3")
+    rationale = parsed.get("rationale", "")
+    scores = parsed.get("scores", [])
 else:
     winner_id = judge_result.get("winner_id", "candidate_3")
-
-# winner → @reviewer
 ```
 
-### Judge modes:
+### Judge modes
 
 | Mode | Поведение |
 |------|-----------|
 | **deterministic** | Picks middle candidate (len//2). Returns `winner_id: candidate_3`. |
-| **llm** | Returns `winner_id: null, judge_call_args: {...}`. Orchestrator MUST call `delegate_task`. |
-
-### First real call (2026-07-20):
-- winner: candidate_3 (T=0.7, Standard)
-- Scores: candidate_1=22, candidate_2=30, candidate_3=**35**, candidate_4=31, candidate_5=29
+| **llm** | Returns `winner_id: null, judge_call_args: {...}`. Orchestrator calls `delegate_task`. |
 
 ---
 
-## 5. Ensemble Variations
+## 5. Сбор Findings (CRITICAL — иначе convergence = converged всегда)
+
+После каждого агента, который может найти баги (reviewer, tester, security, integration), **парсить его вывод**.
+
+### Формат findings
+
+Каждый finding — dict с полями:
+```python
+{
+    "severity": "P0" | "P1" | "P2",
+    "file": "path/to/file.py",       # или "general" если без файла
+    "category": "security" | "style" | "logic" | "coverage" | "performance" | ...,
+    "description": "что именно не так",
+    "recommendation": "как исправить",
+    "status": "open"                  # open/fixed/accepted
+}
+```
+
+### Как парсить вывод агента
+
+Агент **обязан** в своём выводе указывать findings в формате:
+```
+[P0] file.py: описание — рекомендация
+[P1] file.py: описание — рекомендация
+[P2] general: описание — рекомендация
+```
+
+Если агент не нашёл проблем — findings пуст. Это нормально (converged).
+
+```python
+def extract_findings_from_output(output: str) -> list[dict]:
+    """Парсинг [P0], [P1], [P2] из вывода агента."""
+    import re
+    findings = []
+    for sev in ("P0", "P1", "P2"):
+        pattern = rf"\[{sev}\]\s+(\S+):\s*(.+?)(?:\s*—\s*(.+))?$"
+        for match in re.finditer(pattern, output, re.MULTILINE):
+            findings.append({
+                "severity": sev,
+                "file": match.group(1),
+                "description": match.group(2).strip(),
+                "recommendation": (match.group(3) or "").strip(),
+                "status": "open",
+                "category": "review",
+            })
+    return findings
+```
+
+Обязательно побеждать findings в `state["findings"]` перед вызовом `pipeline_convergence`.
+
+---
+
+## 6. Ensemble Variations
 
 | ID | T | Strategy |
 |----|---|----------|
@@ -200,7 +284,7 @@ else:
 
 ---
 
-## 6. Convergence Engine (deterministic)
+## 7. Convergence Engine (deterministic)
 
 ```python
 MAX_CONVERGENCE_ROUNDS = 3
@@ -221,7 +305,7 @@ MAX_CONVERGENCE_ROUNDS = 3
 
 ---
 
-## 7. Config (полный)
+## 8. Config
 
 ```yaml
 pipeline:
@@ -255,7 +339,7 @@ pipeline:
 
 ---
 
-## 8. 12 Tools
+## 9. 12 Tools
 
 | Tool | Output |
 |------|--------|
@@ -289,7 +373,9 @@ pipeline_classify → pipeline_save → pipeline_load/pipeline_resume → pipeli
 - Convergence не видит результаты — бесконечный цикл или ложный `converged`
 - Retro-логи не пишутся
 
-## 11. Python Plugin Gotchas (удалён pipeline-testing-gotchas)
+---
+
+## 11. Python Plugin Gotchas
 
 ### Ruff I001 на try/except
 Не используй многострочные `from .x import (...)` внутри try/except:
@@ -307,27 +393,17 @@ except ImportError:
     from ensemble import generate_candidates, judge_candidates
 ```
 
-### scan_board picks wrong parent
-Если несколько pipeline parent-ов (мусор от старых прогонов):
-```python
-# Всегда: фильтр child_task_ids + sort by created_at DESC
-rows = cursor.execute("SELECT * FROM tasks WHERE status IN ('ready','todo','running') ORDER BY created_at DESC LIMIT 5").fetchall()
-```
-
 ### P1 findings — self-resolve
 Если нашёл и исправил P1 в том же раунде — **помечай как P2**, а не P1. Иначе:
 - severity=P1 → convergence видит «1 P1 остался» → continue
 - severity=P2 → convergence видит 0 P0/P1 → converged
 
 ### Context-mode для анализа больших кодбаз
-Не тащи 10+ файлов `read_file` + reasoning в контекст. Используй `execute_code()`:
-```python
-from hermes_tools import terminal, read_file, search_files
-r = terminal("cd ~/project && grep -rn 'TODO' --include='*.py' . | head -20")
-# Анализ в sandbox, не в контексте агента
-```
+Не тащи 10+ файлов `read_file` + reasoning в контекст. Используй `execute_code()`.
 
-## 12. Retro Log Analysis (удалён Pipeline Self-Analysis & Retro)
+---
+
+## 12. Retro Log Analysis
 
 Ретро-логи: `~/.hermes/plugins/pipeline/retro/pipe_*.jsonl`
 
@@ -341,32 +417,19 @@ for line in sys.stdin:
         print(e.get('run','')[:20], e['decision'], e.get('p0',0), e.get('p1',0))
 "
 
-# Дельта-анализ: сравнить findings между двумя прогонами
-python3 -c "
-import json, glob
-def load(run_prefix):
-    evts = []
-    for f in glob.glob('$HOME/.hermes/plugins/pipeline/retro/*.jsonl'):
-        for line in open(f):
-            e = json.loads(line)
-            if e.get('run','').startswith(run_prefix):
-                evts.append(e)
-    return evts
-v1 = load('pipe:f3c9')
-v2 = load('pipe:af9d')
-for v in [v1,v2]:
-    conv = [e for e in v if e['event']=='convergence']
-    if conv: print(conv[-1]['run'][:20], conv[-1]['decision'])
-"
-
-# Fingerprint analysis
-python3 -c "
-import hashlib
-def fp(findings):
-    items = sorted(f\"{f.get('severity','')}:{f.get('file','')}:{f.get('category','')}:{(f.get('description') or '')[:80]}\" for f in findings)
-    return hashlib.md5('|'.join(items).encode(), usedforsecurity=False).hexdigest()[:12]
+# Findings по прогону
+cat ~/.hermes/plugins/pipeline/retro/pipe_*.jsonl | python3 -c "
+import sys,json
+for line in sys.stdin:
+    e = json.loads(line)
+    if e.get('event') == 'findings_detail':
+        print(f\"{e.get('run','')[:20]} → {len(e.get('items',[]))} findings\")
+        for f in e.get('items',[]):
+            print(f\"  [{f.get('severity','?')}] {f.get('file','?')}: {f.get('description','')[:80]}\")
 "
 ```
+
+---
 
 ## 13. Bugfix History
 
@@ -380,7 +443,10 @@ def fp(findings):
 | #15 | P1 | kanban.py | stale cleanup пропускал 1-child | ✅ |
 | #20 | P2 | kanban.py | scan_board без LIMIT 1 | ✅ |
 | v3.3.2 | — | classify.py | RU keywords, word-boundary, priority | ✅ |
-| **v3.3.3** | — | _orchestration_ | **LLM Judge: delegate_task с judge_call_args** | ✅ |
+| v3.3.3 | — | _orchestration_ | **LLM Judge: delegate_task с judge_call_args** | ✅ |
+| **v3.5.0** | — | kanban.py | **scan_board order fix** — парсинг pipeline из parent body | ✅ |
+| **v3.5.0** | — | ensemble.py | **Judge output 2000→8000** — реальный код для оценки | ✅ |
+| **v3.5.0** | — | __init__.py | **Judge config passthrough fix** | ✅ |
 
 ## 14. Pitfalls
 
@@ -390,7 +456,9 @@ def fp(findings):
 4. **judge.prompt удалён** — промпты генерируются программно в `_build_judge_prompt()`.
 5. **classify word-boundary** — `len(kw) < 5`, не `<= 5`. Иначе `crash` не матчит `crashes`.
 6. **Ruff I001 в try/except** — одна строка на импорт, не многострочный.
-7. **scan_board parent order** — всегда `ORDER BY created_at DESC LIMIT 1`.
+7. **scan_board parent order** — в v3.5.0 парсинг из body, не ORDER BY.
 8. **P1 self-resolve** — исправленный P1 помечай как P2, а то convergence зациклится.
 9. **Kanban bypass** — никогда не bypass через прямой delegate_task.
-10. **Kanban worker toolsets override** — диспатчер (`_default_spawn` в `kanban_db.py:8307-8309`) читает `_get_platform_tools(cfg, "cli")` из профиля воркера и передаёт как `--toolsets a,b,c`. Это **CLI-флаг высшего приоритета** — переопределяет `enabled_toolsets` в профиле. Решение: `agent.disabled_toolsets` в профиле фильтрует тулзы до того, как диспатчер их запакует.
+10. **Findings collection** — КРИТИЧЕСКИ ВАЖНО парсить вывод reviewer/tester/security на [P0/P1/P2]. Без этого convergence всегда converged.
+11. **Execute-then-judge** — ensemble candidates должны быть выполнены ДО вызова pipeline_ensemble_judge. Иначе Judge оценивает описания, а не код.
+12. **Kanban worker toolsets override** — диспатчер читает `_get_platform_tools(cfg, "cli")` из профиля воркера и передаёт как `--toolsets a,b,c`. Это CLI-флаг высшего приоритета — переопределяет `enabled_toolsets` в профиле. Решение: `agent.disabled_toolsets` в профиле фильтрует тулзы до того, как диспатчер их запакует.

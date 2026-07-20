@@ -6,13 +6,19 @@ category: verification
 tags: [pipeline, audit, verification, quality, ensemble, master]
 ---
 
-# Pipeline Audit Checklist (v3.4.0)
+# Pipeline Audit Checklist (v3.5.0)
 
 ## Preconditions
 - [ ] Load `pipeline-orchestrator` skill (`skill_view('pipeline-orchestrator')`)
 - [ ] `hermes plugins list` shows `pipeline` as enabled
 - [ ] `~/.hermes/plugins/pipeline/config.yaml` — валидный конфиг
 - [ ] 79/79 тестов проходят (`pytest tests/ -q`)
+
+## Критические проверки (v3.5.0)
+
+### scan_board order fix
+- [ ] `pipeline_resume()` возвращает правильный порядок агентов (из parent body, не ORDER BY)
+- [ ] В родительском body есть строка «Агенты: @finder → @analyst → ...»
 
 ## Known Bugfixes (v3.4.0 — 28 total)
 
@@ -27,7 +33,8 @@ tags: [pipeline, audit, verification, quality, ensemble, master]
 | #20 | P2 | kanban.py | scan_board без LIMIT 1 | ✅ |
 | v3.3.2 | — | classify.py | RU keywords, word-boundary, priority | ✅ |
 | v3.3.3 | — | orchestration | LLM Judge: delegate_task с judge_call_args | ✅ |
-| **v3.4.0** | — | **README** | **Установка: устаревшие 2 строки, мёртвые kanban CLI команды + не хватало 2 скиллов** | ✅ |
+| **v3.5.0** | — | **README** | **scan_board order fix + Judge output 8000 + config passthrough** | ✅ |
+| **v3.5.0** | — | **ensemble flow** | **execute-then-judge + findings collection (оркестрация)** | ✅ |
 
 ## Audit Steps
 

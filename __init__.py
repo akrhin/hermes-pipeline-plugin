@@ -822,7 +822,8 @@ def handle_ensemble_judge(args, **kwargs):
         judge_mode = args.get("judge_mode", "deterministic")
 
         config = read_ensemble_config()
-        result = ensemble_judge_candidates(request, candidates, judge_mode, config)
+        judge_cfg = config.get("judge", {}) if isinstance(config, dict) else {}
+        result = ensemble_judge_candidates(request, candidates, judge_mode, judge_cfg)
 
         retro = rt.get_retro()
         retro.ensemble_judge(

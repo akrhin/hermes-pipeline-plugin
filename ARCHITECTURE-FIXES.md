@@ -580,4 +580,7 @@ Fix 4 P0 bugs in convergence cycle:
 | `classify.py` | Remove 'док' from DOCUMENTATION + word-boundary fix | #4 |
 | `agents/integration.prompt` | Remove dead "Full context" header | #4 |
 | `agents/judge.prompt` | Delete file (dead code) | #4 |
-| `plugin.yaml` | Bump version → 3.1.2 | все |
+|| `plugin.yaml` | Bump version → 3.1.2 | все |
+|| `kanban.py` (v3.5.0) | **scan_board order fix**: парсинг pipeline из parent body вместо ORDER BY | — |
+|| `ensemble.py` (v3.5.0) | **Judge output truncation**: 2000→8000 символов для реального кода | — |
+|| `__init__.py` (v3.5.0) | **Judge config passthrough fix**: только `judge` секция вместо полного config | — |

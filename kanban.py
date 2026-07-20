@@ -798,7 +798,7 @@ def scan_board() -> dict | None:
     body = t["body"] or ""
     parent_status = t["status"]
 
-    # Get children via task_links + tasks join
+    # Get children via task_links + tasks join (pipeline order comes from body, not DB)
     children = _sqlite_select(
         "SELECT c.id, c.title, c.status "
         "FROM tasks c "
@@ -819,11 +819,35 @@ def scan_board() -> dict | None:
         if line.startswith("Категория:"):
             category = line.split(":", 1)[1].strip()
 
-    # Reconstruct pipeline state
+    # ══ ПРАВИЛЬНЫЙ ПОРЯДОК — из родительского body, не из ORDER BY ═══════
+    # Все дети создаются за ~миллисекунды, их created_at одинаков —
+    # ORDER BY ASC возвращает недетерминированный порядок.
+    # Парсим «Агенты: @finder → @analyst → ...» из body.
+    pipeline = []
+    for line in body.split("\n"):
+        if line.startswith("Агенты:") or line.startswith("Агенты :"):
+            agents_part = line.split(":", 1)[1].strip()
+            pipeline = [
+                a.strip().lstrip("@").strip()
+                for a in agents_part.split("→")
+                if a.strip()
+            ]
+            break
+    # Fallback: если не нашли в body — парсим из title под @-агентов
+    if not pipeline:
+        for child in children:
+            ctitle = child["title"] or ""
+            if ctitle.startswith("@"):
+                agent = ctitle.split(":", 1)[0].lstrip("@").strip()
+                if agent:
+                    pipeline.append(agent)
+
+    # Build task_ids and reconstruct state
     current_idx = -1
     completed = []
-    pipeline = []
     task_ids = {}
+    # Индексируем детей по имени агента и статусу
+    child_agents = {}
     for child in children:
         cid = child["id"]
         ctitle = child["title"] or ""
@@ -832,12 +856,16 @@ def scan_board() -> dict | None:
         if ctitle.startswith("@"):
             agent = ctitle.split(":", 1)[0].lstrip("@").strip()
         if agent:
-            task_ids[agent] = cid
-            pipeline.append(agent)
-        if cstatus == "done":
-            completed.append(agent)
-        elif cstatus in ("ready", "todo", "running") and current_idx == -1:
-            if agent in pipeline:
+            child_agents[agent] = {"id": cid, "status": cstatus}
+
+    # Используем правильный порядок pipeline
+    for agent in pipeline:
+        info = child_agents.get(agent)
+        if info:
+            task_ids[agent] = info["id"]
+            if info["status"] == "done":
+                completed.append(agent)
+            elif info["status"] in ("ready", "todo", "running") and current_idx == -1:
                 current_idx = pipeline.index(agent)
 
     state = {

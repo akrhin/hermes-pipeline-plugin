@@ -246,7 +246,12 @@ pipeline:
 | v2.1 | pipeline_run_agent — 10th tool. Delegation package pattern |
 | v2.2 | config.yaml вынос MODEL_MAP. models.py merge logic |
 | v2.3 | **Selective context** (AGENT_CONTEXT_FIELDS). full_context удалён |
-| v3.0 | **Best-of-N skeleton**: pipeline_ensemble_run, pipeline_ensemble_judge |
+|| v3.0 | **Best-of-N skeleton**: pipeline_ensemble_run, pipeline_ensemble_judge |
+|| v3.1 | 20 bugfixes (4 P0+7 P1+9 P2) — SQLite rewrite, LLM Judge, classify RU, reopen |
+|| v3.2 | Flash prompt fix + model config hot-reload |
+|| v3.3 | LLM Judge delegation fix + AGENTS.md + community files |
+|| v3.4 | README rewrite (5-step install) + toolsets override docs |
+|| **v3.5** | **scan_board order fix (pipeline из body) + ensemble judge output 2000→8000 + judge config passthrough** |
 | v3.1 | **Ensemble production**: ensemble.py, config-driven, LLM Judge, kanban subtasks |
 | **v3.2** | **Retrospective logging**, hot-reload MODEL_MAP, default prompt fallback, convergence status:fixed filter. 16 agents, 12 tools |
 | **v3.3** | **SQLite-native kanban** (PR#1 от @V0rt). Прямой SQLite без CLI. 20 bugfixes (4 P0 + 7 P1 + 9 P2). reopen(), AGENT_VERB, _extract_target(), try/finally resource leak fix |
