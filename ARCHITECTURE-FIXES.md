@@ -583,4 +583,5 @@ Fix 4 P0 bugs in convergence cycle:
 || `plugin.yaml` | Bump version → 3.1.2 | все |
 || `kanban.py` (v3.5.0) | **scan_board order fix**: парсинг pipeline из parent body вместо ORDER BY | — |
 || `ensemble.py` (v3.5.0) | **Judge output truncation**: 2000→8000 символов для реального кода | — |
-|| `__init__.py` (v3.5.0) | **Judge config passthrough fix**: только `judge` секция вместо полного config | — |
+||| `__init__.py` (v3.5.0) | **Judge config passthrough fix**: только `judge` секция вместо полного config | — |
+|||**orchestration** (v3.5.0) | **Execute-then-judge:** 5 кандидатов писали в один файл — Judge видел только последнего | Фикс в скилле: каждый кандидат пишет `.candidate_N` |

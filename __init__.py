@@ -338,7 +338,8 @@ def handle_classify(args, **kwargs):
         result = classify.classify(request)
         retro.log(
             "classify_result",
-            category=result.get("category", "?"),
+            categories=result.get("categories", []),
+            primary=result.get("primary", "?"),
             agents=len(result.get("pipeline", [])),
         )
         return json.dumps(result, ensure_ascii=False)

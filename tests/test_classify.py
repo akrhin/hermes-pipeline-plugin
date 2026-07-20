@@ -13,53 +13,53 @@ from classify import classify
 class TestClassify:
     def test_security_auth(self):
         result = classify("добавь аутентификацию через JWT")
-        assert result["category"] == "SECURITY_RELATED"
+        assert result["primary"] == "SECURITY_RELATED"
         assert "finder" in result["pipeline"]
         assert "security" in result["pipeline"]
 
     def test_bug_crash(self):
         result = classify("баг: крашится при логине")
-        assert result["category"] == "BUG_UNKNOWN"
+        assert result["primary"] == "BUG_UNKNOWN"
 
     def test_known_bug_priority(self):
         """When both BUG_KNOWN and BUG_UNKNOWN match equally, BUG_UNKNOWN wins (safer)."""
         result = classify("почини баг")
         # Both match 1 keyword each, BUG_UNKNOWN is defined first → wins tie
-        assert result["category"] in ("BUG_KNOWN", "BUG_UNKNOWN")
+        assert result["primary"] in ("BUG_KNOWN", "BUG_UNKNOWN")
 
     def test_refactoring(self):
         result = classify("рефактори UserService")
-        assert result["category"] == "REFACTORING"
+        assert result["primary"] == "REFACTORING"
 
     def test_performance(self):
         result = classify("оптимизируй запросы к базе")
-        assert result["category"] == "PERFORMANCE"
+        assert result["primary"] == "PERFORMANCE"
 
     def test_infrastructure(self):
         result = classify("настрой docker-compose")
-        assert result["category"] == "INFRASTRUCTURE"
+        assert result["primary"] == "INFRASTRUCTURE"
 
     def test_documentation(self):
         result = classify("обнови README файл")
-        assert result["category"] == "DOCUMENTATION"
+        assert result["primary"] == "DOCUMENTATION"
 
     def test_feature_default(self):
         result = classify("сделай импорт из CSV")
-        assert result["category"] == "FEATURE"
+        assert result["primary"] == "FEATURE"
 
     def test_no_match_returns_feature(self):
         result = classify("как дела?")
-        assert result["category"] == "FEATURE"
-        assert result["matched_keywords"] == []
+        assert result["primary"] == "FEATURE"
+        assert result["matched_keywords"] == {}
 
     def test_security_takes_precedence(self):
         """Security keywords beat feature when equal scores."""
         result = classify("секрет токен")
-        assert result["category"] == "SECURITY_RELATED"
+        assert result["primary"] == "SECURITY_RELATED"
 
     def test_lowercase_handling(self):
         result = classify("JWT Authentication")
-        assert result["category"] == "SECURITY_RELATED"
+        assert result["primary"] == "SECURITY_RELATED"
 
     def test_pipeline_not_empty(self):
         result = classify("refactor auth module")
@@ -78,34 +78,34 @@ class TestClassify:
 class TestClassifyEdgeCases:
     def test_empty_string(self):
         result = classify("")
-        assert result["category"] == "FEATURE"
+        assert result["primary"] == "FEATURE"
 
     def test_whitespace(self):
         result = classify("   ")
-        assert result["category"] == "FEATURE"
+        assert result["primary"] == "FEATURE"
 
     def test_case_insensitive(self):
         result = classify("FIX BUG IN LOGIN")
         # BUG_KNOWN("fix") + BUG_UNKNOWN("bug") + SECURITY("login") = 1 each
         # BUG_KNOWN now has highest priority (BUG_KNOWN > BUG_UNKNOWN)
-        assert result["category"] in ("BUG_KNOWN", "BUG_UNKNOWN", "SECURITY_RELATED")
+        assert result["primary"] in ("BUG_KNOWN", "BUG_UNKNOWN", "SECURITY_RELATED")
 
     def test_refactor_before_docs(self):
         """'refactor' must win over 'док' (short word boundary)"""
         result = classify("рефакторинг документации")
-        assert result["category"] == "REFACTORING", f"Got {result['category']}"
+        assert result["primary"] == "REFACTORING", f"Got {result['primary']}"
 
     def test_audit_triggers_security(self):
         result = classify("проведи аудит кода")
-        assert result["category"] == "SECURITY_RELATED"
+        assert result["primary"] == "SECURITY_RELATED"
 
     def test_collision_triggers_refactoring(self):
         result = classify("найди коллизии в данных")
-        assert result["category"] == "REFACTORING"
+        assert result["primary"] == "REFACTORING"
 
     def test_mismatch_triggers_refactoring(self):
         result = classify("несоответствия в схеме")
-        assert result["category"] == "REFACTORING"
+        assert result["primary"] == "REFACTORING"
 
 
 class TestClassifyCaching:

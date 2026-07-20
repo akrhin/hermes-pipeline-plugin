@@ -38,6 +38,10 @@ tags: [pipeline, orchestrator, ensemble, convergence, kanban, retro, master]
 - [ ] **skill/pipeline-audit-checklist/SKILL.md** — если добавились баги или проверки
 - [ ] Синхронизировать symlinks: `~/.hermes/skills/` → `~/git/hermes-pipeline-plugin/skill/`
 
+> ⚠️ **Hotfix для execute-then-judge:** каждому кандидату — уникальный output-файл.
+> В задаче кандидата укажи `tools/retro-summary.candidate_N` вместо `tools/retro-summary`.
+> `N` — номер кандидата (1–5). Так Judge увидит все 5 реализаций, а не только последнюю.
+
 ### Фаза 5: Пуш
 - [ ] `git add -A && git commit -m "v?.?.?:"` — осмысленное сообщение
 - [ ] `git push origin main`
@@ -130,10 +134,13 @@ for each agent in state["pipeline"]:
         # 1. Генерация кандидатов (описания)
         candidates = pipeline_ensemble_run(state, "coder", n=5)
         
-        # 2. ВЫПОЛНЕНИЕ кандидатов ДО judge
+        # 2. ВЫПОЛНЕНИЕ кандидатов ДО judge — каждый в свой файл
         for c in candidates:
-            result = delegate_task(goal=c["task"], context=c["context"])
-            c["output"] = result["summary"]  # реальный код
+            # ⚠️ Каждому кандидату — уникальный output-файл, иначе перезапись!
+            candidate_task = c["task"].replace("tools/retro-summary", f"tools/retro-summary.{c['id']}")
+            c["task"] = candidate_task
+            result = delegate_task(goal=candidate_task, context=c["context"])
+            c["output"] = result["summary"]
         
         # 3. ТЕПЕРЬ judge оценивает КОД (не описания)
         judge_result = pipeline_ensemble_judge({
@@ -186,10 +193,16 @@ candidates_result = pipeline_ensemble_run({
 })
 candidates = candidates_result["candidates"]
 
-# ШАГ 2: Исполнение КАЖДОГО кандидата до judge
+# ШАГ 2: Исполнение КАЖДОГО кандидата до judge — в СВОЙ файл!
 for c in candidates:
+    # ⚠️ Уникальный файл на кандидата, иначе последний перезапишет всех
+    candidate_task = c["task"].replace(
+        "tools/retro-summary",
+        f"tools/retro-summary.{c['id']}"
+    )
+    c["task"] = candidate_task
     c["output"] = delegate_task(
-        goal=c["task"],
+        goal=candidate_task,
         context=c.get("context", {})
     )["summary"]
 
@@ -460,5 +473,5 @@ for line in sys.stdin:
 8. **P1 self-resolve** — исправленный P1 помечай как P2, а то convergence зациклится.
 9. **Kanban bypass** — никогда не bypass через прямой delegate_task.
 10. **Findings collection** — КРИТИЧЕСКИ ВАЖНО парсить вывод reviewer/tester/security на [P0/P1/P2]. Без этого convergence всегда converged.
-11. **Execute-then-judge** — ensemble candidates должны быть выполнены ДО вызова pipeline_ensemble_judge. Иначе Judge оценивает описания, а не код.
+11. **Execute-then-judge file overwrite** — каждый делегированный кандидат пишет в один и тот же `tools/retro-summary`. Последний перезаписывает всех. **Фикс:** в задаче кандидата заменить `tools/retro-summary` на `tools/retro-summary.{candidate_id}`. Сделать ДО вызова `delegate_task`.
 12. **Kanban worker toolsets override** — диспатчер читает `_get_platform_tools(cfg, "cli")` из профиля воркера и передаёт как `--toolsets a,b,c`. Это CLI-флаг высшего приоритета — переопределяет `enabled_toolsets` в профиле. Решение: `agent.disabled_toolsets` в профиле фильтрует тулзы до того, как диспатчер их запакует.
