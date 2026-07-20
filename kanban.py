@@ -365,7 +365,8 @@ def _update_parent_status(parent_id: str | None, status: str):
     if not parent_id:
         return
     import os, sqlite3
-    db_path = os.path.expanduser("~/.hermes/kanban/boards/pipeline/kanban.db")
+    db_path = _db_path()
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         now = int(time.time())
@@ -380,9 +381,11 @@ def _update_parent_status(parent_id: str | None, status: str):
                 (status, now, parent_id),
             )
         conn.commit()
-        conn.close()
     except sqlite3.Error as exc:
         logger.warning("sqlite error in _update_parent_status: %s", exc)
+    finally:
+        if conn:
+            conn.close()
 
 
 def advance(state: dict, completed_agent: str) -> dict:
@@ -413,21 +416,21 @@ def advance(state: dict, completed_agent: str) -> dict:
         completed.append(completed_agent)
         state["completed"] = completed
 
+    # Determine next index before parent status
+    next_idx = current_idx + 1
+
     # Update parent status: running on first advance, done on last
     if parent_id:
-        is_first_advance = current_idx == 0
-        is_last_agent = (current_idx + 1) >= len(pipeline)
+        is_first_advance = len(completed) == 1  # first item just added
+        is_last_agent = next_idx >= len(pipeline)
         if is_first_advance:
             _update_parent_status(parent_id, "running")
             comment(parent_id, f"🚀 Запущен этап @{completed_agent}")
         if is_last_agent:
             _update_parent_status(parent_id, "done")
             comment(parent_id, "✅ Пайплайн завершён")
-        else:
-            pass  # already running
 
     # Promote and claim next
-    next_idx = current_idx + 1
     if next_idx < len(pipeline):
         next_agent = pipeline[next_idx]
         next_id = task_ids.get(next_agent)
