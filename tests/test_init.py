@@ -417,3 +417,41 @@ def test_run_agent_path_traversal_guard():
     # Should resolve to "finder" after basename, not error
     assert "error" not in result
     assert result["agent_id"] == "finder"
+
+
+def test_ensemble_judge_llm_returns_call_args():
+    """LLM Judge mode returns judge_call_args, not a fake winner."""
+    candidates = [
+        {"id": "candidate_1", "temperature": 0.3, "instruction_extra": "minimal"},
+        {"id": "candidate_2", "temperature": 0.5, "instruction_extra": "clean"},
+        {"id": "candidate_3", "temperature": 0.7, "instruction_extra": "standard"},
+        {"id": "candidate_4", "temperature": 0.9, "instruction_extra": "full"},
+        {"id": "candidate_5", "temperature": 1.1, "instruction_extra": "creative"},
+    ]
+    from ensemble import judge_candidates
+    result = judge_candidates("test request", candidates, judge_mode="llm")
+    # Must NOT have fake winner_id (was bug #3)
+    assert result["winner_id"] is None, f"BUG #3: got fake winner {result['winner_id']}"
+    # Must have judge_call_args for orchestrator
+    assert "judge_call_args" in result, "Missing judge_call_args for LLM delegation"
+    assert result["judge_call_args"]["model"] == "deepseek-v4-flash"
+    assert "judge_prompt" in result
+    print("OK: LLM Judge returns judge_call_args, not fake winner")
+
+
+def test_ensemble_judge_deterministic_picks_middle():
+    """Deterministic mode picks middle candidate."""
+    candidates = [{"id": f"c_{i}", "temperature": t}
+                  for i, t in enumerate([0.3, 0.5, 0.7, 0.9, 1.1])]
+    from ensemble import judge_candidates
+    result = judge_candidates("test", candidates, judge_mode="deterministic")
+    assert result["winner_id"] == "c_2", f"Expected c_2, got {result['winner_id']}"
+    print("OK: Deterministic judge picks middle")
+
+
+def test_ensemble_judge_empty_candidates():
+    """Empty candidates returns None winner."""
+    from ensemble import judge_candidates
+    result = judge_candidates("test", [], judge_mode="deterministic")
+    assert result["winner_id"] is None
+    print("OK: Empty candidates handled")

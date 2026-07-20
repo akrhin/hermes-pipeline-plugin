@@ -17,7 +17,7 @@
 
 ### Fixes
 - Баг #1 — convergence('continue') теперь может reopen coder
-- Баг #3 — LLM Judge более не возвращает фальшивый winner
+- Баг #3 — LLM Judge больше не заглушка: возвращает `judge_call_args` для реального делегирования LLM
 - Баг #4 — Flash-агенты получают prompt
 - Баг #5 — stack trace в error-ответах handler'ов (было str(e) без traceback)
 - Баг #8 — handle_convergence больше не мутирует state по ссылке
