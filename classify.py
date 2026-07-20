@@ -10,7 +10,7 @@ from functools import lru_cache
 # ── Category definitions ─────────────────────────────────────────────────────┘
 
 # Minimum length for plain substring matching
-_SHORT_KW_LEN = 5  # keywords <= this length use word-boundary matching
+_SHORT_KW_LEN = 5  # strict < 5: "crash"(5) uses substring, "bug"(3) uses word-boundary
 
 
 @lru_cache(maxsize=256)
@@ -26,7 +26,7 @@ def _kw_matches(kw: str, text: str) -> bool:
     like "док" matching inside "документация".
     Longer keywords use fast substring matching.
     """
-    if len(kw) <= _SHORT_KW_LEN:
+    if len(kw) < _SHORT_KW_LEN:
         return bool(_make_word_pattern(kw).search(text))
     return kw in text
 
@@ -95,6 +95,7 @@ CATEGORIES = {
             "error",
             "не работает",
             "сломал",
+            "сломано",
             "broken",
             "exception",
             "вылета",
@@ -103,6 +104,10 @@ CATEGORIES = {
             "не открыва",
             "не сохраня",
             "не отправля",
+            "крашит",
+            "краш",
+            "упал",
+            "валит",
         ],
         "pipeline": ["finder", "debugger", "fixer", "reviewer", "tester"],
     },
@@ -112,6 +117,9 @@ CATEGORIES = {
             "fix",
             "почини",
             "поправ",
+            "пофикс",
+            "чини",
+            "реши проблем",
         ],
         "pipeline": ["finder", "fixer", "reviewer", "tester"],
     },
@@ -264,22 +272,25 @@ def classify(request: str) -> dict:
         }
 
     # Tiebreaker priority: prefer more specific categories
-    # Weight: type of category matters more than raw keyword count
-    tier1 = {"BUG_UNKNOWN", "BUG_KNOWN", "SECURITY_RELATED"}  # safety-critical
-    tier2 = {"REFACTORING", "PERFORMANCE"}  # structural
-    tier3 = {"INFRASTRUCTURE", "FEATURE"}  # general
+    # Position in PRIORITY_ORDER determines weight:
+    # 0-2 (tier1): ×10, 3-4 (tier2): ×5, 5-6 (tier3): ×2, 7 (DOC): ×3
+    priority_order = [
+        "BUG_KNOWN", "BUG_UNKNOWN", "SECURITY_RELATED",
+        "REFACTORING", "PERFORMANCE",
+        "INFRASTRUCTURE", "FEATURE",
+        "DOCUMENTATION",
+    ]
+    priority_weights = [10, 10, 10, 5, 5, 2, 2, 3]
 
     def priority(cat):
-        """Higher priority = more urgent category."""
         raw_score = scores[cat]
-        if cat in tier1:
-            return (raw_score * 10, raw_score)
-        elif cat in tier2:
-            return (raw_score * 5, raw_score)
-        elif cat in tier3:
-            return (raw_score * 2, raw_score)
-        else:  # DOCUMENTATION
-            return (raw_score, 0)
+        try:
+            pos = priority_order.index(cat)
+            weight = priority_weights[pos]
+        except ValueError:
+            pos = 99
+            weight = 1
+        return (raw_score * weight, -pos, raw_score)
 
     best = max(scores, key=priority)
 

@@ -86,9 +86,9 @@ class TestClassifyEdgeCases:
 
     def test_case_insensitive(self):
         result = classify("FIX BUG IN LOGIN")
-        # BUG (BUG_UNKNOWN) + LOGIN (SECURITY_RELATED) = 1 each
-        # Both in TIER1 — whoever has higher priority wins
-        assert result["category"] in ("BUG_UNKNOWN", "SECURITY_RELATED")
+        # BUG_KNOWN("fix") + BUG_UNKNOWN("bug") + SECURITY("login") = 1 each
+        # BUG_KNOWN now has highest priority (BUG_KNOWN > BUG_UNKNOWN)
+        assert result["category"] in ("BUG_KNOWN", "BUG_UNKNOWN", "SECURITY_RELATED")
 
     def test_refactor_before_docs(self):
         """'refactor' must win over 'док' (short word boundary)"""
