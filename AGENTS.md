@@ -44,23 +44,23 @@ hermes plugins enable pipeline
 
 | Агент | Тип | Провайдер | Дефолтная модель | Когда вызывается |
 |-------|-----|-----------|-----------------|------------------|
-| @finder | Flash | `direct` | `deepseek-v4-flash` | Всегда первый — разведка, сбор информации |
-| @analyst | Flash | `direct` | `deepseek-v4-flash` | Анализ, диагностика, поиск корня проблемы |
-| @researcher | Free | `delegate_free` | `openrouter/free` | Внешние исследования (не используется в каждом пайплайне) |
-| @architect | Pro | `delegate` | `deepseek-v4-pro` | Проектирование решения (требует рассуждений) |
-| @planner | Flash | `direct` | `deepseek-v4-flash` | Разбивка на задачи |
-| @coder | Flash | `direct` | `deepseek-v4-flash` | Написание кода |
-| @editor | Flash | `direct` | `deepseek-v4-flash` | Редактирование (не всегда в пайплайне) |
-| @fixer | Flash | `direct` | `deepseek-v4-flash` | Фикс известных багов |
-| @refactorer | Flash | `direct` | `deepseek-v4-flash` | Рефакторинг |
-| @reviewer | Pro | `delegate` | `deepseek-v4-pro` | Код-ревью с качественной оценкой |
-| @security | Pro | `delegate` | `deepseek-v4-pro` | Security audit (только SECURITY_RELATED) |
-| @integration | Pro | `delegate` | `deepseek-v4-pro` | Консистентность, кросс-файловые проверки |
-| @tester | Flash | `direct` | `deepseek-v4-flash` | Написание тестов, прогон |
-| @debugger | Flash | `direct` | `deepseek-v4-flash` | Отладка (только BUG_UNKNOWN) |
-| @documenter | Flash | `direct` | `deepseek-v4-flash` | Документация |
-| @devops | Flash | `direct` | `deepseek-v4-flash` | Инфраструктура (только INFRASTRUCTURE) |
-| @optimizer | Flash | `direct` | `deepseek-v4-flash` | Оптимизация (только PERFORMANCE) |
+| @finder | Flash | `direct` | `deepseek-v4-flash` | Сбор информации: чтение кода, файлов и конфигов, разведка перед анализом |
+| @analyst | Flash | `direct` | `deepseek-v4-flash` | Анализ и диагностика: поиск корня проблемы, разбор логов, выявление закономерностей |
+| @researcher | Free | `delegate_free` | `openrouter/free` | Внешние исследования: best practices, документация, альтернативы |
+| @architect | Pro | `delegate` | `deepseek-v4-pro` | Проектирование: архитектура изменений, выбор компонентов, связи модулей |
+| @planner | Flash | `direct` | `deepseek-v4-flash` | Планирование: разбивка на подзадачи, оценка объёма, план шагов |
+| @coder | Flash | `direct` | `deepseek-v4-flash` | Разработка: написание кода, реализация фич, имплементация логики |
+| @editor | Flash | `direct` | `deepseek-v4-flash` | Редактирование: правки по плану, форматирование, типизация |
+| @fixer | Flash | `direct` | `deepseek-v4-flash` | Исправление: патчи багов, замена сломанных вызовов, обходы проблем |
+| @refactorer | Flash | `direct` | `deepseek-v4-flash` | Рефакторинг: улучшение структуры, устранение дублирования, выделение функций |
+| @reviewer | Pro | `delegate` | `deepseek-v4-pro` | Код-ревью: проверка качества, логические ошибки, рекомендации |
+| @security | Pro | `delegate` | `deepseek-v4-pro` | Аудит безопасности: XSS, SQL-инъекции, утечки данных, права доступа |
+| @integration | Pro | `delegate` | `deepseek-v4-pro` | Консистентность: кросс-файловые связи, импорты, типы, совместимость API |
+| @tester | Flash | `direct` | `deepseek-v4-flash` | Тестирование: написание тестов, прогон, регрессия, assertions |
+| @debugger | Flash | `direct` | `deepseek-v4-flash` | Отладка: пошаговый поиск первопричины, стек, анализ переменных |
+| @documenter | Flash | `direct` | `deepseek-v4-flash` | Документация: README, AGENTS.md, changelog, комментарии, инструкции |
+| @devops | Flash | `direct` | `deepseek-v4-flash` | Инфраструктура: CI/CD, Docker, деплой, системные юниты, мониторинг |
+| @optimizer | Flash | `direct` | `deepseek-v4-flash` | Оптимизация: производительность, память, асинхронность, кэш |
 
 ### Как работают модели
 
