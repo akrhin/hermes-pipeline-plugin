@@ -1,6 +1,6 @@
 name: pipeline
-version: 3.2.0
-description: "Pipeline Plugin v3.2.0 — Kanban-native. Selective context. Best-of-N ensemble. Retrospective logging + auto-analysis. Convergence fixed (status filter). Hot-reload MODEL_MAP. Default prompt fallback."
+version: 3.3.0
+description: "Pipeline Plugin v3.3.0 — SQLite-native kanban. Selective context. 20 bugfixes from ARCHITECTURE-FIXES.md. Best-of-N ensemble. Retrospective logging + auto-analysis. Convergence fixed (status filter). Hot-reload MODEL_MAP. Default prompt fallback."
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify

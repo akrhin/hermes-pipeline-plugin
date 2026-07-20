@@ -1,4 +1,4 @@
-# Pipeline Plugin v3.2 — Architecture (Kanban-native + Ensemble)
+# Pipeline Plugin v3.3 — Architecture (SQLite Kanban + Ensemble + 20 bugfixes)
 
 ## Purpose
 

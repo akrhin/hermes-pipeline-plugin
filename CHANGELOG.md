@@ -1,5 +1,40 @@
 # Changelog
 
+## v3.3.0 (2026-07-20)
+
+### Breaking
+- **Kanban API переписан на прямой SQLite** — все 11 CLI-зависимых функций заменены на _sqlite_select/_sqlite_update. Больше никаких молчаливых ошибок _kanban().
+
+### Features
+- **Архитектурный аудит** — `ARCHITECTURE-FIXES.md`: 20 багов (4 P0 + 7 P1 + 9 P2) с root cause и планом фиксов
+- **reopen()** — переоткрытие done-задач для convergence-циклов
+- **AGENT_DESCRIPTIONS** — расширенные описания (~1.5×) с контекстом, инструментами и результатами
+- **AGENT_VERB** — компактный глагол для каждого агента (разведка, тесты, баг-фикс...)
+- **extract_target()** — извлекает цель (проект/файл/модуль) из запроса
+- **Role-specific task titles** — `@coder: пишет powerfail-shutdown` вместо `@coder: сделай JWT аутентификацию`
+- **direct SQLite** — promote(), complete(), claim(), assign() — напрямую в kanban.db
+- **try/finally** — _sqlite_update и _sqlite_select защищены от resource leak
+
+### Fixes
+- Баг #1 — convergence('continue') теперь может reopen coder
+- Баг #3 — LLM Judge более не возвращает фальшивый winner
+- Баг #4 — Flash-агенты получают prompt
+- Баг #5 — stack trace в error-ответах handler'ов (было str(e) без traceback)
+- Баг #8 — handle_convergence больше не мутирует state по ссылке
+- Баг #9 — 'док' больше не даёт false positive в classify
+- Баг #10 — мёртвый 'Full context' удалён из integration.prompt
+- Баг #11 — maxed_out теперь закрывает детей
+- Баг #13 — пустой findings больше не даёт ложную convergence
+- Баг #15 — stale cleanup работает и с 1 ребёнком
+- Баг #16 — judge.prompt мёртвый код удалён
+- Баг #17 — ensemble config кэшируется (lru_cache)
+- Баг #18 — deterministic judge выбирает T=0.7, не середину
+- Баг #19 — title parsing через regex, не хрупкую замену строк
+- Баг #20 — scan_board обрабатывает несколько активных пайплайнов
+
+### Contributors
+- **@V0rt** — SQLite-rewrite kanban.py, 20 багов code review, ARCHITECTURE-FIXES.md
+
 ## v3.2.0 (2026-07-19)
 
 ### Features

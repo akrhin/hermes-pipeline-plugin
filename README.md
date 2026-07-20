@@ -188,6 +188,18 @@ pipeline:
 
 ---
 
+## SQLite Kanban (v3.3.0 — @V0rt)
+
+Начиная с v3.3.0, kanban.py работает **напрямую с SQLite**, без CLI.
+Все 11 функций (create_parent, create_child, comment, block_task, list_tasks,
+show_task, scan_board, promote, complete, claim, assign) пишут/читают kanban.db
+через _sqlite_select / _sqlite_update. Это исключает молчаливые ошибки,
+которые возвращала _kanban().
+
+Подробный аудит 20 багов: [`ARCHITECTURE-FIXES.md`](ARCHITECTURE-FIXES.md)
+
+---
+
 ## Retrospective (v3.2.0)
 
 Плагин пишет структурированный JSONL-лог работы для последующего анализа.
@@ -272,7 +284,7 @@ hermes kanban stats       # статистика доски
 
 ---
 
-## Инструменты плагина (v3.2.0)
+## Инструменты плагина (v3.3.0)
 
 | Инструмент | Что делает |
 |-----------|------------|
