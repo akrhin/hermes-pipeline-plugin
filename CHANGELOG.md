@@ -1,6 +1,21 @@
 # Changelog
 
-## v3.3.1 (2026-07-20)
+## v3.3.2 (2026-07-20)
+
+### classify fixes
+- **RU keywords**: `крашит`, `краш`, `упал`, `валит`, `сломано` — BUG_UNKNOWN теперь ловит русские «крашится», «упал сервер»
+- **RU keywords**: `пофикс`, `чини`, `реши проблем` — BUG_KNOWN ловит русские «пофикси», «чини»
+- **word-boundary fix**: `_kw_matches` использовал `<=\b` для 5-символьных ключей. `crash` (5 символов) не матчил `crashes`. Исправлено на `< 5` — всё что >= 5 символов использует substring match.
+- **priority order**: BUG_KNOWN > BUG_UNKNOWN (раньше tiebreaker не детерминирован)
+- **DOCUMENTATION weight**: 3× (было 1×), чтобы побеждать FEATURE при совпадении
+
+### Verification (all 5 unused agents tested)
+- @debugger, @fixer, @refactorer, @optimizer, @devops — все имеют корректные промпты
+- Все 8 категорий классифицируются правильно (14/14 тестов)
+- 79/79 тестов, 0 lint errors
+
+### Anomaly investigated
+- `t_a1a2cf66`: maxed_out без agent_start — **не баг плагина**. Convergence исчерпал лимит раундов (3), но оркестратор не перезапустил агентов. Плагин вёл себя корректно.
 
 ### Bugfixes
 - **Баг #1 (P1)** — `reopen()`: функция отсутствовала. `convergence('continue')` не мог переоткрыть done-задачи для нового раунда. Добавлена `def reopen()` + convergence теперь использует reopen вместо unblock.
