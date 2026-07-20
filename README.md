@@ -14,7 +14,7 @@
 Ты: "добавь JWT аутентификацию в проект"
   │
   ▼
-Агент анализирует → срабатывает триггер SECURITY_RELATED
+Плагин анализирует → срабатывает триггер SECURITY_RELATED
   │
   ▼
 Запускается пайплайн из 11 агентов:
@@ -53,8 +53,7 @@ git clone https://github.com/akrhin/hermes-pipeline-plugin.git git/hermes-pipeli
 ln -sf ~/git/hermes-pipeline-plugin ~/.hermes/plugins/pipeline
 
 # 3. Подключить скилл-оркестратор
-ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator \
-      ~/.hermes/skills/hermes/pipeline-orchestrator
+ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator       ~/.hermes/skills/hermes/pipeline-orchestrator
 
 # 4. Включить плагин в конфиге ~/.hermes/config.yaml
 ```
@@ -81,31 +80,54 @@ systemctl --user restart hermes-gateway
 
 ## Все 16 агентов и их модели
 
-| Агент | Тип | Режим | Дефолтная модель | Что делает |
-|-------|-----|-------|-----------------|------------|
-| **@finder** | Flash | `direct` | `deepseek-v4-flash` | Разведка: структура, файлы, зависимости |
-| **@analyst** | Flash | `direct` | `deepseek-v4-flash` | Диагностика: корень проблемы, логические ошибки |
-| **@researcher** | Flash | `direct` | `deepseek-v4-flash` | Поиск best practices и документации |
-| **@architect** | Flash | `direct` | `deepseek-v4-flash` | Проектирование решения |
-| **@planner** | Flash | `direct` | `deepseek-v4-flash` | Декомпозиция на задачи |
-| **@coder** | Flash | `direct` | `deepseek-v4-flash` | Написание кода |
-| **@fixer** | Flash | `direct` | `deepseek-v4-flash` | Исправление известных багов |
-| **@refactorer** | Flash | `direct` | `deepseek-v4-flash` | Рефакторинг без изменения поведения |
-| **@reviewer** | Flash | `direct` | `deepseek-v4-flash` | Код-ревью |
-| **@security** | **Pro** | **`delegate`** | **`deepseek-v4-pro`** | Аудит безопасности (только SECURITY_RELATED) |
-| **@integration** | Flash | `direct` | `deepseek-v4-flash` | Кросс-файловая консистентность |
-| **@tester** | Flash | `direct` | `deepseek-v4-flash` | Написание и прогон тестов |
-| **@debugger** | Flash | `direct` | `deepseek-v4-flash` | Отладка (только BUG_UNKNOWN) |
-| **@documenter** | Flash | `direct` | `deepseek-v4-flash` | Документация |
-| **@devops** | Flash | `direct` | `deepseek-v4-flash` | Инфраструктура (только INFRASTRUCTURE) |
-| **@optimizer** | Flash | `direct` | `deepseek-v4-flash` | Оптимизация (только PERFORMANCE) |
+| Агент | Тип | Режим | Модель | Контекст | Что делает |
+|-------|-----|-------|--------|----------|------------|
+| **@finder** | Flash | `direct` | `deepseek-v4-flash` | research | Разведка: структура, файлы, зависимости |
+| **@analyst** | Flash | `direct` | `deepseek-v4-flash` | research | Диагностика: корень проблемы, логические ошибки |
+| **@researcher** | Flash | `direct` | `deepseek-v4-flash` | research | Поиск best practices и документации |
+| **@architect** | Flash | `direct` | `deepseek-v4-flash` | research, planning | Проектирование решения |
+| **@planner** | Flash | `direct` | `deepseek-v4-flash` | planning, infrastructure | Декомпозиция на задачи |
+| **@coder** | Flash | `direct` | `deepseek-v4-flash` | implementation, planning | Написание кода |
+| **@fixer** | Flash | `direct` | `deepseek-v4-flash` | implementation | Исправление известных багов |
+| **@refactorer** | Flash | `direct` | `deepseek-v4-flash` | implementation | Рефакторинг без изменения поведения |
+| **@reviewer** | Flash | `direct` | `deepseek-v4-flash` | implementation, research | Код-ревью |
+| **@security** | **Pro** | **`delegate`** | **`deepseek-v4-pro`** | implementation, research | Аудит безопасности (только SECURITY_RELATED) |
+| **@integration** | Flash | `direct` | `deepseek-v4-flash` | implementation, documentation, infrastructure | Кросс-файловая консистентность |
+| **@tester** | Flash | `direct` | `deepseek-v4-flash` | implementation | Написание и прогон тестов |
+| **@debugger** | Flash | `direct` | `deepseek-v4-flash` | implementation | Отладка (только BUG_UNKNOWN) |
+| **@documenter** | Flash | `direct` | `deepseek-v4-flash` | implementation, documentation | Документация |
+| **@devops** | Flash | `direct` | `deepseek-v4-flash` | infrastructure | Инфраструктура (только INFRASTRUCTURE) |
+| **@optimizer** | Flash | `direct` | `deepseek-v4-flash` | implementation | Оптимизация (только PERFORMANCE) |
 
 **Два режима выполнения:**
 - **Flash** (`direct`) — агент работает прямо в моём контексте. Быстро, дёшево. Подходит для механической работы.
-- **Pro** (`delegate`) — я поручаю задачу сабагенту через `delegate_task`. Дороже, но качественнее. Используется только для security-аудита.
+- **Pro** (`delegate`) — я поручу задачу сабагенту через `delegate_task`. Дороже, но качественнее. Используется только для security-аудита.
 
-> **Примечание:** по умолчанию все агенты — Flash. Security переведён на Pro через конфиг (см. ниже).
+> **Примечание:** по умолчанию все агенты — Flash. Security переведён на Pro через конфиг.
 > Файлы `.prompt` есть для всех 16 агентов. Без файла — генерируется default prompt из AGENT_CONTEXT_FIELDS.
+
+---
+
+## SQLite Kanban (v3.3.0 — @V0rt)
+
+Начиная с v3.3.0, **kanban.py работает напрямую с SQLite, без CLI-прослойки**.
+
+Все 11 функций Kanban API:
+- `create_parent()`, `create_child()` — прямой INSERT
+- `comment()` — прямой INSERT
+- `block_task()` — прямой UPDATE
+- `list_tasks()` — прямой SELECT
+- `show_task()` — SELECT с JOIN
+- `scan_board()` — прямой SELECT (ядро load/resume/clear)
+- `promote()`, `complete()` — напрямую в SQLite
+
+**Что это даёт:**
+- ✅ Нет молчаливых ошибок от `_kanban()` (которая возвращала `{}` при любом сбое)
+- ✅ Нет зависимости от `hermes kanban` CLI (ломающегося при изменении формата)
+- ✅ Работает без daemon (не требует `kanban watch`)
+- ✅ Быстрее: SQLite вместо subprocess для каждого вызова
+
+Подробный аудит: [`ARCHITECTURE-FIXES.md`](ARCHITECTURE-FIXES.md) — 20 багов (4 P0 + 7 P1 + 9 P2)
 
 ---
 
@@ -113,14 +135,14 @@ systemctl --user restart hermes-gateway
 
 | Категория | Пайплайн | Примеры запросов |
 |-----------|----------|-----------------|
-| **SECURITY_RELATED** | finder → analyst → researcher → architect → planner → coder → reviewer → **security** → **integration** → tester → documenter | «добавь JWT», «проверь на уязвимости», «сделай авторизацию» |
+| **SECURITY_RELATED** | finder → analyst → researcher → architect → planner → coder → reviewer → **security** → **integration** → tester → documenter | «добавь JWT», «проверь на уязвимости» |
 | **BUG_UNKNOWN** | finder → debugger → fixer → reviewer → tester | «крашится при запуске», «баг: не сохраняет» |
-| **BUG_KNOWN** | finder → fixer → reviewer → tester | «исправь баг в UserService», «почини логин» |
-| **REFACTORING** | finder → analyst → refactorer → reviewer → **integration** → tester | «рефакторинг UserService», «упрости этот код» |
-| **PERFORMANCE** | finder → analyst → optimizer → reviewer → tester | «оптимизируй запросы к БД», «тормозит поиск» |
+| **BUG_KNOWN** | finder → fixer → reviewer → tester | «исправь баг в UserService» |
+| **REFACTORING** | finder → analyst → refactorer → reviewer → **integration** → tester | «рефакторинг UserService» |
+| **PERFORMANCE** | finder → analyst → optimizer → reviewer → tester | «оптимизируй запросы к БД» |
 | **INFRASTRUCTURE** | finder → devops → (reviewer → tester) | «настрой CI/CD», «докеризируй проект» |
 | **DOCUMENTATION** | finder → documenter | «напиши README», «документируй API» |
-| **FEATURE** | finder → analyst → architect → planner → coder → reviewer → **integration** → tester → documenter | «сделай импорт из CSV», «добавь REST API» |
+| **FEATURE** | finder → analyst → architect → planner → coder → reviewer → **integration** → tester → documenter | «сделай импорт из CSV» |
 
 ---
 
@@ -131,16 +153,13 @@ systemctl --user restart hermes-gateway
 **`~/.hermes/plugins/pipeline/config.yaml`**
 
 Три уровня приоритета (высший побеждает):
-
 ```
 1. agents.<agent_id>     — точечная настройка конкретного агента
 2. defaults.<тип>        — групповая настройка по типу провайдера
-3. BUILTIN_MODEL_MAP     — хардкод в models.py (см. таблицу выше)
+3. BUILTIN_MODEL_MAP     — хардкод в models.py
 ```
 
-Если секция `models` отсутствует или файла нет — используется хардкод.
-
-**Hot-reload:** конфиг перечитывается при каждом вызове инструмента (по mtime с наносекундной точностью). Рестарт не нужен — просто измени config.yaml и следующий вызов подхватит новые настройки.
+**Hot-reload:** конфиг перечитывается при каждом вызове инструмента (по mtime с наносекундной точностью). Рестарт не нужен.
 
 ### Реальный конфиг по умолчанию
 
@@ -150,93 +169,100 @@ pipeline:
   models:
     defaults:
       delegate:
-        provider: direct            # все Pro → Flash
-        model: deepseek-v4-flash
-      delegate_free:
-        provider: direct            # researcher → Flash
+        provider: direct
         model: deepseek-v4-flash
     agents:
       security:
-        provider: delegate          # только security на Pro
+        provider: delegate
         model: deepseek-v4-pro
-```
 
-### Примеры сценариев
-
-**Все Pro перевести во Flash (ноль дорогих вызовов):**
-
-```yaml
-pipeline:
-  models:
-    defaults:
-      delegate:
-        provider: direct
-        model: deepseek-v4-flash
-    agents: {}                      # убрать security override
-```
-
-**Coder на самую мощную модель:**
-
-```yaml
-pipeline:
-  models:
+  ensemble:
+    enabled: true
     agents:
       coder:
-        provider: delegate
-        model: openrouter/anthropic/claude-sonnet-4
+        enabled: true
+        n: 5
+        judge_mode: llm
+
+  retro:
+    enabled: true
+    dir: ~/.hermes/plugins/pipeline/retro
+    max_files: 100
+    auto_analyze: false
 ```
 
 ---
 
-## SQLite Kanban (v3.3.0 — @V0rt)
+## Retrospective — логирование прогонов
 
-Начиная с v3.3.0, kanban.py работает **напрямую с SQLite**, без CLI.
-Все 11 функций (create_parent, create_child, comment, block_task, list_tasks,
-show_task, scan_board, promote, complete, claim, assign) пишут/читают kanban.db
-через _sqlite_select / _sqlite_update. Это исключает молчаливые ошибки,
-которые возвращала _kanban().
+Плагин пишет структурированный JSONL-лог каждого прогона пайплайна в директорию `~/.hermes/plugins/pipeline/retro/`.
 
-Подробный аудит 20 багов: [`ARCHITECTURE-FIXES.md`](ARCHITECTURE-FIXES.md)
+### Для чего это нужно
 
----
+- **Диагностика** — если агент повёл себя неожиданно, ретро-лог покажет что именно произошло
+- **Анализ сходимости** — как convergence принимал решения, какие были findings
+- **Детерминизм ensemble** — какие температуры генерировались, какой кандидат победил
+- **Performance** — сколько времени занял каждый агент, какой round
+- **Саморефлексия** — плагин может анализировать собственные логи
 
-## Retrospective (v3.2.0)
+### Какие события логируются
 
-Плагин пишет структурированный JSONL-лог работы для последующего анализа.
+| Событие | Описание |
+|---------|----------|
+| `pipeline_start` | Категория, список агентов |
+| `model_routing` | Какая модель назначена агенту |
+| `agent_start` | Запуск агента, модель, directive |
+| `agent_done` | Завершение агента |
+| `ensemble_gen` | Генерация N кандидатов, температуры |
+| `ensemble_judge` | Выбор победителя, mode |
+| `convergence` | Решение: converged/continue/stuck/maxed_out |
+| `findings` | Сводка: P0/P1/P2/fixed |
+| `findings_detail` | Детали каждого finding |
+| `error` | Ошибки с traceback |
+| `pipeline_clear` | Завершение пайплайна |
 
-**Где хранится:** `~/.hermes/plugins/pipeline/retro/pipe_<id>.jsonl`
+### Как смотреть
 
-**События (на каждый handler):**
-- `pipeline_start` — категория, список агентов
-- `agent_start` — агент, модель, размер контекста
-- `model_routing` — effective/configured модель
-- `convergence` — round, decision, P0/P1/P2 counts, fingerprint
-- `findings` — сводка: сколько P0/P1/P2, сколько fixed
-- `ensemble_gen/judge` — N, temperatures, winner, mode
-- `error` — ошибки с описанием
-- `pipeline_clear` — завершение
+```bash
+# Все лог-файлы
+ls ~/.hermes/plugins/pipeline/retro/
 
-Конфиг ретроспективы:
+# Содержимое конкретного прогона
+cat ~/.hermes/plugins/pipeline/retro/pipe_t_<id>.jsonl
+
+# Сводка: сколько событий каждого типа
+cat ~/.hermes/plugins/pipeline/retro/*.jsonl | python3 -c "
+import sys,json
+cats={}
+for l in sys.stdin:
+    e=json.loads(l)
+    cats[e['event']]=cats.get(e['event'],0)+1
+for k,v in sorted(cats.items()):
+    print(f'{k}: {v}')
+"
+```
+
+### Конфиг
 
 ```yaml
 pipeline:
   retro:
-    enabled: true                  # вкл/выкл
+    enabled: true          # вкл/выкл
     dir: ~/.hermes/plugins/pipeline/retro
-    max_files: 100                 # автоочистка
-    auto_analyze: false            # выключен — копим данные
+    max_files: 100         # автоочистка старых логов
+    auto_analyze: false    # автоанализ выключен — копим данные
 ```
 
 ---
 
-## Конвергенция (v3.2.0)
+## Конвергенция
 
 Оценка сходимости — детерминированная, без LLM.
 
-**Что нового в v3.2.0:**
 - ✅ Фильтр `status: fixed` — findings со статусом `fixed`, `accepted`, `none` не считаются
 - ✅ Fingerprint только по открытым P0/P1
-- ✅ Максимум 3 раунда (P0/P1 → continue → fix → continue → fix → converged/maxed_out)
+- ✅ Максимум 3 раунда
+- ✅ `reopen()` — переоткрытие done-задач для convergence-циклов (v3.3.0)
 
 ---
 
@@ -257,15 +283,19 @@ pipeline:
       disable_on_round_gt: 1
 ```
 
+- **5 кандидатов** (T=0.3, 0.5, 0.7, 0.9, 1.1)
+- **Judge** выбирает: `candidate_3` (T=0.7) — самый стабильный (подтверждено 3 прогонами)
+- На round ≥ 2 ensemble автоматически отключается (экономия токенов)
+
 ---
 
 ## Kanban-интеграция
 
-Пайплайн автоматически ведёт доску `pipeline`:
+Пайплайн автоматически ведёт доску `pipeline`, используя **прямой SQLite** (v3.3.0):
 
 | Событие | Что на доске |
 |---------|--------------|
-| Старт | Создаётся задача «🔷 Пайплайн: …» с дочерними тасками для каждого агента |
+| Старт | Создаётся задача с дочерними тасками для каждого агента |
 | Агент завершён | Статус `done`, промоутится следующий |
 | Конвергенция | Комментарий: «Round N: P0=x, P1=y, P2=z» |
 | Converged | Задача → complete |
@@ -273,11 +303,9 @@ pipeline:
 | Очистка | Задача → complete (Cancelled) |
 
 Статус можно смотреть:
-
 ```bash
 hermes kanban ls          # все задачи
 hermes kanban show <id>   # детали
-hermes kanban stats       # статистика доски
 ```
 
 После рестарта агента (`/new`) — `pipeline_resume()` восстанавливает состояние с доски.
@@ -303,6 +331,18 @@ hermes kanban stats       # статистика доски
 
 ---
 
+## Контрибуторы
+
+См. [`CONTRIBUTORS.md`](CONTRIBUTORS.md)
+
+---
+
+## Changelog
+
+См. [`CHANGELOG.md`](CHANGELOG.md)
+
+---
+
 ## Обновление
 
 ```bash
@@ -317,8 +357,9 @@ git pull
 
 ## Требования
 
-- **Hermes Agent** — любая версия с поддержкой `register_tool`, `delegate_task` и канального плагина
+- **Hermes Agent** — любая версия с поддержкой плагинов и Kanban
 - **Python** ≥ 3.11
+- **sqlite3** — встроенный модуль Python (не требует установки)
 - **PyYAML** — для чтения конфига
 
 ---

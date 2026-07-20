@@ -8,13 +8,15 @@
 
 ## Key Design Decisions
 
-1. **Плагин, не MCP-сервер** — работает in-process с доступом к Hermes API и Kanban CLI.
+1. **Плагин, не MCP-сервер** — работает in-process с доступом к Hermes API и прямому SQLite (без CLI).
 2. **Нет команд** — пайплайн запускается по анализу сообщения агентом.
-3. **Kanban.db = SSOT** — никакого `state.json`. Состояние живёт на доске `pipeline` в виде дерева задач.
+3. **Kanban.db = SSOT** — никакого `state.json`. Состояние живёт на доске `pipeline` в виде дерева задач. **v3.3.0: прямой SQLite** больше не через `hermes kanban` CLI.
 4. **Три уровня моделей** — Flash (напрямую), Pro (через delegation), OpenRouter free.
 5. **Я — оркестратор** — плагин даёт инструменты, я шагаю по таскам на доске.
 6. **Selective context** — каждый агент получает только те секции контекста, которые ему нужны (AGENT_CONTEXT_FIELDS).
 7. **Best-of-N Ensemble** — для @coder N=5 независимых генераций с разной temperature, judge выбирает лучшее.
+8. **SQLite Kanban (v3.3.0)** — все операции с доской напрямую через sqlite3, без CLI-прослойки.
+9. **Retrospective** — JSONL-лог каждого прогона для анализа и отладки.
 
 ## Architecture
 

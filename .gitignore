@@ -6,3 +6,15 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.egg-info/
+
+# Audit snapshots (local only)
+*audit_snapshot_*.json
+
+# Code review artifacts
+code_review_results.json
+
+# Ruff cache
+.ruff_cache/
+
+# OS
+.DS_Store

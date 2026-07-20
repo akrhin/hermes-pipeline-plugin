@@ -156,28 +156,22 @@ pipeline:
 
 | File | Purpose |
 |------|---------|
-<<<<<<< HEAD
-| `plugin.yaml` | Manifest (v3.2.0, 12 tools) |
+| `plugin.yaml` | Manifest (v3.3.0, 12 tools) |
 | `__init__.py` | Plugin core: 12 tools + register + hot-reload MODEL_MAP + default prompt |
 | `models.py` | v3.2.0 Model config loader: YAML → merge → MODEL_MAP |
-| `kanban.py` | Kanban API (create_tree, advance, converge, scan_board, resume) + ensemble |
-| `retro.py` | v3.2.0 Retrospective logging + auto-analysis |
+| `kanban.py` | **Kanban API — прямой SQLite** (create_tree, advance, converge, scan_board, resume, reopen) + ensemble |
+| `retro.py` | v3.2.0 Retrospective logging + auto-analysis — JSONL-лог каждого прогона |
 | `ensemble.py` | Best-of-N ensemble: candidate generation + LLM/deterministic judge |
-| `classify.py` | Request classification → 8 categories |
-| `agents/*.prompt` | Prompt templates for 16 agents |
-| `config.yaml` | Pipeline config: models, ensemble, retro |
-| `plugin.yaml` | Manifest (v3.3.0, 12 tools + SQLite kanban) |
-| `__init__.py` | Plugin core: 12 tools + register + hot-reload MODEL_MAP + default prompt |
-| `models.py` | v3.2.0 Model config loader: YAML → merge → MODEL_MAP |
-| `kanban.py` | Kanban API — **direct SQLite** (create_tree, advance, converge, scan_board, resume, reopen) + ensemble |
-| `ensemble.py` | Best-of-N ensemble: candidate generation + LLM/deterministic judge |
-| `classify.py` | Request classification → 8 categories |
+| `classify.py` | Request classification → 8 категорий |
 | `agents/*.prompt` | Prompt templates for 16 agents |
 | `AGENTS.md` | This file (v3.3.0) |
-| `ARCHITECTURE.md` | Full architecture doc (v3.2) |
-| `config.yaml` | Pipeline config: models, ensemble, retro |
+| `ARCHITECTURE.md` | Full architecture doc (v3.3) |
 | `ARCHITECTURE-FIXES.md` | Code review report — 20 bugs found and resolved |
+| `config.yaml` | Pipeline config: models, ensemble, retro |
+| `CONTRIBUTORS.md` | Список контрибуторов |
+| `CHANGELOG.md` | История изменений |
 | `skill/pipeline-orchestrator/` | Orchestrator skill |
+
 ## v1.x → v2.0 Changes
 
 | Old | New (Variant C) |
@@ -388,5 +382,3 @@ sqlite3 ~/.hermes/kanban/boards/pipeline/kanban.db \
 - Added: Agent Skill Creation Guide
 - Fixed: Role-specific task descriptions (AGENT_DESCRIPTIONS заменён на request[:60])
 - Fixed: Ensemble subtask titles unique (было request[:40], стало "candidate T=X")
-
->>>>>>> pr-v0rt
