@@ -695,8 +695,19 @@ def handle_run_agent(args, **kwargs):
             tokens_prompt=tokens_prompt,
         )
 
+        # 5. Build prompt for ALL agents (Flash + Pro)
+        ctx = context_override if context_override is not None else state.get("context", {})
+        request = state.get("request", "")
+        category = state.get("category", "")
+
+        # 5a. Build prompt via shared function (selective context, no full_context)
+        prompt_result = _build_agent_prompt(agent_id, ctx, request, category)
+        if "error" in prompt_result:
+            return json.dumps(prompt_result)
+        prompt = prompt_result["prompt"]
+
         if directive == "direct":
-            # Flash agents: return minimal package without prompt file
+            # Flash agents: return package with prompt
             return json.dumps(
                 {
                     "agent_id": agent_id,
@@ -704,23 +715,12 @@ def handle_run_agent(args, **kwargs):
                     "tool_hint": tool_hint,
                     "provider": provider,
                     "model": model,
-                    "prompt": None,
+                    "prompt": prompt,
                     "call_args": None,
                     "state": state,
                 },
                 ensure_ascii=False,
             )
-
-        # 5. Resolve context (delegation agents only)
-        ctx = context_override if context_override is not None else state.get("context", {})
-        request = state.get("request", "")
-        category = state.get("category", "")
-
-        # 5. Build prompt via shared function (selective context, no full_context)
-        prompt_result = _build_agent_prompt(agent_id, ctx, request, category)
-        if "error" in prompt_result:
-            return json.dumps(prompt_result)
-        prompt = prompt_result["prompt"]
 
         # 6. Build call_args for delegation agents
         call_args = {

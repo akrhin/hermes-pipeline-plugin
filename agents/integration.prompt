@@ -7,8 +7,7 @@
 Оригинальный запрос: {request}
 Категория: {category}
 
-### Full context
-### Integration context
+### Implementation context
 {implementation_context}
 
 ### Documentation context

@@ -293,6 +293,19 @@ def unblock(task_id: str) -> bool:
     return promote(task_id, force=True)
 
 
+def reopen(task_id: str) -> bool:
+    """Re-open a done task for a new convergence round.
+
+    Transitions done → todo and resets assignee so the orchestrator
+    can pick it up again. Returns True if succeeded.
+    """
+    return _sqlite_update(
+        "UPDATE tasks SET status='todo', assignee=null, completed_at=null"
+        " WHERE id=? AND status='done'",
+        (task_id,),
+    )
+
+
 def list_tasks(status: str = "", include_archived: bool = False) -> list[dict]:
     """List tasks via direct SQLite, optionally filtered by status."""
     sql = "SELECT id, title, body, assignee, status, priority, created_by, created_at," \
@@ -685,12 +698,15 @@ def on_convergence(state: dict, convergence_result: dict) -> None:
             "p2": p2,
         }
         complete(parent_id, result_summary=f"Maxed out: {reason}", metadata=metadata)
+        # Close all child tasks too (Bug #11: was missing)
+        for agent, tid in task_ids.items():
+            complete(tid, result_summary=f"⛔ @{agent} maxed out")
 
     elif decision == "continue":
-        # Unblock @coder for next round
+        # Reopen @coder for next round (Bug #1: converge('continue') не перезапускал coder)
         coder_id = task_ids.get("coder")
         if coder_id:
-            unblock(coder_id)
+            reopen(coder_id)  # done → todo, resets assignee
             comment(
                 parent_id, f"🔄 Раунд {round_num}: @coder перезапущен ({len(findings)} findings)"
             )
@@ -731,9 +747,10 @@ def _cleanup_stale_pipelines(max_age_hours: int = 24) -> int:
     archived = 0
     for row in stale:
         tid = row["id"]
-        # Check that it really has children (a pipeline parent)
+        # Check that it really has children (a pipeline parent).
+        # Bug #15: was len(children) < 2, which skipped 1-child pipelines
         children = _sqlite_select("SELECT child_id FROM task_links WHERE parent_id=?", (tid,))
-        if len(children) < 2:
+        if len(children) < 1:
             continue
         # Archive all children first
         for c in children:
@@ -760,13 +777,15 @@ def scan_board() -> dict | None:
     if cleaned:
         logger.info("cleaned up %d stale pipeline(s) before scan", cleaned)
 
-    # Find parents with children — pipeline parents in any active status
+    # Find parents with children — pipeline parents in any active status.
+    # LIMIT 1: process only the most recent (Bug #20: старые неактивные пайплайны не мешают)
     parent_rows = _sqlite_select(
         "SELECT t.id, t.title, t.body, t.status, t.created_at "
         "FROM tasks t "
         "WHERE EXISTS (SELECT 1 FROM task_links l WHERE l.parent_id=t.id) "
         "AND t.status IN ('running','ready','todo','blocked') "
-        "ORDER BY t.created_at DESC",
+        "ORDER BY t.created_at DESC "
+        "LIMIT 1",
     )
 
     if not parent_rows:

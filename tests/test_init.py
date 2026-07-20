@@ -334,7 +334,8 @@ def test_run_agent_direct_for_flash():
     assert result["directive"] == "direct"
     assert result["tool_hint"] is None
     assert result["call_args"] is None
-    assert result["prompt"] is None
+    assert result["prompt"] is not None
+    assert len(result["prompt"]) > 50
 
 
 def test_run_agent_delegate_free():
