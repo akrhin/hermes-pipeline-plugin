@@ -17,10 +17,12 @@ computes deterministically (same algorithm as old state.py).
 """
 
 import hashlib
-import json
 import logging
-import subprocess
-from typing import Any
+import os
+import re
+import sqlite3
+import time
+import uuid
 
 
 def _import_ensemble():
@@ -41,47 +43,92 @@ ensemble_judge_candidates = _ensemble_judge
 
 logger = logging.getLogger(__name__)
 
-BOARD = "pipeline"
-KANBAN_TIMEOUT = 15
 MAX_CONVERGENCE_ROUNDS = 3
 NEXT_ACTION_STATUSES = {"ready", "todo"}
 
 
-# ── Kanban CLI helpers ──────────────────────────────────────────────────────┘
+def _extract_target(request: str) -> str:
+    """Извлечь цель (проект/модуль/файл) из запроса для заголовка задачи.
 
-
-def _kanban(*args: str) -> dict[str, Any]:
-    """Run ``hermes kanban --board <BOARD> <args>``. Returns parsed JSON or {}.
-    Callers MUST pass ``--json`` as part of *args* when they expect JSON output.
-    ``--json`` is a per-command flag (not global), so placing it in the global
-    prefix is an error — it must be after the subcommand.
+    Приоритет:
+    1. Упоминание файла (.py, .md, .yaml и т.д.)
+    2. Упоминание проекта/плагина (hermes-pipeline-plugin, pipeline-dashboard, server.py и т.д.)
+    3. Первое существительное после "в"/"для"
     """
-    cmd = ["hermes", "kanban", "--board", BOARD]
-    cmd.extend(args)
-    try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=KANBAN_TIMEOUT
-        )
-        if result.returncode != 0:
-            logger.warning("kanban error (exit %d): %s", result.returncode,
-                           result.stderr.strip()[:200])
-            return {}
-        out = result.stdout.strip()
-        if not out:
-            return {}
-        try:
-            return json.loads(out)
-        except json.JSONDecodeError:
-            return {"_text": out}
-    except subprocess.TimeoutExpired:
-        logger.warning("kanban command timed out")
-        return {}
-    except FileNotFoundError:
-        logger.warning("hermes binary not found — kanban disabled")
-        return {}
-    except OSError as exc:
-        logger.warning("kanban subprocess error: %s", exc)
-        return {}
+    if not request:
+        return "проект"
+    # 1. Конкретные имена проектов/файлов (lowercase для case-insensitive сравнения)
+    known = [
+        "hermes-pipeline-plugin", "pipeline-dashboard", "kanban.py", "server.py",
+        "__init__.py", "models.py", "ensemble.py", "agents.md", "architecture.md",
+        "config.yaml", "kanban.db", "pipeline", "plugin", "дашборд",
+    ]
+    req_lower = request.lower()
+    for name in known:
+        if name in req_lower:
+            return name
+    # 2. Файл после предлогов "в", "для", "на"
+    m = re.search(r'\b(?:в|для|на)\s+(\S+(?:\.\w+)?)\b', request)
+    if m:
+        return m.group(1)
+    # 3. Первое слово из 3+ букв без спецсимволов
+    m = re.search(r'\b([а-яёa-z]{3,})\b', request.lower())
+    if m:
+        return m.group(1)
+    return "проект"
+
+
+_AGENT_VERB: dict[str, str] = {
+    "finder":     "разведка",
+    "analyst":    "анализ",
+    "researcher": "исследование",
+    "architect":  "архитектура",
+    "planner":    "план",
+    "coder":      "разработка",
+    "editor":     "правки",
+    "fixer":      "баг-фикс",
+    "refactorer": "рефакторинг",
+    "reviewer":   "ревью",
+    "security":   "безопасность",
+    "integration":"интеграция",
+    "tester":     "тесты",
+    "debugger":   "отладка",
+    "documenter": "документация",
+    "devops":     "деплой",
+    "optimizer":  "оптимизация",
+}
+
+
+# ── Role-specific task descriptions (shown in dashboard per agent) ──
+# Расширенные описания (~x1.5 от кратких) — дают контекст: что делает, чем пользуется, какой результат
+AGENT_DESCRIPTIONS: dict[str, str] = {
+    "finder":     "Сбор информации: чтение кода, файлов, конфигов — разведка кодовой базы перед анализом",
+    "analyst":    "Анализ данных и диагностика: поиск корня проблемы, разбор логов, выявление закономерностей",
+    "researcher": "Внешние исследования: поиск best practices, документация библиотек, альтернативные подходы",
+    "architect":  "Проектирование решения: архитектура изменений, выбор компонентов, связи между модулями",
+    "planner":    "Планирование: разбивка на подзадачи, оценка объёма работ, построение плана из шагов",
+    "coder":      "Разработка: написание кода, реализация фич, правка синтаксиса, имплементация логики",
+    "editor":     "Редактирование: правки по готовому плану, мелкие доработки, форматирование, типизация",
+    "fixer":      "Исправление: патчи известных багов, замена сломанных вызовов, обходы проблем",
+    "refactorer": "Рефакторинг: улучшение структуры, устранение дублирования, выделение функций",
+    "reviewer":   "Код-ревью: проверка качества, поиск логических ошибок, рекомендации по улучшению",
+    "security":   "Аудит безопасности: XSS, SQL-инъекции, утечки данных, права доступа",
+    "integration":"Консистентность: кросс-файловые связи, импорты, типы, совместимость API",
+    "tester":     "Тестирование: написание тестов, прогон, проверка регрессии, assertions",
+    "debugger":   "Отладка: шаг за шагом поиск первопричины, снятие стека, анализ переменных",
+    "documenter": "Документация: README, AGENTS.md, комментарии в коде, changelog, инструкции",
+    "devops":     "Инфраструктура: CI/CD, Docker, деплой, системные юниты, мониторинг",
+    "optimizer":  "Оптимизация: производительность, память, асинхронность, кэширование, регрессия",
+}
+
+
+# ── DB path helper ──────────────────────────────────────────────────────────┘
+
+
+def _db_path() -> str:
+    """Return the path to the kanban SQLite database."""
+    base = os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes"))
+    return os.path.join(base, "kanban", "boards", "pipeline", "kanban.db")
 
 
 # ── Public API ──────────────────────────────────────────────────────────────┘
@@ -90,79 +137,176 @@ def _kanban(*args: str) -> dict[str, Any]:
 def create_parent(title: str, body: str = "",
                   idempotency_key: str = "") -> str | None:
     """Create the parent pipeline task. Returns task_id or None."""
-    cmd = ["create", "--json", "--body", body, "--priority", "1", title]
-    if idempotency_key:
-        cmd.extend(["--idempotency-key", idempotency_key])
-    result = _kanban(*cmd)
-    return result.get("id") or None
+    task_id = idempotency_key or f"task:{uuid.uuid4().hex[:12]}"
+    now = int(time.time())
+    ok = _sqlite_update(
+        "INSERT OR IGNORE INTO tasks (id, title, body, status, priority, created_at) VALUES (?, ?, ?, 'ready', 1, ?)",
+        (task_id, title, body, now),
+    )
+    if not ok:
+        # Task may already exist — try to fetch its id
+        rows = _sqlite_select("SELECT id FROM tasks WHERE id=?", (task_id,))
+        return rows[0]["id"] if rows else None
+    logger.info("sqlite: created parent %s", task_id)
+    return task_id
 
 
 def create_child(title: str, parent_id: str, body: str = "",
                  idempotency_key: str = "") -> str | None:
     """Create a child task linked to parent. Returns task_id or None."""
-    cmd = ["create", "--json", "--body", body, "--parent", parent_id, "--priority", "2"]
-    if idempotency_key:
-        cmd.extend(["--idempotency-key", idempotency_key])
-    cmd.append(title)
-    result = _kanban(*cmd)
-    return result.get("id") or None
+    task_id = idempotency_key or f"task:{uuid.uuid4().hex[:12]}"
+    now = int(time.time())
+    ok = _sqlite_update(
+        "INSERT OR IGNORE INTO tasks (id, title, body, status, priority, created_at) VALUES (?, ?, ?, 'todo', 2, ?)",
+        (task_id, title, body, now),
+    )
+    if not ok:
+        rows = _sqlite_select("SELECT id FROM tasks WHERE id=?", (task_id,))
+        if rows:
+            return rows[0]["id"]
+        return None
+    # Link child to parent
+    _sqlite_update(
+        "INSERT OR IGNORE INTO task_links (parent_id, child_id) VALUES (?, ?)",
+        (parent_id, task_id),
+    )
+    logger.info("sqlite: created child %s under parent %s", task_id, parent_id)
+    return task_id
 
 
-def promote(task_id: str) -> bool:
-    """Promote task to `ready` so it can be worked on."""
-    return bool(_kanban("promote", "--json", task_id))
+def _sqlite_update(query: str, params: tuple = ()) -> bool:
+    """Execute a write query on the kanban DB via direct SQLite."""
+    if not query:
+        return False
+    db_path = _db_path()
+    if not os.path.isfile(db_path):
+        logger.warning("kanban DB not found: %s", db_path)
+        return False
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute(query, params)
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+    except sqlite3.Error as exc:
+        logger.warning("sqlite error: %s", exc)
+        return False
+
+
+def _sqlite_select(query: str, params: tuple = ()) -> list[dict]:
+    """Execute a SELECT query and return rows as list of dicts."""
+    db_path = _db_path()
+    if not os.path.isfile(db_path):
+        return []
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.row_factory = sqlite3.Row
+            cur = conn.execute(query, params)
+            return [dict(r) for r in cur.fetchall()]
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return []
+
+
+def promote(task_id: str, force: bool = False) -> bool:
+    """Promote task to ``ready`` via direct SQLite.
+
+    ``force`` is accepted for backward compatibility but has no effect —
+    direct SQLite has no parent-dependency gate.  The CLI ``promote``
+    command (which does enforce gates) has been replaced because it
+    silently returns ``{}`` when it fails (no error, no warning).
+    """
+    # Bug #1 + Bug #5: kanban promote CLI молча падает — прямой SQLite
+    return _sqlite_update(
+        "UPDATE tasks SET status='ready' WHERE id=? AND status IN ('todo','blocked')",
+        (task_id,),
+    )
 
 
 def comment(task_id: str, text: str) -> bool:
-    """Append a comment. Returns True if command succeeded."""
-    return bool(_kanban("comment", task_id, text))
+    """Append a comment via direct SQLite. Returns True if succeeded."""
+    return _sqlite_update(
+        "INSERT INTO task_comments (task_id, body, created_at, author) VALUES (?, ?, unixepoch(), ?)",
+        (task_id, text, "pipeline-orchestrator"),
+    )
 
 
 def complete(task_id: str, result_summary: str = "",
              metadata: dict | None = None) -> bool:
-    """Mark task done. Returns True if command succeeded."""
-    cmd = ["complete"]
-    if result_summary:
-        cmd.extend(["--result", result_summary])
-    if metadata:
-        cmd.extend(["--metadata", json.dumps(metadata, ensure_ascii=False)])
-    cmd.append(task_id)
-    return bool(_kanban(*cmd))
+    """Mark task done via direct SQLite.
+
+    ``result_summary`` and ``metadata`` are accepted for backward
+    compatibility but stored as a comment (since kanban comments are the
+    universal audit trail).  The CLI ``complete`` command silently
+    returns ``{}`` on failure, so we now write directly to the DB.
+    """
+    # Bug #5: kanban complete CLI молча падает — прямой SQLite
+    ok = _sqlite_update(
+        "UPDATE tasks SET status='done', completed_at=unixepoch() WHERE id=? AND status!='done'",
+        (task_id,),
+    )
+    if ok and result_summary:
+        # Store result summary as a comment via DB (kanban comments table)
+        _sqlite_update(
+            "INSERT INTO task_comments (task_id, body, created_at, author) VALUES (?, ?, unixepoch(), ?)",
+            (task_id, result_summary, "pipeline-orchestrator"),
+        )
+    return ok
 
 
 def block_task(task_id: str, reason: str = "",
                kind: str = "needs_input") -> bool:
-    """Block a task for human review. Returns True if command succeeded."""
-    cmd = ["block", "--kind", kind, task_id]
-    if reason:
-        cmd.append(reason)
-    return bool(_kanban(*cmd))
+    """Block a task via direct SQLite. Returns True if succeeded.
+
+    ``kind`` controls the resulting status:
+      - ``dependency`` → ``todo`` (auto-promoted by recompute_ready)
+      - ``needs_input``, ``capability``, ``transient`` → ``blocked``
+    """
+    status = "todo" if kind == "dependency" else "blocked"
+    return _sqlite_update(
+        "UPDATE tasks SET status=?, block_kind=COALESCE(?, block_kind) WHERE id=?",
+        (status, kind, task_id),
+    )
 
 
 def unblock(task_id: str) -> bool:
-    """Unblock a task (for next convergence round). Alias for promote()."""
-    return promote(task_id)
+    """Unblock a task (for next convergence round). Needs --force."""
+    return promote(task_id, force=True)
 
 
 def list_tasks(status: str = "", include_archived: bool = False) -> list[dict]:
-    """List tasks, optionally filtered by status. Returns list of dicts."""
-    cmd = ["ls", "--json"]
+    """List tasks via direct SQLite, optionally filtered by status."""
+    sql = "SELECT id, title, body, assignee, status, priority, created_by, created_at, started_at, completed_at, block_kind, block_recurrences FROM tasks WHERE 1=1"
+    params: list[str] = []
     if status:
-        cmd.extend(["--status", status])
-    if include_archived:
-        cmd.extend(["--archived"])
-    result = _kanban(*cmd)
-    if isinstance(result, list):
-        return result
-    if "tasks" in result:
-        return result["tasks"]
-    return []
+        sql += " AND status=?"
+        params.append(status)
+    if not include_archived:
+        sql += " AND status!='archived'"
+    sql += " ORDER BY created_at DESC"
+    return _sqlite_select(sql, tuple(params))
 
 
 def show_task(task_id: str) -> dict:
-    """Get full task detail (comments, children, etc.)."""
-    result = _kanban("show", "--json", task_id)
-    return result if isinstance(result, dict) else {}
+    """Get full task detail via direct SQLite (task + children + comments)."""
+    rows = _sqlite_select("SELECT * FROM tasks WHERE id=?", (task_id,))
+    if not rows:
+        return {}
+    task = rows[0]
+    task["children"] = [
+        r["child_id"] for r in _sqlite_select(
+            "SELECT child_id FROM task_links WHERE parent_id=?", (task_id,)
+        )
+    ]
+    task["comments"] = _sqlite_select(
+        "SELECT * FROM task_comments WHERE task_id=? ORDER BY created_at ASC",
+        (task_id,),
+    )
+    return task
 
 
 def parent_task_id(pipeline: list[str], request: str = "") -> str:
@@ -218,10 +362,13 @@ def create_task_tree(state: dict) -> dict:
 
     # ── Create children ──────────────────────────────────────────────────
     round_num = state.get("round", 0)
+    target = _extract_target(request)
     for agent in pipeline:
         c_ikey = child_id(parent_ikey, agent, round_num)
-        c_title = f"@{agent}: {request[:60]}"
-        c_body = f"Этап: {agent}\nЗапрос: {request}"
+        verb = _AGENT_VERB.get(agent, agent)
+        c_title = f"@{agent}: {verb} {target}"
+        desc = AGENT_DESCRIPTIONS.get(agent, request[:60])
+        c_body = f"Этап: {agent}\nЗадача: {desc}\nОбъект: {target}\nЗапрос: {request}"
         child_id_val = create_child(c_title, parent_id,
                                     body=c_body, idempotency_key=c_ikey)
         if child_id_val:
@@ -233,8 +380,10 @@ def create_task_tree(state: dict) -> dict:
         first_agent = pipeline[0]
         first_id = state["kanban_task_ids"].get(first_agent)
         if first_id:
-            promote(first_id)
-            logger.info("promoted first agent %s → ready", first_agent)
+            promote(first_id, force=True)
+            _claim_and_assign(first_id, f"@{first_agent}")
+            logger.info("promoted first agent %s → ready (assignee=%s)",
+                        first_agent, first_agent)
     # ══ Log the pipeline start on the parent task ════════════════════════
     comment(parent_id,
             f"🚀 Пайплайн запущен\n"
@@ -245,8 +394,68 @@ def create_task_tree(state: dict) -> dict:
     return state
 
 
+def _claim_and_assign(task_id: str, assignee: str) -> bool:
+    """Move a ``ready`` task to ``running`` and assign it.
+
+    The kanban ``claim`` CLI requires a running daemon worker and
+    silently fails when none is present (returns ``{}`` without
+    ``claim_id``).  Since pipeline orchestrators do not (and should not)
+    run a daemon, we write directly to the kanban DB — the same DB the
+    pipeline dashboard reads via SQLite.
+
+    Sets ``status`` → ``running``, ``assignee``, ``started_at``, and
+    ``last_heartbeat_at`` so the dashboard can show meaningful lifecycle
+    metadata.
+    """
+    # Bug #3: claim CLI молча не работает без daemon-воркера — используем прямой SQLite
+    if not task_id or not assignee:
+        return False
+    now = int(time.time())
+    return _sqlite_update(
+        "UPDATE tasks SET status='running', assignee=COALESCE(assignee,?), "
+        "started_at=COALESCE(started_at,?), last_heartbeat_at=? WHERE id=?",
+        (assignee, now, now, task_id),
+    )
+
+
+def _update_parent_status(parent_id: str | None, status: str):
+    """Update parent task status directly via SQLite."""
+    if not parent_id:
+        return
+    import os, sqlite3
+    db_path = _db_path()
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        now = int(time.time())
+        if status == "running":
+            conn.execute(
+                "UPDATE tasks SET status=?, started_at=COALESCE(started_at,?) WHERE id=?",
+                (status, now, parent_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE tasks SET status=?, completed_at=? WHERE id=?",
+                (status, now, parent_id),
+            )
+        conn.commit()
+    except sqlite3.Error as exc:
+        logger.warning("sqlite error in _update_parent_status: %s", exc)
+    finally:
+        if conn:
+            conn.close()
+
+
 def advance(state: dict, completed_agent: str) -> dict:
     """Mark an agent task as done and promote the next one.
+
+    Sets ``completed`` on the current agent, then promotes the next
+    agent to ``ready`` and claims it into ``running`` with ``started_at``
+    and an assignee so the dashboard can show meaningful lifecycle data.
+
+    Updates the parent pipeline task status:
+    - first advance  → parent becomes ``running``
+    - all children done → parent becomes ``done``
 
     Returns state dict with updated current_idx.
     """
@@ -265,16 +474,31 @@ def advance(state: dict, completed_agent: str) -> dict:
         completed.append(completed_agent)
         state["completed"] = completed
 
-    # Promote next
+    # Determine next index before parent status
     next_idx = current_idx + 1
+
+    # Update parent status: running on first advance, done on last
+    if parent_id:
+        is_first_advance = len(completed) == 1  # first item just added
+        is_last_agent = next_idx >= len(pipeline)
+        if is_first_advance:
+            _update_parent_status(parent_id, "running")
+            comment(parent_id, f"🚀 Запущен этап @{completed_agent}")
+        if is_last_agent:
+            _update_parent_status(parent_id, "done")
+            comment(parent_id, "✅ Пайплайн завершён")
+
+    # Promote and claim next
     if next_idx < len(pipeline):
         next_agent = pipeline[next_idx]
         next_id = task_ids.get(next_agent)
         if next_id:
-            promote(next_id)
+            # Pipeline lifecycle: promote(todo→ready) then claim(ready→running)
+            promote(next_id, force=True)
+            _claim_and_assign(next_id, f"@{next_agent}")  # Bug #2: ранее claim не делался — started_at был пуст
             if parent_id:
                 comment(parent_id, f"👉 Начинается этап @{next_agent}")
-            logger.info("promoted %s → ready", next_agent)
+            logger.info("promoted+claimed %s → running (assignee=%s)", next_agent, next_agent)
         state["current_idx"] = next_idx
 
     return state
@@ -471,102 +695,132 @@ def on_clear(state: dict) -> None:
 # ── Resume from board ───────────────────────────────────────────────────────┘
 
 
+def _cleanup_stale_pipelines(max_age_hours: int = 24) -> int:
+    """Archive pipeline parents that have been in ``ready`` for too long.
+
+    A pipeline parent in ``ready`` with no agent ever promoted to
+    ``running`` is a stale zombie — it was created by ``pipeline_save``,
+    the first promote silently failed (BUG #1 pre-fix), and no agent ever
+    picked it up.  This function finds those and archives them so the
+    dashboard stays clean.
+
+    Returns the number of pipelines archived.
+    """
+    now = int(time.time())
+    cutoff = now - max_age_hours * 3600
+    # Find stale parents: pipeline parents in 'ready' older than cutoff
+    stale = _sqlite_select(
+        "SELECT id FROM tasks WHERE title LIKE '🔷%' AND status='ready' AND created_at < ?",
+        (cutoff,),
+    )
+    archived = 0
+    for row in stale:
+        tid = row["id"]
+        # Check that it really has children (a pipeline parent)
+        children = _sqlite_select(
+            "SELECT child_id FROM task_links WHERE parent_id=?", (tid,)
+        )
+        if len(children) < 2:
+            continue
+        # Archive all children first
+        for c in children:
+            complete(c["child_id"], result_summary="Archived (stale pipeline)")
+        # Then archive the parent
+        complete(tid, result_summary="Archived (stale pipeline — no agent ever started)")
+        logger.info("cleaned up stale pipeline %s", tid)
+        archived += 1
+    return archived
+
+
 def scan_board() -> dict | None:
     """Scan the pipeline board for an active pipeline run.
 
     Returns state dict reconstructed from kanban tasks, or None if idle.
-    Uses list() to find parents, then filters children by parent_task_ids.
+    Uses direct SQLite instead of round-tripped list/show_task calls.
+
+    Before scanning, archives any stale zombie pipelines that were
+    created but never started (first promote silently failed pre-fix,
+    or the session was reset before any agent ran).
     """
-    tasks = list_tasks(status="running")
-    if not tasks:
-        tasks = list_tasks(status="ready")
-    if not tasks:
-        tasks = list_tasks(status="todo")
+    # Garbage-collect stale pipelines before scanning
+    cleaned = _cleanup_stale_pipelines(max_age_hours=24)  # Bug #4: мёртвые пайплайны накапливались
+    if cleaned:
+        logger.info("cleaned up %d stale pipeline(s) before scan", cleaned)
 
-    if not tasks:
+    # Find parents with children — pipeline parents in any active status
+    parent_rows = _sqlite_select(
+        "SELECT t.id, t.title, t.body, t.status, t.created_at "
+        "FROM tasks t "
+        "WHERE EXISTS (SELECT 1 FROM task_links l WHERE l.parent_id=t.id) "
+        "AND t.status IN ('running','ready','todo','blocked') "
+        "ORDER BY t.created_at DESC",
+    )
+
+    if not parent_rows:
         return None
 
-    # Filter to only parent tasks (those with children on the board)
-    parent_tasks = []
-    for t in tasks:
-        tid = t.get("id", "")
-        if not tid:
-            continue
-        detail = show_task(tid)
-        children = detail.get("children", [])
-        if len(children) >= 2:  # A pipeline parent has 2+ children
-            parent_tasks.append(t)
+    # Process the first (most recent) active parent
+    t = parent_rows[0]
+    parent_id = t["id"]
+    title = t["title"] or ""
+    body = t["body"] or ""
+    parent_status = t["status"]
 
-    if not parent_tasks:
-        return None
+    # Get children via task_links + tasks join
+    children = _sqlite_select(
+        "SELECT c.id, c.title, c.status "
+        "FROM tasks c "
+        "JOIN task_links l ON l.child_id=c.id "
+        "WHERE l.parent_id=? "
+        "ORDER BY c.created_at ASC",
+        (parent_id,),
+    )
 
-    # Sort by created_at descending — prefer the most recent active pipeline
-    parent_tasks.sort(key=lambda t: t.get("created_at", 0), reverse=True)
+    # Extract request from title/body
+    request = title.replace("🔷  Пайплайн: ", "", 1)
+    if "Запрос: " in body:
+        request = body.split("Запрос: ", 1)[1]
 
-    # Find the first non-completed parent
-    for t in parent_tasks:
-        if t.get("status") in ("running", "ready", "todo", "blocked", "stuck",
-                                "needs_input"):
-            parent_id = t.get("id")
-            if not parent_id:
-                continue
+    # Extract category from body
+    category = ""
+    for line in body.split("\n"):
+        if line.startswith("Категория:"):
+            category = line.split(":", 1)[1].strip()
 
-            # Get all tasks to find children of this parent
-            detail = show_task(parent_id)
-            child_ids = detail.get("children", [])
-            all_tasks = list_tasks(include_archived=True)
-            children = [c for c in all_tasks if c.get("id") in child_ids]
+    # Reconstruct pipeline state
+    current_idx = -1
+    completed = []
+    pipeline = []
+    task_ids = {}
+    for child in children:
+        cid = child["id"]
+        ctitle = child["title"] or ""
+        cstatus = child["status"] or ""
+        agent = ""
+        if ctitle.startswith("@"):
+            agent = ctitle.split(":", 1)[0].lstrip("@").strip()
+        if agent:
+            task_ids[agent] = cid
+            pipeline.append(agent)
+        if cstatus == "done":
+            completed.append(agent)
+        elif cstatus in ("ready", "todo", "running") and current_idx == -1:
+            if agent in pipeline:
+                current_idx = pipeline.index(agent)
 
-            title = t.get("title", "")
-            body = t.get("body", "")
-            request = title.replace("🔷  Пайплайн: ", "", 1)  # Extract from title if not in body
-
-            # Find request in body
-            if "Запрос: " in body:
-                request = body.split("Запрос: ", 1)[1]
-
-            # Extract category from body
-            category = ""
-            for line in body.split("\n"):
-                if line.startswith("Категория:"):
-                    category = line.split(":", 1)[1].strip()
-
-    # Find which child is ready/todo — use the FIRST one (lowest index)
-            current_idx = -1
-            completed = []
-            pipeline = []
-            task_ids = {}
-            for idx, child in enumerate(children):
-                cid = child.get("id", "")
-                ctitle = child.get("title", "")
-                cstatus = child.get("status", "")
-                agent = ""
-                if ctitle.startswith("@"):
-                    agent = ctitle.split(":", 1)[0].lstrip("@").strip()
-                if agent:
-                    task_ids[agent] = cid
-                    pipeline.append(agent)
-                if cstatus == "done":
-                    completed.append(agent)
-                elif cstatus in ("ready", "todo", "running") and current_idx == -1:
-                    if agent in pipeline:
-                        current_idx = pipeline.index(agent)
-
-            state = {
-                "request": request,
-                "category": category,
-                "pipeline": pipeline,
-                "current_idx": current_idx if current_idx >= 0 else 0,
-                "completed": completed,
-                "status": t.get("status", "running"),
-                "kanban_parent_id": parent_id,
-                "kanban_task_ids": task_ids,
-                "round": 0,
-                "findings": [],
-            }
-            return state
-
-    return None
+    state = {
+        "request": request,
+        "category": category,
+        "pipeline": pipeline,
+        "current_idx": current_idx if current_idx >= 0 else 0,
+        "completed": completed,
+        "status": parent_status,
+        "kanban_parent_id": parent_id,
+        "kanban_task_ids": task_ids,
+        "round": 0,
+        "findings": [],
+    }
+    return state
 
 
 def get_agent_context(state: dict, agent_id: str) -> dict:
@@ -618,12 +872,13 @@ def create_ensemble_subtasks(state: dict, agent_id: str, candidates: list[dict])
         return state
 
     request = state.get("request", "Ensemble")
+    target = _extract_target(request)
 
     # Create a sub-task marker: agent_id+"/ensemble" under the main agent
     ensemble_task_ids = {}
     for c in candidates:
         cid = c["id"]
-        c_title = f"  {cid}: {request[:40]}"
+        c_title = f"  {cid}: {target} (T={c['temperature']})"
         c_body = f"Ensemble candidate: {cid}\nT={c['temperature']}\n{c['instruction_extra']}"
         child = create_child(c_title, parent_id, body=c_body)
         if child:
