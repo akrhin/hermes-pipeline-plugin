@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import kanban as kb
+import convergence as cv
 
 
 class TestConvergence:
@@ -21,7 +21,7 @@ class TestConvergence:
     def test_converged_no_findings(self):
         """Zero findings → converged."""
         state = {"round": 0, "findings": []}
-        result = kb.evaluate_convergence(state)
+        result = cv.evaluate_convergence(state)
         assert result["decision"] == "converged"
         assert result["p0_count"] == 0
         assert result["p1_count"] == 0
@@ -34,7 +34,7 @@ class TestConvergence:
                 {"severity": "P2", "file": "x.py", "category": "style"},
             ],
         }
-        result = kb.evaluate_convergence(state)
+        result = cv.evaluate_convergence(state)
         assert result["decision"] == "converged"
         assert result["p2_count"] == 1
 
@@ -46,7 +46,7 @@ class TestConvergence:
                 {"severity": "P0", "file": "x.py", "category": "security"},
             ],
         }
-        result = kb.evaluate_convergence(state)
+        result = cv.evaluate_convergence(state)
         assert result["decision"] == "continue"
         assert result["p0_count"] == 1
 
@@ -59,7 +59,7 @@ class TestConvergence:
                 {"severity": "P0", "file": "x.py", "category": "security"},
             ],
         }
-        result = kb.evaluate_convergence(state)
+        result = cv.evaluate_convergence(state)
         assert result["decision"] == "maxed_out"
 
     def test_stuck_same_fingerprint(self):
@@ -74,7 +74,7 @@ class TestConvergence:
                     "description": "XSS in login",
                 },
             ],
-            "prev_findings_fingerprint": kb._compute_fingerprint(
+            "prev_findings_fingerprint": cv._compute_fingerprint(
                 [
                     {
                         "severity": "P0",
@@ -85,12 +85,12 @@ class TestConvergence:
                 ]
             ),
         }
-        result = kb.evaluate_convergence(state)
+        result = cv.evaluate_convergence(state)
         assert result["decision"] == "stuck"
 
     def test_not_stuck_different_fingerprint(self):
         """Different findings than previous round → continue."""
-        fp = kb._compute_fingerprint(
+        fp = cv._compute_fingerprint(
             [
                 {
                     "severity": "P0",
@@ -112,7 +112,7 @@ class TestConvergence:
             ],
             "findings_fingerprint": fp,
         }
-        result = kb.evaluate_convergence(state)
+        result = cv.evaluate_convergence(state)
         assert result["decision"] == "continue"
 
     def test_fingerprint_consistency(self):
@@ -125,10 +125,10 @@ class TestConvergence:
             {"severity": "P0", "file": "a.py", "category": "sec", "description": "y"},
             {"severity": "P0", "file": "b.py", "category": "sec", "description": "x"},
         ]
-        assert kb._compute_fingerprint(a) == kb._compute_fingerprint(b)
+        assert cv._compute_fingerprint(a) == cv._compute_fingerprint(b)
 
     def test_fingerprint_different(self):
         """Different findings produce different fingerprints."""
         a = [{"severity": "P0", "file": "a.py", "category": "sec", "description": "x"}]
         b = [{"severity": "P0", "file": "a.py", "category": "sec", "description": "y"}]
-        assert kb._compute_fingerprint(a) != kb._compute_fingerprint(b)
+        assert cv._compute_fingerprint(a) != cv._compute_fingerprint(b)

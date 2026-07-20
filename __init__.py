@@ -38,6 +38,7 @@ if PLUGIN_DIR not in sys.path:
 logger = logging.getLogger(__name__)
 
 import classify
+import convergence as cv
 import kanban as kb
 import retro as rt
 
@@ -373,7 +374,7 @@ def handle_convergence(args, **kwargs):
                     "round": state.get("round", 0),
                 }
             )
-        result = kb.evaluate_convergence(state, findings)
+        result = cv.evaluate_convergence(state, findings)
         kb.on_convergence(state, result)
 
         # Retro log convergence
