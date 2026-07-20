@@ -19,6 +19,7 @@ computes deterministically (same algorithm as old state.py).
 import hashlib
 import logging
 import os
+import re
 import sqlite3
 import time
 import uuid
@@ -44,6 +45,59 @@ logger = logging.getLogger(__name__)
 
 MAX_CONVERGENCE_ROUNDS = 3
 NEXT_ACTION_STATUSES = {"ready", "todo"}
+
+
+def _extract_target(request: str) -> str:
+    """Извлечь цель (проект/модуль/файл) из запроса для заголовка задачи.
+
+    Приоритет:
+    1. Упоминание файла (.py, .md, .yaml и т.д.)
+    2. Упоминание проекта/плагина (hermes-pipeline-plugin, pipeline-dashboard, server.py и т.д.)
+    3. Первое существительное после "в"/"для"
+    """
+    if not request:
+        return "проект"
+    # 1. Конкретные имена проектов/файлов (lowercase для case-insensitive сравнения)
+    known = [
+        "hermes-pipeline-plugin", "pipeline-dashboard", "kanban.py", "server.py",
+        "__init__.py", "models.py", "ensemble.py", "agents.md", "architecture.md",
+        "config.yaml", "kanban.db", "pipeline", "plugin", "дашборд",
+    ]
+    req_lower = request.lower()
+    for name in known:
+        if name in req_lower:
+            return name
+    # 2. Файл после предлогов "в", "для", "на"
+    m = re.search(r'\b(?:в|для|на)\s+(\S+(?:\.\w+)?)\b', request)
+    if m:
+        return m.group(1)
+    # 3. Первое слово из 3+ букв без спецсимволов
+    m = re.search(r'\b([а-яёa-z]{3,})\b', request.lower())
+    if m:
+        return m.group(1)
+    return "проект"
+
+
+_AGENT_VERB: dict[str, str] = {
+    "finder":     "разведка",
+    "analyst":    "анализ",
+    "researcher": "исследование",
+    "architect":  "архитектура",
+    "planner":    "план",
+    "coder":      "разработка",
+    "editor":     "правки",
+    "fixer":      "баг-фикс",
+    "refactorer": "рефакторинг",
+    "reviewer":   "ревью",
+    "security":   "безопасность",
+    "integration":"интеграция",
+    "tester":     "тесты",
+    "debugger":   "отладка",
+    "documenter": "документация",
+    "devops":     "деплой",
+    "optimizer":  "оптимизация",
+}
+
 
 # ── Role-specific task descriptions (shown in dashboard per agent) ──
 # Расширенные описания (~x1.5 от кратких) — дают контекст: что делает, чем пользуется, какой результат
@@ -307,11 +361,13 @@ def create_task_tree(state: dict) -> dict:
     state["kanban_task_ids"] = {}  # agent → task_id
 
     # ── Create children ──────────────────────────────────────────────────
+    target = _extract_target(request)
     for agent in pipeline:
         c_ikey = child_id(parent_ikey, agent)
+        verb = _AGENT_VERB.get(agent, agent)
+        c_title = f"@{agent}: {verb} {target}"
         desc = AGENT_DESCRIPTIONS.get(agent, request[:60])
-        c_title = f"@{agent}: {desc}"
-        c_body = f"Этап: {agent}\nЗадача: {desc}\nЗапрос: {request}"
+        c_body = f"Этап: {agent}\nЗадача: {desc}\nОбъект: {target}\nЗапрос: {request}"
         child_id_val = create_child(c_title, parent_id,
                                     body=c_body, idempotency_key=c_ikey)
         if child_id_val:
@@ -807,12 +863,13 @@ def create_ensemble_subtasks(state: dict, agent_id: str, candidates: list[dict])
         return state
 
     request = state.get("request", "Ensemble")
+    target = _extract_target(request)
 
     # Create a sub-task marker: agent_id+"/ensemble" under the main agent
     ensemble_task_ids = {}
     for c in candidates:
         cid = c["id"]
-        c_title = f"  {cid}: candidate T={c['temperature']}"
+        c_title = f"  {cid}: {target} (T={c['temperature']})"
         c_body = f"Ensemble candidate: {cid}\nT={c['temperature']}\n{c['instruction_extra']}"
         child = create_child(c_title, parent_id, body=c_body)
         if child:
