@@ -250,7 +250,7 @@ class TestCLI:
             _event("agent_start", agent="finder", directive="direct"),
             _event("agent_done", agent="finder"),
         ]
-        f = _write_jsonl(tmp_path / "pipe_integration.jsonl", events)
+        _write_jsonl(tmp_path / "pipe_integration.jsonl", events)
         rc = rs.main(["--dir", str(tmp_path)])
         assert rc == 0
         captured = capsys.readouterr()
@@ -262,7 +262,7 @@ class TestCLI:
             _event("agent_start", agent="finder"),
             _event("agent_done", agent="finder"),
         ]
-        f = _write_jsonl(tmp_path / "pipe_json.jsonl", events)
+        _write_jsonl(tmp_path / "pipe_json.jsonl", events)
         rc = rs.main(["--dir", str(tmp_path), "--json"])
         assert rc == 0
         captured = capsys.readouterr()
@@ -393,7 +393,7 @@ class TestIntegration:
                 "pipeline_start",
                 category="FEATURE",
                 agents=1,
-                request="\u0434\u043e\u0431\u0430\u0432\u044c \u043a\u043e\u043c\u0430\u043d\u0434\u0443",
+                request="добавь команду",
             )
         ]
         f = _write_jsonl(tmp_path / "pipe_unicode.jsonl", events)
