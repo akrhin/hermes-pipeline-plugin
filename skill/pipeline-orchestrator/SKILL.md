@@ -13,6 +13,7 @@ tags: [pipeline, orchestrator, ensemble, convergence, kanban, retro, master]
 **Этот раздел — закон. Не пропускай ни один пункт, не говори «потом», не оставляй todo в ответах.**
 
 ### Фаза 1: Получение задачи → Декомпозиция
+0. **ПЕРЕД ВСЕМ:** Загрузи этот скилл (`skill_view('pipeline-orchestrator')`) — перечитай правила, не по памяти.
 1. Прочитай README.md, AGENTS.md, ARCHITECTURE.md, CHANGELOG.md, plugin.yaml
 2. Узнай текущую версию, что уже сделано, кто авторы
 3. Разбей задачу на шаги. Запиши в todo. Не начинай исполнение без плана.

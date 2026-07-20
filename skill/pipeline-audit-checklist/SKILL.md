@@ -2,17 +2,17 @@
 name: pipeline-audit-checklist
 description: "Verification Checklist for Pipeline Plugin v3.6.0 — comprehensive audit covering orchestrator, ensemble, docs, retro, code-review-graph"
 author: Hermes Agent
-category: verification
+category: hermes
 tags: [pipeline, audit, verification, quality, ensemble, master]
 ---
 
 # Pipeline Audit Checklist (v3.6.0)
 
 ## Preconditions
-- [ ] Load `pipeline-orchestrator` skill (`skill_view('pipeline-orchestrator')`)
+- [ ] **ПЕРВЫМ ДЕЛОМ:** Load `pipeline-orchestrator` skill (`skill_view('pipeline-orchestrator')`)
 - [ ] `hermes plugins list` shows `pipeline` as enabled
 - [ ] `~/.hermes/plugins/pipeline/config.yaml` — валидный конфиг
-- [ ] 79/79 тестов проходят (`pytest tests/ -q`)
+- [ ] 112/112 тестов проходят (`pytest tests/ -q`)
 - [ ] code-review-graph installed (`code-review-graph --version`) — v2.3.7+
 - [ ] CRG MCP-сервер в `~/.hermes/config.addon.yaml` с `enabled: true`
 - [ ] Граф собран (`code-review-graph status` в корне проекта)
