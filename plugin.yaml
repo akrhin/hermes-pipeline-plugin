@@ -1,6 +1,6 @@
 name: pipeline
-version: 3.6.0
-description: "Pipeline Plugin v3.6.0 — code-review-graph integration: agents @reviewer and @security use MCP-powered graph for blast radius, risk scoring, and test gap detection. 38-528× token savings on code review."
+version: 3.7.0
+description: "Pipeline Plugin v3.7.0 — convergence extracted, retro split, classify keywords expanded (+41), primary priority fixed, duplicate _import_ensemble removed."
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify

@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.7.0 (2026-07-21)
+
+### Refactoring — convergence extracted, retro split, imports cleaned
+
+- **convergence.py** — новый модуль. `_compute_fingerprint` и `evaluate_convergence` вынесены из kanban.py (1014→898 строк). Импорты обновлены в `__init__.py` и тестах.
+- **retro.py** — `build_analysis_prompt` (193 строки, degree 88) разбит на 4 подсети:
+  - `_classify_events` — классификация событий по типам
+  - `_build_metrics_sections` — построение метрических секций
+  - `_detect_patterns` — детекция анти-паттернов пайплайна
+  - `_build_raw_events_section` — построение сырой секции событий
+- **Дубликат `_import_ensemble`** удалён из kanban.py (остался только в `__init__.py`)
+- **classify.py** — расширен multi-label keyword набор (+41 ключ):
+  - SECURITY_RELATED: +8 (xss, csrf, уязвим, injection…)
+  - BUG_UNKNOWN: +13 (глюк, regression, defect, traceback…)
+  - REFACTORING: +16 (дублирова, cohesion, coupling, dead code, lint…)
+  - PERFORMANCE: +12 (latency, cache, benchmark, bottleneck…)
+  - INFRASTRUCTURE: +18 (k8s, helm, terraform, monitoring…)
+  - DOCUMENTATION: +11 (changelog, wiki, architecture, spec…)
+  - FEATURE: +11 (разработ, extend, integration, plugin…)
+- **Primary priority fix**: позиция категории в `_PRIORITY_ORDER` теперь определяет primary раньше score
+- **Тесты**: 112/112
+- **Ruff**: 0 errors в production коде
+
 ## v3.6.0 (2026-07-20)
 
 ### code-review-graph integration

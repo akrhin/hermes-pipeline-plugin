@@ -1,6 +1,6 @@
 ---
 name: pipeline-orchestrator
-description: "Главный оркестратор-скилл for Pipeline Plugin v3.6.0 — kanban.db SSOT, 16 agents, 8 categories, selective context, LLM Judge ensemble (execute-then-judge), deterministic convergence, hot-reload config, forced findings collection, code-review-graph MCP integration (38-528× token savings)."
+description: "Главный оркестратор-скилл for Pipeline Plugin v3.7.0 — kanban.db SSOT, 16 agents, 8 categories, selective context, LLM Judge ensemble (execute-then-judge), deterministic convergence (now in convergence.py), hot-reload config, forced findings collection, code-review-graph MCP integration."
 author: Hermes Agent + Vladimir
 category: hermes
 tags: [pipeline, orchestrator, ensemble, convergence, kanban, retro, master]
