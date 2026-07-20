@@ -133,14 +133,27 @@ BUILTIN_MODEL_MAP        ← низший (хардкод в models.py)
 **Правило:** никогда не вызывай `delegate_task` напрямую — всегда через `pipeline_run_agent`.
 Порядок: `pipeline_run_agent(state, agent_id)` → прочитать `call_args` → `delegate_task(**call_args)` → `pipeline_advance(state, agent_id)`.
 
-## Pipeline Agents
+## Pipeline Agents per Category
+
+Не все 16 агентов запускаются в каждом прогоне — только релевантные категории. Это экономия токенов и времени.
+
+| Категория | Агенты | Всего |
+|-----------|--------|-------|
+| **SECURITY_RELATED** | finder → analyst → researcher → architect → planner → coder → reviewer → **security** → integration → tester → documenter | **11** |
+| **BUG_UNKNOWN** | finder → **debugger** → fixer → reviewer → tester | **5** |
+| **BUG_KNOWN** | finder → **fixer** → reviewer → tester | **4** |
+| **REFACTORING** | finder → analyst → **refactorer** → reviewer → integration → tester | **6** |
+| **PERFORMANCE** | finder → analyst → **optimizer** → reviewer → tester | **5** |
+| **INFRASTRUCTURE** | finder → **devops** → (reviewer → tester если тестируемо) | **2-4** |
+| **DOCUMENTATION** | finder → documenter | **2** |
+| **FEATURE** | finder → analyst → architect → planner → coder → reviewer → integration → tester → documenter | **9** |
+
+**Итого:** 16 уникальных агентов. В одном прогоне — от 2 до 11 в зависимости от категории.
 
 ```
 @finder → @analyst → @researcher → @architect → @planner → @coder
 → @reviewer → @security → @integration → @tester → @documenter
 ```
-
-(для SECURITY_RELATED — 11 агентов. Другие категории используют подмножество.)
 
 ## SQLite Kanban (v3.3.0)
 

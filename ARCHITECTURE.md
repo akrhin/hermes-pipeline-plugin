@@ -250,4 +250,5 @@ pipeline:
 | v3.1 | **Ensemble production**: ensemble.py, config-driven, LLM Judge, kanban subtasks |
 | **v3.2** | **Retrospective logging**, hot-reload MODEL_MAP, default prompt fallback, convergence status:fixed filter. 16 agents, 12 tools |
 | **v3.3** | **SQLite-native kanban** (PR#1 от @V0rt). Прямой SQLite без CLI. 20 bugfixes (4 P0 + 7 P1 + 9 P2). reopen(), AGENT_VERB, _extract_target(), try/finally resource leak fix |
+| **v3.3.1** | **Bugfix release**: Flash prompt (P0), LLM Judge stub (P0), reopen() added, maxed_out children close, stale 1-child cleanup, scan_board LIMIT 1, integration.prompt dead Full context. 79/79 tests |
 

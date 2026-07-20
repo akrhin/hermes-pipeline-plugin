@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.3.1 (2026-07-20)
+
+### Bugfixes
+- **Баг #1 (P1)** — `reopen()`: функция отсутствовала. `convergence('continue')` не мог переоткрыть done-задачи для нового раунда. Добавлена `def reopen()` + convergence теперь использует reopen вместо unblock.
+- **Баг #3 (P0)** — **LLM Judge — заглушка**: `judge_candidates(mode='llm')` всегда возвращал `candidate_3`, не вызывая LLM. Теперь возвращает `judge_call_args` для реального делегирования.
+- **Баг #4 (P0)** — **Flash-агенты без prompt**: `handle_run_agent()` возвращал `prompt: null` для direct-агентов. Теперь все 16 агентов получают реальный промпт.
+- **Баг #10 (P2)** — **integration.prompt**: мёртвый `### Full context` заменён на selective context секции (implementation, documentation, infrastructure).
+- **Баг #11 (P2)** — **maxed_out не закрывал детей**: convergence('maxed_out') не закрывал child-таски. Исправлено.
+- **Баг #15 (P1)** — **stale cleanup с 1 ребёнком**: `len(children) < 2` пропускал пайплайны с одним child-таском. Исправлено на `< 1`.
+- **Баг #20 (P2)** — **scan_board без LIMIT**: возвращал все активные пайплайны, мог застревать на старых. Добавлен `LIMIT 1`.
+
+### Tests
+- Добавлены 3 regression-теста: `test_ensemble_judge_llm_returns_call_args`, `test_ensemble_judge_deterministic_picks_middle`, `test_ensemble_judge_empty_candidates`
+- Исправлен `test_run_agent_direct_for_flash` (ожидал `prompt: null`, теперь ожидает живой prompt)
+- **79/79 тестов**
+
+### Misc
+- `judge.prompt` (мёртвый код) удалён
+- Все `.prompt` файлы проверены на отсутствие `Full context`
+
 ## v3.3.0 (2026-07-20)
 
 ### Breaking

@@ -1,6 +1,6 @@
 name: pipeline
-version: 3.3.0
-description: "Pipeline Plugin v3.3.0 — SQLite-native kanban. Selective context. 20 bugfixes from ARCHITECTURE-FIXES.md. Best-of-N ensemble. Retrospective logging + auto-analysis. Convergence fixed (status filter). Hot-reload MODEL_MAP. Default prompt fallback."
+version: 3.3.1
+description: "Pipeline Plugin v3.3.1 — bugfix: Flash prompt (P0), LLM Judge stub (P0), reopen(), maxed_out children, stale cleanup 1-child, scan_board LIMIT 1, integration.prompt dead Full context. 79/79 tests, 0 lint errors."
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify
