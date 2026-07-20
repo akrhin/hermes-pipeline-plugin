@@ -1,6 +1,6 @@
 name: pipeline
-version: 3.3.2
-description: "Pipeline Plugin v3.3.2 — classify fix: RU keywords (крашит, упал, валит, пофикс), word-boundary fix (crash→crashes), priority order (BUG_KNOWN > BUG_UNKNOWN). 79/79 tests."
+version: 3.3.3
+description: "Pipeline Plugin v3.3.3 — LLM Judge orchestration fixed: delegate_task called with judge_call_args instead of ignored. 79/79 tests."
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify

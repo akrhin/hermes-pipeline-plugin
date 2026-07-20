@@ -251,4 +251,6 @@ pipeline:
 | **v3.2** | **Retrospective logging**, hot-reload MODEL_MAP, default prompt fallback, convergence status:fixed filter. 16 agents, 12 tools |
 | **v3.3** | **SQLite-native kanban** (PR#1 от @V0rt). Прямой SQLite без CLI. 20 bugfixes (4 P0 + 7 P1 + 9 P2). reopen(), AGENT_VERB, _extract_target(), try/finally resource leak fix |
 | **v3.3.1** | **Bugfix release**: Flash prompt (P0), LLM Judge stub (P0), reopen() added, maxed_out children close, stale 1-child cleanup, scan_board LIMIT 1, integration.prompt dead Full context. 79/79 tests |
+| **v3.3.2** | **Classify fixes**: RU keywords (крашит, упал, валит, пофикс), word-boundary fix (crash→crashes), priority order (BUG_KNOWN > BUG_UNKNOWN). 14/14 classify tests |
+| **v3.3.3** | **LLM Judge orchestration fix**: delegate_task called with judge_call_args. Real LLM evaluation instead of ignored winner. |
 

@@ -1,6 +1,16 @@
 # Changelog
 
-## v3.3.2 (2026-07-20)
+## v3.3.3 (2026-07-20)
+
+### LLM Judge — реальное делегирование
+- **Фикс оркестрации**: `handle_ensemble_judge` возвращает `judge_call_args`. Оркестратор (агент) теперь вызывает `delegate_task(**judge_call_args)` вместо игнорирования результата.
+- **Winner больше не null**: LLM реально оценивает кандидатов и возвращает `winner_id` с скоррингами.
+- **Подтверждено**: первый реальный вызов LLM Judge — subagent получил judge prompt и начал оценку.
+
+### Documentation
+- `AGENTS.md`: обновлено описание LLM Judge — теперь работает
+- `ARCHITECTURE.md`: миграция v3.3.3
+- Обновлён `pipeline-audit-checklist` skill
 
 ### classify fixes
 - **RU keywords**: `крашит`, `краш`, `упал`, `валит`, `сломано` — BUG_UNKNOWN теперь ловит русские «крашится», «упал сервер»

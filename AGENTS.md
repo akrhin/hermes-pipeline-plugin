@@ -1,10 +1,10 @@
-# AGENTS.md — Pipeline Plugin (v3.3.0, SQLite-native)
+# AGENTS.md — Pipeline Plugin (v3.3.3, SQLite-native)
 
 ## What This Is
 
 Плагин-оркестратор multi-agent пайплайнов для Hermes Agent.
 **Variant C:** `state.json` удалён. `kanban.db` — единое состояние.
-**v3.3.0:** прямой SQLite вместо CLI-прослойки (см. SQLite Kanban).
+**v3.3.3:** всё пофикшено. `judge_candidates(mode='llm')` возвращает `judge_call_args`, **оркестратор вызывает `delegate_task`** — LLM реально оценивает кандидатов.
 После рестарта: `pipeline_resume()` сканирует доску.
 
 ## Quick Start
