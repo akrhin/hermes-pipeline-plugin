@@ -1,6 +1,6 @@
 ---
 name: pipeline-orchestrator
-description: "Master orchestrator skill for Pipeline Plugin v3.3.3 — kanban.db SSOT, 16 agents, 8 categories, selective context, LLM Judge ensemble, deterministic convergence, hot-reload config."
+description: "Главный оркестратор-скилл for Pipeline Plugin v3.3.3 — kanban.db SSOT, 16 agents, 8 categories, selective context, LLM Judge ensemble, deterministic convergence, hot-reload config."
 author: Hermes Agent + Vladimir
 category: hermes
 tags: [pipeline, orchestrator, ensemble, convergence, kanban, retro, master]
