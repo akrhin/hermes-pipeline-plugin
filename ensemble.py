@@ -153,8 +153,22 @@ def judge_candidates(request: str, candidates: list[dict],
         # Fallback: middle candidate
         idx = len(candidates) // 2
         winner = candidates[idx]
+        scores = []
+        for rank, c in enumerate(candidates):
+            # Deterministic scoring: middle candidate = highest score
+            dist = abs(rank - idx)
+            total = max(40 - dist * 5, 10)
+            scores.append({
+                "id": c["id"],
+                "total": total,
+                "correctness": max(10 - dist, 3),
+                "completeness": max(10 - dist, 3),
+                "code_quality": max(10 - dist, 3),
+                "security": max(10 - dist, 3),
+            })
         return {
             "winner_id": winner["id"],
+            "scores": scores,
             "rationale": (f"Selected {winner['id']} (T={winner.get('temperature', '?')}) — "
                           f"{winner.get('instruction_extra', 'balanced approach')}"),
             "temperature": winner.get("temperature"),

@@ -1,5 +1,44 @@
 # Changelog
 
+## v3.2.0 (2026-07-19)
+
+### Features
+- **Retrospective logging** — structured JSONL-лог (`retro.py`) пишет pipeline_start, agent_start, agent_done, model_routing, convergence, findings, error, pipeline_clear
+- **Hot-reload MODEL_MAP** — `nanosecond mtime` проверка config.yaml без рестарта сессии
+- **Default prompt fallback** — агенты без `.prompt` получают шаблон из AGENT_CONTEXT_FIELDS
+- **Convergence filtering** — `status:fixed` фильтруется, только открытые findings
+
+### Changes
+- 16 агентов (editor удалён как мёртвый)
+- Все Flash (direct) кроме security (Pro/delegate)
+- plugin.yaml v3.2.0, 12 инструментов
+- Retro-лог пишется по умолчанию (auto_analyze: false)
+- AGENTS.md, README, ARCHITECTURE.md актуализированы
+
+## v3.1.0 (2026-07-19)
+
+### Features
+- **Selective context passing (v2.3+)** — AGENT_CONTEXT_FIELDS: каждый агент получает ТОЛЬКО свои секции
+- **Integration agent** — cross-file integration checks
+- **Kanban Dashboard** — hooks в pipeline_save, convergence, clear
+
+### Changes
+- 16 агентов, 12 инструментов
+- state.json удалён (SSOT: kanban.db)
+- pipeline_resume() для восстановления после рестарта
+
+## v3.0.0 (2026-07-18)
+
+### Features
+- **Best-of-N Ensemble** — pipeline_ensemble_run + pipeline_ensemble_judge
+- **7 T-вариаций** (0.3..1.1) для @coder на round 0
+- **LLM Judge / Deterministic Judge** режимы
+
+### Changes
+- ensemble.py модуль с generate_candidates, judge_candidates
+- kanban.py: create_ensemble_subtasks
+- Config: pipeline.ensemble секция
+
 ## v1.2.0 (2026-07-19)
 
 ### Features

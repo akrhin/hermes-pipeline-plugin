@@ -579,7 +579,7 @@ def get_agent_context(state: dict, agent_id: str) -> dict:
     # Build agent-specific context
     agent_ctx = dict(ctx)  # shallow copy
     # Highlight the most relevant section
-    if agent_id in ("coder", "editor", "fixer", "refactorer"):
+    if agent_id in ("coder", "fixer", "refactorer"):
         agent_ctx["_focus"] = "implementation"
     elif agent_id in ("reviewer", "security", "tester"):
         agent_ctx["_focus"] = "quality"
