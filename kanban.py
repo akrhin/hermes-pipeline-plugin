@@ -811,7 +811,7 @@ def create_ensemble_subtasks(state: dict, agent_id: str, candidates: list[dict])
     ensemble_task_ids = {}
     for c in candidates:
         cid = c["id"]
-        c_title = f"  {cid}: {request[:40]}"
+        c_title = f"  {cid}: candidate T={c['temperature']}"
         c_body = f"Ensemble candidate: {cid}\nT={c['temperature']}\n{c['instruction_extra']}"
         child = create_child(c_title, parent_id, body=c_body)
         if child:
