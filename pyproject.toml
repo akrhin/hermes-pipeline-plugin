@@ -11,6 +11,6 @@ select = ["E", "W", "F", "I", "N"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["E402", "E501", "N999", "BLE001", "ARG001", "I001"]
-"kanban.py" = ["I001"]
+"kanban.py" = ["I001", "E501"]
 "classify.py" = ["F401", "RUF001"]
 "tests/*.py" = ["S101", "RUF001"]

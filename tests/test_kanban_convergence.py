@@ -67,28 +67,48 @@ class TestConvergence:
         state = {
             "round": 2,
             "findings": [
-                {"severity": "P0", "file": "x.py", "category": "security",
-                 "description": "XSS in login"},
+                {
+                    "severity": "P0",
+                    "file": "x.py",
+                    "category": "security",
+                    "description": "XSS in login",
+                },
             ],
-            "prev_findings_fingerprint": kb._compute_fingerprint([
-                {"severity": "P0", "file": "x.py", "category": "security",
-                 "description": "XSS in login"},
-            ]),
+            "prev_findings_fingerprint": kb._compute_fingerprint(
+                [
+                    {
+                        "severity": "P0",
+                        "file": "x.py",
+                        "category": "security",
+                        "description": "XSS in login",
+                    },
+                ]
+            ),
         }
         result = kb.evaluate_convergence(state)
         assert result["decision"] == "stuck"
 
     def test_not_stuck_different_fingerprint(self):
         """Different findings than previous round → continue."""
-        fp = kb._compute_fingerprint([
-            {"severity": "P0", "file": "x.py", "category": "security",
-             "description": "Old bug"},
-        ])
+        fp = kb._compute_fingerprint(
+            [
+                {
+                    "severity": "P0",
+                    "file": "x.py",
+                    "category": "security",
+                    "description": "Old bug",
+                },
+            ]
+        )
         state = {
             "round": 2,
             "findings": [
-                {"severity": "P0", "file": "y.py", "category": "security",
-                 "description": "New bug"},
+                {
+                    "severity": "P0",
+                    "file": "y.py",
+                    "category": "security",
+                    "description": "New bug",
+                },
             ],
             "findings_fingerprint": fp,
         }

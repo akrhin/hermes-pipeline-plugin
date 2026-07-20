@@ -53,6 +53,7 @@ def read_ensemble_config(config_path: str | None = None) -> dict:
 
     try:
         import yaml
+
         with open(config_path, "r", encoding="utf-8") as f:
             raw = yaml.safe_load(f)
     except Exception:
@@ -86,23 +87,29 @@ def generate_candidates(state: dict, agent_id: str, n: int = 5) -> list[dict]:
     agent_cfg = agent_config.get("agents", {}).get(agent_id, {})
     n = min(n, agent_cfg.get("n", 5), agent_config.get("max_n", 10), len(VARIATIONS))
     if n < agent_cfg.get("n", 5) and n == len(VARIATIONS):
-        logger.warning("Ensemble n=%d capped to %d (only %d variations available). "
-                       "Add more entries to VARIATIONS in ensemble.py.",
-                       agent_cfg.get("n", 5), n, len(VARIATIONS))
+        logger.warning(
+            "Ensemble n=%d capped to %d (only %d variations available). "
+            "Add more entries to VARIATIONS in ensemble.py.",
+            agent_cfg.get("n", 5),
+            n,
+            len(VARIATIONS),
+        )
 
     candidates = []
     for i in range(n):
         var = VARIATIONS[i]
         prompt = f"{task}\n\n{var['instruction_extra']}"
-        candidates.append({
-            "id": f"candidate_{i+1}",
-            "task": prompt,
-            "temperature": var["temperature"],
-            "instruction_extra": var["instruction_extra"],
-            "agent_id": agent_id,
-            "context": ctx,
-            "category": category,
-        })
+        candidates.append(
+            {
+                "id": f"candidate_{i + 1}",
+                "task": prompt,
+                "temperature": var["temperature"],
+                "instruction_extra": var["instruction_extra"],
+                "agent_id": agent_id,
+                "context": ctx,
+                "category": category,
+            }
+        )
     return candidates
 
 
@@ -116,9 +123,11 @@ def _build_judge_prompt(request: str, candidates: list[dict]) -> str:
     lines.append("## Кандидаты\n")
     for c in candidates:
         output = c.get("output", c.get("task", ""))
-        lines.append(f"### {c['id']} (T={c.get('temperature', '?')})\n"
-                     f"Стиль: {c.get('instruction_extra', 'стандартный')}\n"
-                     f"```\n{output[:2000]}\n```\n")
+        lines.append(
+            f"### {c['id']} (T={c.get('temperature', '?')})\n"
+            f"Стиль: {c.get('instruction_extra', 'стандартный')}\n"
+            f"```\n{output[:2000]}\n```\n"
+        )
 
     lines.append("""Оцени каждого кандидата по 4 критериям (0-10):
 1. Correctness — решает ли задачу
@@ -137,9 +146,12 @@ def _build_judge_prompt(request: str, candidates: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def judge_candidates(request: str, candidates: list[dict],
-                     judge_mode: str = "deterministic",
-                     judge_config: dict | None = None) -> dict:
+def judge_candidates(
+    request: str,
+    candidates: list[dict],
+    judge_mode: str = "deterministic",
+    judge_config: dict | None = None,
+) -> dict:
     """Select the best candidate.
 
     Two modes:
@@ -158,19 +170,23 @@ def judge_candidates(request: str, candidates: list[dict],
             # Deterministic scoring: middle candidate = highest score
             dist = abs(rank - idx)
             total = max(40 - dist * 5, 10)
-            scores.append({
-                "id": c["id"],
-                "total": total,
-                "correctness": max(10 - dist, 3),
-                "completeness": max(10 - dist, 3),
-                "code_quality": max(10 - dist, 3),
-                "security": max(10 - dist, 3),
-            })
+            scores.append(
+                {
+                    "id": c["id"],
+                    "total": total,
+                    "correctness": max(10 - dist, 3),
+                    "completeness": max(10 - dist, 3),
+                    "code_quality": max(10 - dist, 3),
+                    "security": max(10 - dist, 3),
+                }
+            )
         return {
             "winner_id": winner["id"],
             "scores": scores,
-            "rationale": (f"Selected {winner['id']} (T={winner.get('temperature', '?')}) — "
-                          f"{winner.get('instruction_extra', 'balanced approach')}"),
+            "rationale": (
+                f"Selected {winner['id']} (T={winner.get('temperature', '?')}) — "
+                f"{winner.get('instruction_extra', 'balanced approach')}"
+            ),
             "temperature": winner.get("temperature"),
             "mode": "deterministic",
         }
@@ -188,9 +204,11 @@ def judge_candidates(request: str, candidates: list[dict],
             "judge_model": judge_cfg.get("model", "deepseek-v4-flash"),
         }
 
-    return {"winner_id": candidates[0]["id"],
-            "rationale": "Unknown mode, picked first",
-            "mode": "fallback"}
+    return {
+        "winner_id": candidates[0]["id"],
+        "rationale": "Unknown mode, picked first",
+        "mode": "fallback",
+    }
 
 
 def build_judge_call_args(prompt: str, config: dict) -> dict:

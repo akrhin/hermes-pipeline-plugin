@@ -16,22 +16,22 @@ logger = logging.getLogger(__name__)
 # ── Built-in fallback MODEL_MAP (неизменный хардкод) ──
 
 BUILTIN_MODEL_MAP: dict[str, dict[str, str]] = {
-    "finder":      {"provider": "direct", "model": "deepseek-v4-flash"},
-    "analyst":     {"provider": "direct", "model": "deepseek-v4-flash"},
-    "planner":     {"provider": "direct", "model": "deepseek-v4-flash"},
-    "coder":       {"provider": "direct", "model": "deepseek-v4-flash"},
-    "fixer":       {"provider": "direct", "model": "deepseek-v4-flash"},
-    "refactorer":  {"provider": "direct", "model": "deepseek-v4-flash"},
-    "tester":      {"provider": "direct", "model": "deepseek-v4-flash"},
-    "debugger":    {"provider": "direct", "model": "deepseek-v4-flash"},
-    "documenter":  {"provider": "direct", "model": "deepseek-v4-flash"},
-    "devops":      {"provider": "direct", "model": "deepseek-v4-flash"},
-    "optimizer":   {"provider": "direct", "model": "deepseek-v4-flash"},
-    "architect":   {"provider": "delegate", "model": "deepseek-v4-pro"},
-    "reviewer":    {"provider": "delegate", "model": "deepseek-v4-pro"},
-    "security":    {"provider": "delegate", "model": "deepseek-v4-pro"},
+    "finder": {"provider": "direct", "model": "deepseek-v4-flash"},
+    "analyst": {"provider": "direct", "model": "deepseek-v4-flash"},
+    "planner": {"provider": "direct", "model": "deepseek-v4-flash"},
+    "coder": {"provider": "direct", "model": "deepseek-v4-flash"},
+    "fixer": {"provider": "direct", "model": "deepseek-v4-flash"},
+    "refactorer": {"provider": "direct", "model": "deepseek-v4-flash"},
+    "tester": {"provider": "direct", "model": "deepseek-v4-flash"},
+    "debugger": {"provider": "direct", "model": "deepseek-v4-flash"},
+    "documenter": {"provider": "direct", "model": "deepseek-v4-flash"},
+    "devops": {"provider": "direct", "model": "deepseek-v4-flash"},
+    "optimizer": {"provider": "direct", "model": "deepseek-v4-flash"},
+    "architect": {"provider": "delegate", "model": "deepseek-v4-pro"},
+    "reviewer": {"provider": "delegate", "model": "deepseek-v4-pro"},
+    "security": {"provider": "delegate", "model": "deepseek-v4-pro"},
     "integration": {"provider": "delegate", "model": "deepseek-v4-pro"},
-    "researcher":  {"provider": "delegate_free", "model": "openrouter/free"},
+    "researcher": {"provider": "delegate_free", "model": "openrouter/free"},
 }
 
 # Провайдер-типы, для которых defaults применимы
@@ -135,9 +135,7 @@ def load_model_config() -> dict[str, dict[str, str]]:
         dict: Рабочая MODEL_MAP (shallow copy, оригинал BUILTIN_MODEL_MAP не мутирует).
     """
     # 1. Копируем хардкод (чтобы не мутировать BUILTIN_MODEL_MAP)
-    model_map = {
-        agent_id: dict(routing) for agent_id, routing in BUILTIN_MODEL_MAP.items()
-    }
+    model_map = {agent_id: dict(routing) for agent_id, routing in BUILTIN_MODEL_MAP.items()}
 
     # 2. Читаем config.yaml
     config_section = _read_config_section()

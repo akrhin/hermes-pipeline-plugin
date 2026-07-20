@@ -44,9 +44,7 @@ class TestLoadModelConfig:
 
     def test_defaults_delegate_provider_and_model_override(self):
         """defaults.delegate can change both provider and model."""
-        section = {
-            "defaults": {"delegate": {"provider": "direct", "model": "deepseek-v4-flash"}}
-        }
+        section = {"defaults": {"delegate": {"provider": "direct", "model": "deepseek-v4-flash"}}}
         with mock.patch.object(models, "_read_config_section", return_value=section):
             result = models.load_model_config()
 
@@ -102,9 +100,7 @@ class TestLoadModelConfig:
     def test_researcher_defaults_delegate_free(self):
         """defaults.delegate_free should apply to researcher agent."""
         section = {
-            "defaults": {
-                "delegate_free": {"provider": "delegate", "model": "perplexity/sonar-pro"}
-            }
+            "defaults": {"delegate_free": {"provider": "delegate", "model": "perplexity/sonar-pro"}}
         }
         with mock.patch.object(models, "_read_config_section", return_value=section):
             result = models.load_model_config()
@@ -128,9 +124,19 @@ class TestLoadModelConfig:
             result = models.load_model_config()
 
         # All direct agents changed
-        for agent_id in ["finder", "analyst", "planner", "coder",
-                          "fixer", "refactorer", "tester", "debugger",
-                          "documenter", "devops", "optimizer"]:
+        for agent_id in [
+            "finder",
+            "analyst",
+            "planner",
+            "coder",
+            "fixer",
+            "refactorer",
+            "tester",
+            "debugger",
+            "documenter",
+            "devops",
+            "optimizer",
+        ]:
             assert result[agent_id]["model"] == "new-flash"
         # Non-direct agents untouched
         assert result["architect"]["model"] == "deepseek-v4-pro"

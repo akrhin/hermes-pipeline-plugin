@@ -52,16 +52,23 @@ def _import_ensemble():
         from .ensemble import judge_candidates as ej
         from .ensemble import should_use_ensemble as se
         from .ensemble import read_ensemble_config as re
+
         return ec, ej, se, re
     except ImportError:
         from ensemble import generate_candidates as ec
         from ensemble import judge_candidates as ej
         from ensemble import should_use_ensemble as se
         from ensemble import read_ensemble_config as re
+
         return ec, ej, se, re
 
 
-ensemble_generate_candidates, ensemble_judge_candidates, should_use_ensemble, read_ensemble_config = _import_ensemble()
+(
+    ensemble_generate_candidates,
+    ensemble_judge_candidates,
+    should_use_ensemble,
+    read_ensemble_config,
+) = _import_ensemble()
 
 # ── Tool schemas ──────────────────────────────────────────────────────────────
 
@@ -329,8 +336,11 @@ def handle_classify(args, **kwargs):
         retro = rt.get_retro()
         retro.log("classify", request=request[:80])
         result = classify.classify(request)
-        retro.log("classify_result", category=result.get("category", "?"),
-                  agents=len(result.get("pipeline", [])))
+        retro.log(
+            "classify_result",
+            category=result.get("category", "?"),
+            agents=len(result.get("pipeline", [])),
+        )
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e), "traceback": traceback.format_exc()})
@@ -342,11 +352,13 @@ def handle_convergence(args, **kwargs):
         state = args["state"]
         findings = args.get("findings")
         if findings is None and not state.get("findings"):
-            return json.dumps({
-                "decision": "unknown",
-                "reason": "No findings — cannot evaluate",
-                "round": state.get("round", 0),
-            })
+            return json.dumps(
+                {
+                    "decision": "unknown",
+                    "reason": "No findings — cannot evaluate",
+                    "round": state.get("round", 0),
+                }
+            )
         result = kb.evaluate_convergence(state, findings)
         kb.on_convergence(state, result)
 
@@ -362,8 +374,9 @@ def handle_convergence(args, **kwargs):
             reason=result.get("reason", ""),
         )
         if findings:
-            active = [f for f in findings
-                      if f.get("status", "open") not in ("fixed", "accepted", "none")]
+            active = [
+                f for f in findings if f.get("status", "open") not in ("fixed", "accepted", "none")
+            ]
             p0 = len([f for f in active if f["severity"] == "P0"])
             p1 = len([f for f in active if f["severity"] == "P1"])
             p2 = len([f for f in findings if f["severity"] == "P2"])
@@ -383,8 +396,9 @@ def handle_convergence(args, **kwargs):
 
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
-        return json.dumps({"error": str(e), "traceback": traceback.format_exc()},
-                          ensure_ascii=False)
+        return json.dumps(
+            {"error": str(e), "traceback": traceback.format_exc()}, ensure_ascii=False
+        )
 
 
 def handle_save(args, **kwargs):
@@ -396,15 +410,21 @@ def handle_save(args, **kwargs):
         # Wire retro with the new run_id
         parent_id = state.get("kanban_parent_id")
         retro = rt.get_retro(run_id=parent_id or "")
-        retro.log("pipeline_start", category=state.get("category", ""),
-                  agents=len(state.get("pipeline", [])),
-                  request=(state.get("request", "") or "")[:80])
+        retro.log(
+            "pipeline_start",
+            category=state.get("category", ""),
+            agents=len(state.get("pipeline", [])),
+            request=(state.get("request", "") or "")[:80],
+        )
 
-        return json.dumps({
-            "status": "ok",
-            "kanban_parent_id": state.get("kanban_parent_id"),
-            "kanban_task_ids": state.get("kanban_task_ids", {}),
-        }, ensure_ascii=False)
+        return json.dumps(
+            {
+                "status": "ok",
+                "kanban_parent_id": state.get("kanban_parent_id"),
+                "kanban_task_ids": state.get("kanban_task_ids", {}),
+            },
+            ensure_ascii=False,
+        )
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
 
@@ -416,8 +436,7 @@ def handle_load(args, **kwargs):
         if state is None:
             rt.get_retro().log("pipeline_load", found=False)
             return json.dumps(None)
-        rt.get_retro().log("pipeline_load", found=True,
-                           pipeline=state.get("pipeline", []))
+        rt.get_retro().log("pipeline_load", found=True, pipeline=state.get("pipeline", []))
         return json.dumps(state, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
@@ -465,22 +484,22 @@ def handle_advance(args, **kwargs):
 # Вместо полного контекста передаём только релевантные секции.
 # full_context убран — integration.prompt переписан на конкретные секции.
 AGENT_CONTEXT_FIELDS = {
-    "finder":       ["research"],
-    "analyst":      ["research"],
-    "researcher":   ["research"],
-    "architect":    ["research", "planning"],
-    "planner":      ["planning", "infrastructure"],
-    "coder":        ["implementation", "planning"],
-    "fixer":        ["implementation"],
-    "refactorer":   ["implementation"],
-    "reviewer":     ["implementation", "research"],
-    "security":     ["implementation", "research"],
-    "integration":  ["implementation", "documentation", "infrastructure"],
-    "tester":       ["implementation"],
-    "debugger":     ["implementation"],
-    "documenter":   ["implementation", "documentation"],
-    "devops":       ["infrastructure"],
-    "optimizer":    ["implementation"],
+    "finder": ["research"],
+    "analyst": ["research"],
+    "researcher": ["research"],
+    "architect": ["research", "planning"],
+    "planner": ["planning", "infrastructure"],
+    "coder": ["implementation", "planning"],
+    "fixer": ["implementation"],
+    "refactorer": ["implementation"],
+    "reviewer": ["implementation", "research"],
+    "security": ["implementation", "research"],
+    "integration": ["implementation", "documentation", "infrastructure"],
+    "tester": ["implementation"],
+    "debugger": ["implementation"],
+    "documenter": ["implementation", "documentation"],
+    "devops": ["infrastructure"],
+    "optimizer": ["implementation"],
 }
 
 
@@ -526,8 +545,15 @@ def _build_agent_prompt(agent_id: str, context: dict, request: str, category: st
     fields = AGENT_CONTEXT_FIELDS.get(agent_id)
     if fields is None:
         # Fallback: render all 6 context sections + full_context for unknown agents
-        fields = ["research", "planning", "implementation", "quality", "documentation", "infrastructure",
-                   "full_context"]
+        fields = [
+            "research",
+            "planning",
+            "implementation",
+            "quality",
+            "documentation",
+            "infrastructure",
+            "full_context",
+        ]
 
     format_kwargs = {
         "request": request_esc,
@@ -538,7 +564,9 @@ def _build_agent_prompt(agent_id: str, context: dict, request: str, category: st
             format_kwargs["full_context"] = json.dumps(context, ensure_ascii=False, indent=2)
         else:
             field_name = f"{field}_context"
-            format_kwargs[field_name] = json.dumps(context.get(field, {}), ensure_ascii=False, indent=2)
+            format_kwargs[field_name] = json.dumps(
+                context.get(field, {}), ensure_ascii=False, indent=2
+            )
 
     try:
         formatted = template.format(**format_kwargs)
@@ -590,8 +618,7 @@ def _load_model_map() -> dict[str, dict[str, str]]:
     if current_mtime > _CONFIG_MTIME or not _MODEL_MAP_CACHE:
         _MODEL_MAP_CACHE = load_model_config()
         _CONFIG_MTIME = current_mtime
-        logger.info("Loaded MODEL_MAP from config.yaml (%d agents)",
-                     len(_MODEL_MAP_CACHE))
+        logger.info("Loaded MODEL_MAP from config.yaml (%d agents)", len(_MODEL_MAP_CACHE))
 
     return _MODEL_MAP_CACHE
 
@@ -654,26 +681,35 @@ def handle_run_agent(args, **kwargs):
             tool_hint = None
 
         # 4. Log model routing & agent start
-        retro.model_routing(agent_id, effective=f"{provider}/{model}",
-                            configured=f"{provider}/{model}")
+        retro.model_routing(
+            agent_id, effective=f"{provider}/{model}", configured=f"{provider}/{model}"
+        )
 
         ctx = context_override if context_override is not None else state.get("context", {})
         tokens_prompt = len(json.dumps(ctx, ensure_ascii=False)) // 4  # rough estimate
-        retro.agent_start(agent_id, directive=directive, model=model,
-                          round=state.get("round", 0), tokens_prompt=tokens_prompt)
+        retro.agent_start(
+            agent_id,
+            directive=directive,
+            model=model,
+            round=state.get("round", 0),
+            tokens_prompt=tokens_prompt,
+        )
 
         if directive == "direct":
             # Flash agents: return minimal package without prompt file
-            return json.dumps({
-                "agent_id": agent_id,
-                "directive": directive,
-                "tool_hint": tool_hint,
-                "provider": provider,
-                "model": model,
-                "prompt": None,
-                "call_args": None,
-                "state": state,
-            }, ensure_ascii=False)
+            return json.dumps(
+                {
+                    "agent_id": agent_id,
+                    "directive": directive,
+                    "tool_hint": tool_hint,
+                    "provider": provider,
+                    "model": model,
+                    "prompt": None,
+                    "call_args": None,
+                    "state": state,
+                },
+                ensure_ascii=False,
+            )
 
         # 5. Resolve context (delegation agents only)
         ctx = context_override if context_override is not None else state.get("context", {})
@@ -695,16 +731,19 @@ def handle_run_agent(args, **kwargs):
         }
 
         # 7. Return delegation package
-        return json.dumps({
-            "agent_id": agent_id,
-            "directive": directive,
-            "tool_hint": tool_hint,
-            "provider": provider,
-            "model": model,
-            "prompt": prompt,
-            "call_args": call_args,
-            "state": state,  # pass-through for pipeline_advance
-        }, ensure_ascii=False)
+        return json.dumps(
+            {
+                "agent_id": agent_id,
+                "directive": directive,
+                "tool_hint": tool_hint,
+                "provider": provider,
+                "model": model,
+                "prompt": prompt,
+                "call_args": call_args,
+                "state": state,  # pass-through for pipeline_advance
+            },
+            ensure_ascii=False,
+        )
 
     except KeyError as e:
         return json.dumps({"error": f"Missing placeholder in prompt: {e}"})
@@ -727,16 +766,26 @@ def handle_ensemble_run(args, **kwargs):
 
         # Check if ensemble should be used
         if not should_use_ensemble(state, agent_id):
-            retro.log("ensemble_disabled", agent=agent_id,
-                      reason=f"Round {state.get('round', 0)} > max")
-            return json.dumps({
-                "agent_id": agent_id,
-                "n": 1,
-                "ensemble": False,
-                "reason": "Ensemble disabled for this agent/round",
-                "candidates": [{"id": "single", "task": state.get("request", ""),
-                                "temperature": 0.7, "instruction_extra": "Single pass"}],
-            }, ensure_ascii=False)
+            retro.log(
+                "ensemble_disabled", agent=agent_id, reason=f"Round {state.get('round', 0)} > max"
+            )
+            return json.dumps(
+                {
+                    "agent_id": agent_id,
+                    "n": 1,
+                    "ensemble": False,
+                    "reason": "Ensemble disabled for this agent/round",
+                    "candidates": [
+                        {
+                            "id": "single",
+                            "task": state.get("request", ""),
+                            "temperature": 0.7,
+                            "instruction_extra": "Single pass",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            )
 
         candidates = ensemble_generate_candidates(state, agent_id, n)
 
@@ -747,12 +796,15 @@ def handle_ensemble_run(args, **kwargs):
         # Create kanban sub-tasks for visibility
         kb.create_ensemble_subtasks(state, agent_id, candidates)
 
-        return json.dumps({
-            "agent_id": agent_id,
-            "n": len(candidates),
-            "ensemble": True,
-            "candidates": candidates,
-        }, ensure_ascii=False)
+        return json.dumps(
+            {
+                "agent_id": agent_id,
+                "n": len(candidates),
+                "ensemble": True,
+                "candidates": candidates,
+            },
+            ensure_ascii=False,
+        )
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
 

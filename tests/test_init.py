@@ -83,42 +83,58 @@ class TestHandlePrompt:
 
     def test_prompt_basic_build(self):
         self._write_prompt("testagent", "Request: {request}")
-        result = json.loads(plugin.handle_prompt({
-            "agent_id": "testagent",
-            "context": {},
-            "request": "hello",
-        }))
+        result = json.loads(
+            plugin.handle_prompt(
+                {
+                    "agent_id": "testagent",
+                    "context": {},
+                    "request": "hello",
+                }
+            )
+        )
         assert "prompt" in result
         assert "hello" in result["prompt"]
 
     def test_prompt_missing_context_placeholder(self):
         self._write_prompt("testagent", "{request}: {research_context}")
-        result = json.loads(plugin.handle_prompt({
-            "agent_id": "testagent",
-            "context": {},
-            "request": "test",
-        }))
+        result = json.loads(
+            plugin.handle_prompt(
+                {
+                    "agent_id": "testagent",
+                    "context": {},
+                    "request": "test",
+                }
+            )
+        )
         assert "prompt" in result
         assert "test:" in result["prompt"]
         assert "{}" in result["prompt"]
 
     def test_prompt_category_injection(self):
         self._write_prompt("testagent", "Category: {category}")
-        result = json.loads(plugin.handle_prompt({
-            "agent_id": "testagent",
-            "context": {},
-            "request": "",
-            "category": "SECURITY_RELATED",
-        }))
+        result = json.loads(
+            plugin.handle_prompt(
+                {
+                    "agent_id": "testagent",
+                    "context": {},
+                    "request": "",
+                    "category": "SECURITY_RELATED",
+                }
+            )
+        )
         assert "SECURITY_RELATED" in result["prompt"]
 
     def test_prompt_context_injection(self):
         self._write_prompt("testagent", "Full: {full_context}")
-        result = json.loads(plugin.handle_prompt({
-            "agent_id": "testagent",
-            "context": {"key": "val"},
-            "request": "",
-        }))
+        result = json.loads(
+            plugin.handle_prompt(
+                {
+                    "agent_id": "testagent",
+                    "context": {"key": "val"},
+                    "request": "",
+                }
+            )
+        )
         assert "val" in result["prompt"]
         assert "key" in result["prompt"]
 
@@ -147,45 +163,89 @@ class TestHandleConvergence:
 
     def test_convergence_converged(self):
         state = self._make_state()
-        result = json.loads(plugin.handle_convergence({
-            "state": state,
-            "findings": [{"severity": "P2", "file": "x.py", "category": "style"}],
-        }))
+        result = json.loads(
+            plugin.handle_convergence(
+                {
+                    "state": state,
+                    "findings": [{"severity": "P2", "file": "x.py", "category": "style"}],
+                }
+            )
+        )
         assert result["decision"] == "converged"
 
     def test_convergence_continue(self):
         state = self._make_state()
-        result = json.loads(plugin.handle_convergence({
-            "state": state,
-            "findings": [{"severity": "P0", "file": "x.py", "category": "security",
-                          "description": "XSS"}],
-        }))
+        result = json.loads(
+            plugin.handle_convergence(
+                {
+                    "state": state,
+                    "findings": [
+                        {
+                            "severity": "P0",
+                            "file": "x.py",
+                            "category": "security",
+                            "description": "XSS",
+                        }
+                    ],
+                }
+            )
+        )
         assert result["decision"] == "continue"
         assert result["p0_count"] == 1
 
     def test_convergence_stuck(self):
         state = self._make_state()
-        r1 = json.loads(plugin.handle_convergence({
-            "state": state,
-            "findings": [{"severity": "P0", "file": "x.py", "category": "security",
-                          "description": "XSS"}],
-        }))
+        r1 = json.loads(
+            plugin.handle_convergence(
+                {
+                    "state": state,
+                    "findings": [
+                        {
+                            "severity": "P0",
+                            "file": "x.py",
+                            "category": "security",
+                            "description": "XSS",
+                        }
+                    ],
+                }
+            )
+        )
         assert r1["decision"] == "continue"
-        r2 = json.loads(plugin.handle_convergence({
-            "state": state,
-            "findings": [{"severity": "P0", "file": "x.py", "category": "security",
-                          "description": "XSS"}],
-        }))
+        r2 = json.loads(
+            plugin.handle_convergence(
+                {
+                    "state": state,
+                    "findings": [
+                        {
+                            "severity": "P0",
+                            "file": "x.py",
+                            "category": "security",
+                            "description": "XSS",
+                        }
+                    ],
+                }
+            )
+        )
         assert r2["decision"] == "stuck"
 
     def test_convergence_maxed_out(self):
         state = self._make_state()
         for _ in range(3):
-            result = json.loads(plugin.handle_convergence({
-                "state": state,
-                "findings": [{"severity": "P0", "file": "x.py", "category": "security",
-                              "description": "XSS"}],
-            }))
+            result = json.loads(
+                plugin.handle_convergence(
+                    {
+                        "state": state,
+                        "findings": [
+                            {
+                                "severity": "P0",
+                                "file": "x.py",
+                                "category": "security",
+                                "description": "XSS",
+                            }
+                        ],
+                    }
+                )
+            )
         assert result["decision"] == "maxed_out"
 
 
@@ -201,28 +261,43 @@ class TestHandleClassify:
     """Tests for pipeline_classify handler."""
 
     def test_classify_security(self):
-        result = json.loads(plugin.handle_classify({
-            "request": "добавь JWT аутентификацию",
-        }))
+        result = json.loads(
+            plugin.handle_classify(
+                {
+                    "request": "добавь JWT аутентификацию",
+                }
+            )
+        )
         assert result["category"] == "SECURITY_RELATED"
 
     def test_classify_feature_default(self):
-        result = json.loads(plugin.handle_classify({
-            "request": "сделай импорт из CSV",
-        }))
+        result = json.loads(
+            plugin.handle_classify(
+                {
+                    "request": "сделай импорт из CSV",
+                }
+            )
+        )
         assert result["category"] == "FEATURE"
 
     def test_classify_bug(self):
-        result = json.loads(plugin.handle_classify({
-            "request": "баг: крашится при логине",
-        }))
+        result = json.loads(
+            plugin.handle_classify(
+                {
+                    "request": "баг: крашится при логине",
+                }
+            )
+        )
         assert result["category"] == "BUG_UNKNOWN"
 
+
 # ── pipeline_run_agent tests ───────────────────────────────────────────────
+
 
 def test_run_agent_returns_delegation_package():
     """handle_run_agent returns full delegation package with expected fields."""
     from __init__ import handle_run_agent
+
     state = {
         "request": "добавить JWT",
         "category": "FEATURE",
@@ -246,6 +321,7 @@ def test_run_agent_returns_delegation_package():
 def test_run_agent_direct_for_flash():
     """Flash agents get directive: 'direct' and call_args: null."""
     from __init__ import handle_run_agent
+
     state = {
         "request": "test",
         "category": "BUG_KNOWN",
@@ -264,6 +340,7 @@ def test_run_agent_direct_for_flash():
 def test_run_agent_delegate_free():
     """Free-tier agents get directive: delegate_free."""
     from __init__ import handle_run_agent
+
     state = {
         "request": "research",
         "category": "SECURITY_RELATED",
@@ -282,6 +359,7 @@ def test_run_agent_delegate_free():
 def test_run_agent_unknown_agent():
     """Unknown agent_id returns error."""
     from __init__ import handle_run_agent
+
     state = {"request": "x", "pipeline": ["finder"], "current_idx": 0, "status": "running"}
     result = json.loads(handle_run_agent({"state": state, "agent_id": "nonexistent"}))
     assert "error" in result
@@ -291,6 +369,7 @@ def test_run_agent_unknown_agent():
 def test_run_agent_missing_request():
     """State missing 'request' returns error."""
     from __init__ import handle_run_agent
+
     state = {"pipeline": ["finder"], "current_idx": 0, "status": "running"}
     result = json.loads(handle_run_agent({"state": state, "agent_id": "finder"}))
     assert "error" in result
@@ -300,6 +379,7 @@ def test_run_agent_missing_request():
 def test_run_agent_missing_pipeline():
     """State missing 'pipeline' returns error."""
     from __init__ import handle_run_agent
+
     state = {"request": "x", "current_idx": 0, "status": "running"}
     result = json.loads(handle_run_agent({"state": state, "agent_id": "finder"}))
     assert "error" in result
@@ -309,6 +389,7 @@ def test_run_agent_missing_pipeline():
 def test_run_agent_context_override():
     """context parameter overrides state.context."""
     from __init__ import handle_run_agent
+
     state = {
         "request": "test",
         "category": "FEATURE",
@@ -319,9 +400,9 @@ def test_run_agent_context_override():
         "context": {"research": {"original": "from_state"}},
     }
     override = {"research": {"overridden": "yes"}, "planning": {}}
-    result = json.loads(handle_run_agent({
-        "state": state, "agent_id": "architect", "context": override
-    }))
+    result = json.loads(
+        handle_run_agent({"state": state, "agent_id": "architect", "context": override})
+    )
     assert result["agent_id"] == "architect"
     # prompt should contain overridden context
     assert "overridden" in result["prompt"]
@@ -330,6 +411,7 @@ def test_run_agent_context_override():
 def test_run_agent_path_traversal_guard():
     """Agent IDs with path traversal are sanitized."""
     from __init__ import handle_run_agent
+
     state = {"request": "x", "pipeline": ["finder"], "current_idx": 0, "status": "running"}
     result = json.loads(handle_run_agent({"state": state, "agent_id": "../finder"}))
     # Should resolve to "finder" after basename, not error

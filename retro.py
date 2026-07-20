@@ -35,6 +35,7 @@ def _read_retro_config(config_path: str | None = None) -> dict:
 
     try:
         import yaml
+
         with open(config_path, "r", encoding="utf-8") as f:
             raw = yaml.safe_load(f)
     except Exception:
@@ -166,25 +167,63 @@ class RetroLogger:
 
     # ── Convenience log methods ────────────────────────────────────────────────
 
-    def agent_start(self, agent: str, directive: str, model: str, round: int = 0,
-                    tokens_prompt: int | None = None) -> None:
-        self.log("agent_start", agent=agent, directive=directive,
-                 model=model, round=round, tokens_prompt=tokens_prompt)
+    def agent_start(
+        self,
+        agent: str,
+        directive: str,
+        model: str,
+        round: int = 0,
+        tokens_prompt: int | None = None,
+    ) -> None:
+        self.log(
+            "agent_start",
+            agent=agent,
+            directive=directive,
+            model=model,
+            round=round,
+            tokens_prompt=tokens_prompt,
+        )
 
-    def agent_done(self, agent: str, duration_s: float, result: str = "",
-                   tokens_response: int | None = None) -> None:
-        self.log("agent_done", agent=agent, duration_s=round(duration_s, 2),
-                 result=result, tokens_response=tokens_response)
+    def agent_done(
+        self, agent: str, duration_s: float, result: str = "", tokens_response: int | None = None
+    ) -> None:
+        self.log(
+            "agent_done",
+            agent=agent,
+            duration_s=round(duration_s, 2),
+            result=result,
+            tokens_response=tokens_response,
+        )
 
-    def convergence(self, round: int, decision: str, p0: int, p1: int, p2: int,
-                    fingerprint: str = "", reason: str = "") -> None:
-        self.log("convergence", round=round, decision=decision,
-                 p0=p0, p1=p1, p2=p2, fingerprint=fingerprint, reason=reason)
+    def convergence(
+        self,
+        round: int,
+        decision: str,
+        p0: int,
+        p1: int,
+        p2: int,
+        fingerprint: str = "",
+        reason: str = "",
+    ) -> None:
+        self.log(
+            "convergence",
+            round=round,
+            decision=decision,
+            p0=p0,
+            p1=p1,
+            p2=p2,
+            fingerprint=fingerprint,
+            reason=reason,
+        )
 
-    def model_routing(self, agent: str, effective: str, configured: str,
-                      warning: str = "") -> None:
-        self.log("model_routing", agent=agent, effective=effective,
-                 configured=configured, warning=warning)
+    def model_routing(self, agent: str, effective: str, configured: str, warning: str = "") -> None:
+        self.log(
+            "model_routing",
+            agent=agent,
+            effective=effective,
+            configured=configured,
+            warning=warning,
+        )
 
     def ensemble_gen(self, agent: str, n: int, temperatures: list[float]) -> None:
         self.log("ensemble_gen", agent=agent, n=n, temperatures=temperatures)
@@ -192,23 +231,20 @@ class RetroLogger:
     def ensemble_judge(self, winner: str, mode: str, rationale: str = "") -> None:
         self.log("ensemble_judge", winner=winner, mode=mode, rationale=rationale)
 
-    def context_selective(self, agent: str, sections: list[str],
-                          tokens_saved: int | None = None) -> None:
-        self.log("context_selective", agent=agent, sections=sections,
-                 tokens_saved=tokens_saved)
+    def context_selective(
+        self, agent: str, sections: list[str], tokens_saved: int | None = None
+    ) -> None:
+        self.log("context_selective", agent=agent, sections=sections, tokens_saved=tokens_saved)
 
-    def findings_event(self, p0: int, p1: int, p2: int,
-                       fixed: int = 0, accepted: int = 0) -> None:
-        self.log("findings", p0=p0, p1=p1, p2=p2,
-                 fixed=fixed, accepted=accepted)
+    def findings_event(self, p0: int, p1: int, p2: int, fixed: int = 0, accepted: int = 0) -> None:
+        self.log("findings", p0=p0, p1=p1, p2=p2, fixed=fixed, accepted=accepted)
 
     def error(self, agent: str, error: str, resolution: str = "") -> None:
         self.log("error", agent=agent, error=error, resolution=resolution)
 
     def findings_detail(self, findings: list[dict]) -> None:
         """Log the detailed findings list as a single event."""
-        self.log("findings_detail", count=len(findings),
-                 items=findings)
+        self.log("findings_detail", count=len(findings), items=findings)
 
 
 # ── Global singleton ───────────────────────────────────────────────────────────
@@ -370,7 +406,9 @@ def build_analysis_prompt(events: list[dict], run_context: dict | None = None) -
         for err in errors:
             resolution = err.get("resolution", "")
             resolution_suffix = f" → {resolution}" if resolution else ""
-            lines.append(f"  ❌ {err.get('agent', '?')}: {err.get('error', '?')}{resolution_suffix}")
+            lines.append(
+                f"  ❌ {err.get('agent', '?')}: {err.get('error', '?')}{resolution_suffix}"
+            )
         lines.append("")
 
     if findings_events:
@@ -389,11 +427,15 @@ def build_analysis_prompt(events: list[dict], run_context: dict | None = None) -
     if convergences:
         last_decision = convergences[-1].get("decision", "")
         if last_decision == "maxed_out":
-            patterns.append("⚠️  Convergence: maxed_out — findings remained after max rounds. "
-                            "Check if convergence correctly filters 'fixed' findings.")
+            patterns.append(
+                "⚠️  Convergence: maxed_out — findings remained after max rounds. "
+                "Check if convergence correctly filters 'fixed' findings."
+            )
         elif last_decision == "stuck":
-            patterns.append("⚠️  Convergence: stuck — same findings across rounds. "
-                            "Fix convergence or remove stale findings.")
+            patterns.append(
+                "⚠️  Convergence: stuck — same findings across rounds. "
+                "Fix convergence or remove stale findings."
+            )
         elif last_decision == "converged":
             patterns.append("✅ Convergence: converged — all P0/P1 resolved.")
 
@@ -402,17 +444,22 @@ def build_analysis_prompt(events: list[dict], run_context: dict | None = None) -
     if ensemble_judge_events:
         all_deterministic = all(e.get("mode") == "deterministic" for e in ensemble_judge_events)
         if all_deterministic:
-            patterns.append("ℹ️  Ensemble judge always used deterministic mode — "
-                            "LLM Judge was never invoked. Check model availability.")
+            patterns.append(
+                "ℹ️  Ensemble judge always used deterministic mode — "
+                "LLM Judge was never invoked. Check model availability."
+            )
 
     # 3. Routing warnings
     if routings:
         stale_routes = [r for r in routings if "stale" in r.get("warning", "").lower()]
         if stale_routes:
-            models_str = ", ".join(f"{r['agent']} (wanted: {r.get('configured', '?')})"
-                                   for r in stale_routes)
-            patterns.append(f"⚠️  Stale MODEL_MAP detected for: {models_str}. "
-                            "Config change was not picked up — add hot-reload.")
+            models_str = ", ".join(
+                f"{r['agent']} (wanted: {r.get('configured', '?')})" for r in stale_routes
+            )
+            patterns.append(
+                f"⚠️  Stale MODEL_MAP detected for: {models_str}. "
+                "Config change was not picked up — add hot-reload."
+            )
 
     # 4. Errors
     if errors:

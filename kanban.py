@@ -30,10 +30,12 @@ def _import_ensemble():
     try:
         from .ensemble import generate_candidates as gc
         from .ensemble import judge_candidates as jc
+
         return gc, jc
     except ImportError:
         from ensemble import generate_candidates as gc
         from ensemble import judge_candidates as jc
+
         return gc, jc
 
 
@@ -59,66 +61,77 @@ def _extract_target(request: str) -> str:
         return "проект"
     # 1. Конкретные имена проектов/файлов (lowercase для case-insensitive сравнения)
     known = [
-        "hermes-pipeline-plugin", "pipeline-dashboard", "kanban.py", "server.py",
-        "__init__.py", "models.py", "ensemble.py", "agents.md", "architecture.md",
-        "config.yaml", "kanban.db", "pipeline", "plugin", "дашборд",
+        "hermes-pipeline-plugin",
+        "pipeline-dashboard",
+        "kanban.py",
+        "server.py",
+        "__init__.py",
+        "models.py",
+        "ensemble.py",
+        "agents.md",
+        "architecture.md",
+        "config.yaml",
+        "kanban.db",
+        "pipeline",
+        "plugin",
+        "дашборд",
     ]
     req_lower = request.lower()
     for name in known:
         if name in req_lower:
             return name
     # 2. Файл после предлогов "в", "для", "на"
-    m = re.search(r'\b(?:в|для|на)\s+(\S+(?:\.\w+)?)\b', request)
+    m = re.search(r"\b(?:в|для|на)\s+(\S+(?:\.\w+)?)\b", request)
     if m:
         return m.group(1)
     # 3. Первое слово из 3+ букв без спецсимволов
-    m = re.search(r'\b([а-яёa-z]{3,})\b', request.lower())
+    m = re.search(r"\b([а-яёa-z]{3,})\b", request.lower())
     if m:
         return m.group(1)
     return "проект"
 
 
 _AGENT_VERB: dict[str, str] = {
-    "finder":     "разведка",
-    "analyst":    "анализ",
+    "finder": "разведка",
+    "analyst": "анализ",
     "researcher": "исследование",
-    "architect":  "архитектура",
-    "planner":    "план",
-    "coder":      "разработка",
-    "editor":     "правки",
-    "fixer":      "баг-фикс",
+    "architect": "архитектура",
+    "planner": "план",
+    "coder": "разработка",
+    "editor": "правки",
+    "fixer": "баг-фикс",
     "refactorer": "рефакторинг",
-    "reviewer":   "ревью",
-    "security":   "безопасность",
-    "integration":"интеграция",
-    "tester":     "тесты",
-    "debugger":   "отладка",
+    "reviewer": "ревью",
+    "security": "безопасность",
+    "integration": "интеграция",
+    "tester": "тесты",
+    "debugger": "отладка",
     "documenter": "документация",
-    "devops":     "деплой",
-    "optimizer":  "оптимизация",
+    "devops": "деплой",
+    "optimizer": "оптимизация",
 }
 
 
 # ── Role-specific task descriptions (shown in dashboard per agent) ──
 # Расширенные описания (~x1.5 от кратких) — дают контекст: что делает, чем пользуется, какой результат
 AGENT_DESCRIPTIONS: dict[str, str] = {
-    "finder":     "Сбор информации: чтение кода, файлов, конфигов — разведка кодовой базы перед анализом",
-    "analyst":    "Анализ данных и диагностика: поиск корня проблемы, разбор логов, выявление закономерностей",
+    "finder": "Сбор информации: чтение кода, файлов, конфигов — разведка кодовой базы перед анализом",
+    "analyst": "Анализ данных и диагностика: поиск корня проблемы, разбор логов, выявление закономерностей",
     "researcher": "Внешние исследования: поиск best practices, документация библиотек, альтернативные подходы",
-    "architect":  "Проектирование решения: архитектура изменений, выбор компонентов, связи между модулями",
-    "planner":    "Планирование: разбивка на подзадачи, оценка объёма работ, построение плана из шагов",
-    "coder":      "Разработка: написание кода, реализация фич, правка синтаксиса, имплементация логики",
-    "editor":     "Редактирование: правки по готовому плану, мелкие доработки, форматирование, типизация",
-    "fixer":      "Исправление: патчи известных багов, замена сломанных вызовов, обходы проблем",
+    "architect": "Проектирование решения: архитектура изменений, выбор компонентов, связи между модулями",
+    "planner": "Планирование: разбивка на подзадачи, оценка объёма работ, построение плана из шагов",
+    "coder": "Разработка: написание кода, реализация фич, правка синтаксиса, имплементация логики",
+    "editor": "Редактирование: правки по готовому плану, мелкие доработки, форматирование, типизация",
+    "fixer": "Исправление: патчи известных багов, замена сломанных вызовов, обходы проблем",
     "refactorer": "Рефакторинг: улучшение структуры, устранение дублирования, выделение функций",
-    "reviewer":   "Код-ревью: проверка качества, поиск логических ошибок, рекомендации по улучшению",
-    "security":   "Аудит безопасности: XSS, SQL-инъекции, утечки данных, права доступа",
-    "integration":"Консистентность: кросс-файловые связи, импорты, типы, совместимость API",
-    "tester":     "Тестирование: написание тестов, прогон, проверка регрессии, assertions",
-    "debugger":   "Отладка: шаг за шагом поиск первопричины, снятие стека, анализ переменных",
+    "reviewer": "Код-ревью: проверка качества, поиск логических ошибок, рекомендации по улучшению",
+    "security": "Аудит безопасности: XSS, SQL-инъекции, утечки данных, права доступа",
+    "integration": "Консистентность: кросс-файловые связи, импорты, типы, совместимость API",
+    "tester": "Тестирование: написание тестов, прогон, проверка регрессии, assertions",
+    "debugger": "Отладка: шаг за шагом поиск первопричины, снятие стека, анализ переменных",
     "documenter": "Документация: README, AGENTS.md, комментарии в коде, changelog, инструкции",
-    "devops":     "Инфраструктура: CI/CD, Docker, деплой, системные юниты, мониторинг",
-    "optimizer":  "Оптимизация: производительность, память, асинхронность, кэширование, регрессия",
+    "devops": "Инфраструктура: CI/CD, Docker, деплой, системные юниты, мониторинг",
+    "optimizer": "Оптимизация: производительность, память, асинхронность, кэширование, регрессия",
 }
 
 
@@ -134,13 +147,13 @@ def _db_path() -> str:
 # ── Public API ──────────────────────────────────────────────────────────────┘
 
 
-def create_parent(title: str, body: str = "",
-                  idempotency_key: str = "") -> str | None:
+def create_parent(title: str, body: str = "", idempotency_key: str = "") -> str | None:
     """Create the parent pipeline task. Returns task_id or None."""
     task_id = idempotency_key or f"task:{uuid.uuid4().hex[:12]}"
     now = int(time.time())
     ok = _sqlite_update(
-        "INSERT OR IGNORE INTO tasks (id, title, body, status, priority, created_at) VALUES (?, ?, ?, 'ready', 1, ?)",
+        "INSERT OR IGNORE INTO tasks (id, title, body, status, priority, created_at)"
+        " VALUES (?, ?, ?, 'ready', 1, ?)",
         (task_id, title, body, now),
     )
     if not ok:
@@ -151,13 +164,15 @@ def create_parent(title: str, body: str = "",
     return task_id
 
 
-def create_child(title: str, parent_id: str, body: str = "",
-                 idempotency_key: str = "") -> str | None:
+def create_child(
+    title: str, parent_id: str, body: str = "", idempotency_key: str = ""
+) -> str | None:
     """Create a child task linked to parent. Returns task_id or None."""
     task_id = idempotency_key or f"task:{uuid.uuid4().hex[:12]}"
     now = int(time.time())
     ok = _sqlite_update(
-        "INSERT OR IGNORE INTO tasks (id, title, body, status, priority, created_at) VALUES (?, ?, ?, 'todo', 2, ?)",
+        "INSERT OR IGNORE INTO tasks (id, title, body, status, priority, created_at)"
+        " VALUES (?, ?, ?, 'todo', 2, ?)",
         (task_id, title, body, now),
     )
     if not ok:
@@ -230,13 +245,13 @@ def promote(task_id: str, force: bool = False) -> bool:
 def comment(task_id: str, text: str) -> bool:
     """Append a comment via direct SQLite. Returns True if succeeded."""
     return _sqlite_update(
-        "INSERT INTO task_comments (task_id, body, created_at, author) VALUES (?, ?, unixepoch(), ?)",
+        "INSERT INTO task_comments (task_id, body, created_at, author)"
+        " VALUES (?, ?, unixepoch(), ?)",
         (task_id, text, "pipeline-orchestrator"),
     )
 
 
-def complete(task_id: str, result_summary: str = "",
-             metadata: dict | None = None) -> bool:
+def complete(task_id: str, result_summary: str = "", metadata: dict | None = None) -> bool:
     """Mark task done via direct SQLite.
 
     ``result_summary`` and ``metadata`` are accepted for backward
@@ -252,14 +267,14 @@ def complete(task_id: str, result_summary: str = "",
     if ok and result_summary:
         # Store result summary as a comment via DB (kanban comments table)
         _sqlite_update(
-            "INSERT INTO task_comments (task_id, body, created_at, author) VALUES (?, ?, unixepoch(), ?)",
+            "INSERT INTO task_comments (task_id, body, created_at, author)"
+            " VALUES (?, ?, unixepoch(), ?)",
             (task_id, result_summary, "pipeline-orchestrator"),
         )
     return ok
 
 
-def block_task(task_id: str, reason: str = "",
-               kind: str = "needs_input") -> bool:
+def block_task(task_id: str, reason: str = "", kind: str = "needs_input") -> bool:
     """Block a task via direct SQLite. Returns True if succeeded.
 
     ``kind`` controls the resulting status:
@@ -280,7 +295,8 @@ def unblock(task_id: str) -> bool:
 
 def list_tasks(status: str = "", include_archived: bool = False) -> list[dict]:
     """List tasks via direct SQLite, optionally filtered by status."""
-    sql = "SELECT id, title, body, assignee, status, priority, created_by, created_at, started_at, completed_at, block_kind, block_recurrences FROM tasks WHERE 1=1"
+    sql = "SELECT id, title, body, assignee, status, priority, created_by, created_at," \
+          " started_at, completed_at, block_kind, block_recurrences FROM tasks WHERE 1=1"
     params: list[str] = []
     if status:
         sql += " AND status=?"
@@ -298,9 +314,8 @@ def show_task(task_id: str) -> dict:
         return {}
     task = rows[0]
     task["children"] = [
-        r["child_id"] for r in _sqlite_select(
-            "SELECT child_id FROM task_links WHERE parent_id=?", (task_id,)
-        )
+        r["child_id"]
+        for r in _sqlite_select("SELECT child_id FROM task_links WHERE parent_id=?", (task_id,))
     ]
     task["comments"] = _sqlite_select(
         "SELECT * FROM task_comments WHERE task_id=? ORDER BY created_at ASC",
@@ -347,11 +362,7 @@ def create_task_tree(state: dict) -> dict:
 
     # ── Create parent ────────────────────────────────────────────────────
     title = f"🔷  Пайплайн: {request[:80]}"
-    body = (
-        f"Категория: {category}\n"
-        f"Агенты: {agents_str}\n"
-        f"Запрос: {request}"
-    )
+    body = f"Категория: {category}\nАгенты: {agents_str}\nЗапрос: {request}"
     parent_id = create_parent(title, body=body, idempotency_key=parent_ikey)
     if not parent_id:
         logger.warning("failed to create parent kanban task")
@@ -369,8 +380,7 @@ def create_task_tree(state: dict) -> dict:
         c_title = f"@{agent}: {verb} {target}"
         desc = AGENT_DESCRIPTIONS.get(agent, request[:60])
         c_body = f"Этап: {agent}\nЗадача: {desc}\nОбъект: {target}\nЗапрос: {request}"
-        child_id_val = create_child(c_title, parent_id,
-                                    body=c_body, idempotency_key=c_ikey)
+        child_id_val = create_child(c_title, parent_id, body=c_body, idempotency_key=c_ikey)
         if child_id_val:
             state["kanban_task_ids"][agent] = child_id_val
             logger.info("created child task %s → %s", agent, child_id_val)
@@ -382,14 +392,15 @@ def create_task_tree(state: dict) -> dict:
         if first_id:
             promote(first_id, force=True)
             _claim_and_assign(first_id, f"@{first_agent}")
-            logger.info("promoted first agent %s → ready (assignee=%s)",
-                        first_agent, first_agent)
+            logger.info("promoted first agent %s → ready (assignee=%s)", first_agent, first_agent)
     # ══ Log the pipeline start on the parent task ════════════════════════
-    comment(parent_id,
-            f"🚀 Пайплайн запущен\n"
-            f"Категория: {category}\n"
-            f"Агенты: {agents_str}\n"
-            f"Первый этап: @{pipeline[0] if pipeline else '?'}")
+    comment(
+        parent_id,
+        f"🚀 Пайплайн запущен\n"
+        f"Категория: {category}\n"
+        f"Агенты: {agents_str}\n"
+        f"Первый этап: @{pipeline[0] if pipeline else '?'}",
+    )
 
     return state
 
@@ -422,7 +433,8 @@ def _update_parent_status(parent_id: str | None, status: str):
     """Update parent task status directly via SQLite."""
     if not parent_id:
         return
-    import os, sqlite3
+    import sqlite3
+
     db_path = _db_path()
     conn = None
     try:
@@ -495,7 +507,9 @@ def advance(state: dict, completed_agent: str) -> dict:
         if next_id:
             # Pipeline lifecycle: promote(todo→ready) then claim(ready→running)
             promote(next_id, force=True)
-            _claim_and_assign(next_id, f"@{next_agent}")  # Bug #2: ранее claim не делался — started_at был пуст
+            _claim_and_assign(
+                next_id, f"@{next_agent}"
+            )  # Bug #2: ранее claim не делался — started_at был пуст
             if parent_id:
                 comment(parent_id, f"👉 Начинается этап @{next_agent}")
             logger.info("promoted+claimed %s → running (assignee=%s)", next_agent, next_agent)
@@ -533,8 +547,12 @@ def evaluate_convergence(state: dict, findings: list | None = None) -> dict:
         curr_fp = state.get("findings_fingerprint", "")
         state["findings"] = findings
         state["findings_fingerprint"] = _compute_fingerprint(
-            [f for f in findings if f.get("severity") in ("P0", "P1")
-             and f.get("status", "open") not in ("fixed", "accepted", "none")]
+            [
+                f
+                for f in findings
+                if f.get("severity") in ("P0", "P1")
+                and f.get("status", "open") not in ("fixed", "accepted", "none")
+            ]
         )
         state["prev_findings_fingerprint"] = curr_fp
         state["round"] = state.get("round", 0) + 1
@@ -545,8 +563,7 @@ def evaluate_convergence(state: dict, findings: list | None = None) -> dict:
 
     # Filter: only count findings that are actually open
     open_findings = [
-        f for f in active_findings
-        if f.get("status", "open") not in ("fixed", "accepted", "none")
+        f for f in active_findings if f.get("status", "open") not in ("fixed", "accepted", "none")
     ]
     p0 = [f for f in open_findings if f.get("severity") == "P0"]
     p1 = [f for f in open_findings if f.get("severity") == "P1"]
@@ -568,8 +585,7 @@ def evaluate_convergence(state: dict, findings: list | None = None) -> dict:
     if round_num >= max_rounds:
         return {
             "decision": "maxed_out",
-            "reason": f"Reached max rounds ({max_rounds}) — "
-                      f"{len(p0)} P0, {len(p1)} P1 unresolved",
+            "reason": f"Reached max rounds ({max_rounds}) — {len(p0)} P0, {len(p1)} P1 unresolved",
             "round": round_num,
             "p0_count": len(p0),
             "p1_count": len(p1),
@@ -583,7 +599,7 @@ def evaluate_convergence(state: dict, findings: list | None = None) -> dict:
         return {
             "decision": "stuck",
             "reason": f"Same {len(p0p1)} P0/P1 findings as previous round — "
-                      "fixes are not converging",
+            "fixes are not converging",
             "round": round_num,
             "p0_count": len(p0),
             "p1_count": len(p1),
@@ -593,8 +609,7 @@ def evaluate_convergence(state: dict, findings: list | None = None) -> dict:
     # Continue
     return {
         "decision": "continue",
-        "reason": f"{len(p0p1)} P0/P1 findings remain — "
-                  f"round {round_num}/{max_rounds}",
+        "reason": f"{len(p0p1)} P0/P1 findings remain — round {round_num}/{max_rounds}",
         "round": round_num,
         "p0_count": len(p0),
         "p1_count": len(p1),
@@ -649,7 +664,9 @@ def on_convergence(state: dict, convergence_result: dict) -> None:
         metadata = {
             "decision": "converged",
             "round": round_num,
-            "p0": p0, "p1": p1, "p2": p2,
+            "p0": p0,
+            "p1": p1,
+            "p2": p2,
         }
         complete(parent_id, result_summary=reason, metadata=metadata)
         # Close all child tasks too
@@ -657,28 +674,26 @@ def on_convergence(state: dict, convergence_result: dict) -> None:
             complete(tid, result_summary=f"✅ @{agent} done")
 
     elif decision == "stuck":
-        block_task(parent_id,
-                   reason=f"Stuck after round {round_num}: {reason}",
-                   kind="needs_input")
+        block_task(parent_id, reason=f"Stuck after round {round_num}: {reason}", kind="needs_input")
 
     elif decision == "maxed_out":
         metadata = {
             "decision": "maxed_out",
             "round": round_num,
-            "p0": p0, "p1": p1, "p2": p2,
+            "p0": p0,
+            "p1": p1,
+            "p2": p2,
         }
-        complete(parent_id,
-                 result_summary=f"Maxed out: {reason}",
-                 metadata=metadata)
+        complete(parent_id, result_summary=f"Maxed out: {reason}", metadata=metadata)
 
     elif decision == "continue":
         # Unblock @coder for next round
         coder_id = task_ids.get("coder")
         if coder_id:
             unblock(coder_id)
-            comment(parent_id,
-                    f"🔄 Раунд {round_num}: @coder перезапущен "
-                    f"({len(findings)} findings)")
+            comment(
+                parent_id, f"🔄 Раунд {round_num}: @coder перезапущен ({len(findings)} findings)"
+            )
 
 
 def on_clear(state: dict) -> None:
@@ -717,9 +732,7 @@ def _cleanup_stale_pipelines(max_age_hours: int = 24) -> int:
     for row in stale:
         tid = row["id"]
         # Check that it really has children (a pipeline parent)
-        children = _sqlite_select(
-            "SELECT child_id FROM task_links WHERE parent_id=?", (tid,)
-        )
+        children = _sqlite_select("SELECT child_id FROM task_links WHERE parent_id=?", (tid,))
         if len(children) < 2:
             continue
         # Archive all children first
@@ -855,9 +868,12 @@ def generate_candidates(state: dict, agent_id: str, n: int = 5) -> list[dict]:
     return ensemble_gen_candidates(state, agent_id, n)
 
 
-def judge_candidates(request: str, candidates: list[dict],
-                     judge_mode: str = "deterministic",
-                     judge_config: dict | None = None) -> dict:
+def judge_candidates(
+    request: str,
+    candidates: list[dict],
+    judge_mode: str = "deterministic",
+    judge_config: dict | None = None,
+) -> dict:
     """Select the best candidate from N results.
     Delegates to ensemble.py for full implementation.
     """

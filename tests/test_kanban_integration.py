@@ -29,7 +29,9 @@ def _has_kanban():
     try:
         r = subprocess.run(
             [hermes, "kanban", "boards", "ls", "--json"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if r.returncode != 0:
             return False
@@ -65,6 +67,7 @@ def clean_board():
 
 # Track created parents so each test can uniquely identify its own
 _created_parents: dict[str, str] = {}
+
 
 def _unique_state(pipeline=None):
     ts = str(time.time())
@@ -120,8 +123,9 @@ class TestKanbanTreeIntegration:
 
         restored = kb.scan_board()
         assert restored is not None, "scan_board should find active pipeline"
-        assert restored.get("kanban_parent_id") == parent_id, \
+        assert restored.get("kanban_parent_id") == parent_id, (
             f"Expected parent {parent_id}, got {restored.get('kanban_parent_id')}"
+        )
         assert len(restored.get("pipeline", [])) == 3
         assert "finder" in restored.get("completed", [])
 
