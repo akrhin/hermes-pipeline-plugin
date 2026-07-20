@@ -1,0 +1,54 @@
+# Pipeline Plugin Config v3.5.0 — tractor profile (local Qwen)
+# Загружается когда HERMES_PROFILE=tractor
+pipeline:
+  models:
+    defaults:
+      direct:
+        provider: custom
+        model: Qwen3.5-0.8B-GGUF
+      delegate:
+        provider: custom
+        model: Qwen3-Coder-Next-GGUF
+      delegate_free:
+        provider: custom
+        model: Qwen3.5-0.8B-GGUF
+    agents:
+      security:
+        provider: delegate
+        model: Qwen3-Coder-Next-GGUF
+      architect:
+        provider: delegate
+        model: Qwen3-Coder-Next-GGUF
+      reviewer:
+        provider: delegate
+        model: Qwen3-Coder-Next-GGUF
+      integration:
+        provider: delegate
+        model: Qwen3-Coder-Next-GGUF
+      coder:
+        provider: delegate
+        model: Qwen3-Coder-Next-GGUF
+      tester:
+        provider: delegate
+        model: Qwen3-Coder-Next-GGUF
+
+  ensemble:
+    enabled: true
+    default_n: 5
+    max_n: 10
+    agents:
+      coder:
+        enabled: true
+        n: 5
+        judge_mode: llm
+    judge:
+      model: Qwen3.6-35B-A3B-GGUF
+      provider: custom
+    cost_optimization:
+      disable_on_round_gt: 1
+
+  retro:
+    enabled: true
+    dir: ~/.hermes/plugins/pipeline/retro
+    max_files: 100
+    auto_analyze: false
