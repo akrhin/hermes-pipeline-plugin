@@ -39,11 +39,23 @@ VALID_PROVIDER_TYPES = frozenset({"direct", "delegate", "delegate_free"})
 
 
 def _get_config_path() -> Path:
-    """Путь к конфигу плагина: ~/.hermes/plugins/pipeline/config.yaml.
-    Не читает главный config.yaml Hermes, чтобы не засорять его.
+    """Path to plugin config: ~/.hermes/plugins/pipeline/config.yaml
+    with per-profile override support (config.<profile>.yaml).
+
+    Priority:
+      1. config.<profile>.yaml if HERMES_PROFILE is set and file exists
+      2. config.yaml (default fallback)
     """
     hermes_home = os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes"))
-    return Path(hermes_home) / "plugins" / "pipeline" / "config.yaml"
+    base_dir = Path(hermes_home) / "plugins" / "pipeline"
+
+    profile = os.environ.get("HERMES_PROFILE", "")
+    if profile:
+        profile_path = base_dir / f"config.{profile}.yaml"
+        if profile_path.exists():
+            return profile_path
+
+    return base_dir / "config.yaml"
 
 
 def _read_config_section() -> dict[str, Any] | None:
