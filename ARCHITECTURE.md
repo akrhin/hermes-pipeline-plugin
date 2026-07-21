@@ -251,8 +251,12 @@ pipeline:
 || v3.2 | Flash prompt fix + model config hot-reload |
 || v3.3 | LLM Judge delegation fix + AGENTS.md + community files |
 || v3.4 | README rewrite (5-step install) + toolsets override docs |
-|| **v3.5** | **scan_board order fix (pipeline из body) + ensemble judge output 2000→8000 + judge config passthrough** |
-| v3.1 | **Ensemble production**: ensemble.py, config-driven, LLM Judge, kanban subtasks |
+| **v3.5** | **scan_board order fix (pipeline из body) + ensemble judge output 2000→8000 + judge config passthrough** |
+|| **v3.6** | **CRG integration** — reviewer/security используют MCP-инструменты для blast radius, risk score |
+|| **v3.7** | **convergence.py + retro split + classify RU расширение (41 ключ) + primary priority fix** |
+|| **v3.7.1** | **CI quality gates** — bandit B108 suppressed, orchestrator skill ruff/bandit/compileall/pytest |
+|| **v3.7.2** | **Classify audit fix + handlers/extraction** — «аудит»/«audit» → REFACTORING. 17 хендлеров вынесены в `handlers/__init__.py`. `__init__.py` 892→280 строк |
+|| v3.1 | **Ensemble production**: ensemble.py, config-driven, LLM Judge, kanban subtasks |
 | **v3.2** | **Retrospective logging**, hot-reload MODEL_MAP, default prompt fallback, convergence status:fixed filter. 16 agents, 12 tools |
 | **v3.3** | **SQLite-native kanban** (PR#1 от @V0rt). Прямой SQLite без CLI. 20 bugfixes (4 P0 + 7 P1 + 9 P2). reopen(), AGENT_VERB, _extract_target(), try/finally resource leak fix |
 | **v3.3.1** | **Bugfix release**: Flash prompt (P0), LLM Judge stub (P0), reopen() added, maxed_out children close, stale 1-child cleanup, scan_board LIMIT 1, integration.prompt dead Full context. 79/79 tests |

@@ -95,9 +95,11 @@ class TestClassifyEdgeCases:
         result = classify("рефакторинг документации")
         assert result["primary"] == "REFACTORING", f"Got {result['primary']}"
 
-    def test_audit_triggers_security(self):
-        result = classify("проведи аудит кода")
-        assert result["primary"] == "SECURITY_RELATED"
+    def test_audit_triggers_refactoring(self):
+        """'аудит' (general code audit) maps to REFACTORING, not SECURITY_RELATED."""
+        result = classify("сделай аудит кода")
+        assert result["primary"] == "REFACTORING"
+        assert "audit" not in result.get("matched_keywords", {}).get("SECURITY_RELATED", [])
 
     def test_collision_triggers_refactoring(self):
         result = classify("найди коллизии в данных")

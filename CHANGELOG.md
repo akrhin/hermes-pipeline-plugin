@@ -1,3 +1,16 @@
+## v3.7.2 (2026-07-21)
+
+### Refactoring — classify audit fix + handlers extracted
+
+- **Bug #1 (P1) — Классификатор: «аудит»/«audit» маппился в SECURITY_RELATED** вместо REFACTORING.
+  Ключи `аудит` и `audit` перемещены из SECURITY_RELATED в REFACTORING.
+  Общий аудит кода — это рефакторинг, не безопасность.
+- **Bug #2 (P1) — handlers вынесены из `__init__.py` (892→280 строк)**:
+  - 17 хендлеров + `_build_agent_prompt` + `AGENT_CONTEXT_FIELDS` + model config loader → `handlers/__init__.py`
+  - `__init__.py` теперь содержит только 12 tool schemas + `register()`
+  - `handlers._get_plugin_dir()` динамически резолвит PLUGIN_DIR (поддержка тестового monkey-patching)
+- **Тесты**: 22/22 classify, 45 init+models, 112/112 total, Ruff 0 issues
+
 ## v3.7.1 (2026-07-21)
 
 ### Bug fixes — CI quality gates

@@ -1,6 +1,6 @@
 name: pipeline
-version: 3.7.1
-description: "Pipeline Plugin v3.7.1 — bandit B108 suppressed, orchestrator skill quality gates added."
+version: 3.7.2
+description: "Pipeline Plugin v3.7.2 — classify audit fix, handlers extracted from __init__.py (892→~280 lines)."
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify
