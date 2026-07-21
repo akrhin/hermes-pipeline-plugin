@@ -1,4 +1,10 @@
-# Changelog
+## v3.7.1 (2026-07-21)
+
+### Bug fixes — CI quality gates
+
+- **Bandit B108 suppressed** — `/tmp` → `tmp_path` fixture in `test_retro_summary.py:test_parse_args_custom`
+- **Orchestrator skill updated** — Фаза «Перед пушем» теперь включает ruff/bandit/compileall/pytest
+  (была ошибка: агенты не запускали quality gates локально)
 
 ## v3.7.0 (2026-07-21)
 

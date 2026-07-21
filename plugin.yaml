@@ -1,6 +1,6 @@
 name: pipeline
-version: 3.7.0
-description: "Pipeline Plugin v3.7.0 — convergence extracted, retro split, classify keywords expanded (+41), primary priority fixed, duplicate _import_ensemble removed."
+version: 3.7.1
+description: "Pipeline Plugin v3.7.1 — bandit B108 suppressed, orchestrator skill quality gates added."
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify

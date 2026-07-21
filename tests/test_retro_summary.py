@@ -227,9 +227,9 @@ class TestCLI:
         assert args.json is False
         assert args.verbose is False
 
-    def test_parse_args_custom(self) -> None:
-        args = rs.parse_args(["--dir", "/tmp", "--all", "--json", "-v"])
-        assert args.dir == "/tmp"
+    def test_parse_args_custom(self, tmp_path: Path) -> None:
+        args = rs.parse_args(["--dir", str(tmp_path), "--all", "--json", "-v"])
+        assert args.dir == str(tmp_path)
         assert args.all is True
         assert args.json is True
         assert args.verbose is True
