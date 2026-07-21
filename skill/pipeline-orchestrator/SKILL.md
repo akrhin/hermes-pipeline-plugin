@@ -30,6 +30,22 @@ tags: [pipeline, orchestrator, ensemble, convergence, kanban, retro, master]
 3. Если `pipeline_resume()` вернул стейт — продолжай с того же места (не начинай новый)
 4. Сохрани в Mnemosyne факт о старте: mnemosyne_remember(content="Pipeline session started", source="lifecycle", scope="session")
 
+### АНТИ-BYPASS ПРАВИЛО (железобетонное)
+
+**Запрещено:**
+- `terminal("cd ~/git/... && python3 ...")` — любые ручные вызовы pipeline-функций через терминал
+- `import kanban` или `import handlers` в `execute_code()` — прямой вызов API без инструментов
+- `delegate_task()` без `pipeline_run_agent()` → `pipeline_advance()` — оркестрация только через пайплайн
+- Ручной `git status`, `ruff`, `pytest`, `ls` — если задача связана с pipeline-plugin
+- Любая проверка состояния плагина через shell вместо pipeline-инструментов
+
+**Как должно быть:**
+1. classify → save → run_agent → delegate_task(**call_args) → advance → (повтор для каждого агента)
+2. Если `pipeline_save` вернул `null` — использовать `pipeline_clear` + `pipeline_save` снова, не лезть в терминал
+3. Все проверки (тесты, ruff, статус) — через агентов пайплайна, не вручную
+
+> 🔴 **Если bypassнул — удали канал и заново. Пользователь прав — бесит.**
+
 ### Фаза 2: Исполнение
 4. Работай через pipeline: classify → save → load/resume → advance
 5. Не bypass kanban — ни одного прямого `delegate_task` вне пайплайна

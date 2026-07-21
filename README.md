@@ -60,9 +60,9 @@ ln -sf ~/git/hermes-pipeline-plugin ~/.hermes/plugins/pipeline
 ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator \
       ~/.hermes/skills/hermes/pipeline-orchestrator
 ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-ensemble \
-      ~/.hermes/skills/pipeline-ensemble
+      ~/.hermes/skills/hermes/pipeline-ensemble
 ln -sf ~/git/hermes-pipeline-plugin/skill/pipeline-audit-checklist \
-      ~/.hermes/skills/verification/pipeline-audit-checklist
+      ~/.hermes/skills/hermes/pipeline-audit-checklist
 
 # 4. Включить плагин
 hermes plugins enable pipeline
@@ -78,6 +78,7 @@ cp ~/git/hermes-pipeline-plugin/pipeline.config.yaml.example \
 
 ```bash
 hermes plugins list | grep pipeline   # должен быть enabled
+skill_view('pipeline-orchestrator')    # должен загрузиться без ошибок
 ```
 
 ### Полный конфиг
@@ -114,7 +115,7 @@ pipeline:
     enabled: true
     dir: ~/.hermes/plugins/pipeline/retro
     max_files: 100
-    auto_analyze: false
+    auto_analyze: true
 ```
 
 ### Обновление
@@ -147,18 +148,18 @@ cd ~/git/hermes-pipeline-plugin && git pull
 | **@documenter** | Flash | `delegate` | `deepseek-v4-flash` | implementation, documentation | Документация |
 | **@devops** | Flash | `delegate` | `deepseek-v4-flash` | infrastructure | Инфраструктура (только INFRASTRUCTURE) |
 | **@optimizer** | Flash | `delegate` | `deepseek-v4-flash` | implementation | Оптимизация (только PERFORMANCE) |
-- **@quality** | Flash | **`delegate`** | **`deepseek-v4-flash`** | implementation | Quality gates (ruff/bandit/compileall/pytest) |
+|- **@quality** | Flash | **`delegate`** | **`deepseek-v4-flash`** | implementation | Quality gates (ruff/bandit/compileall/pytest) — всегда в конце |
 
-**Три режима выполнения (v3.8.2):**
+**Три режима выполнения (v3.8.3):**
 - **Flash** (`delegate`) — через Polza: `delegate_task` c `polza/deepseek-v4-flash`. Все 16 Flash-агентов. Быстро, дёшево.
 - **Pro** (`delegate`) — через Polza: `delegate_task` c `deepseek-v4-pro`. Только @security. Дороже, качественнее.
 - **`direct`** — (устарел в v3.8.2) раньше использовался для Flash-агентов в v3.7.x, заменён на `delegate` через Polza.
 
 > **Примечание:** 17 агентов: 16 Flash + @security (Pro) + @quality (Flash). Все Flash-агенты используют Polza-делегацию (`delegate/polza/deepseek-v4-flash`). Без .prompt файла — генерируется default prompt из `AGENT_CONTEXT_FIELDS`.
 
-## call_args контракт (v3.8.2)
+## call_args контракт (v3.8.3)
 
-Начиная с v3.8.2, `pipeline_run_agent()` возвращает `call_args = {'goal': prompt}` — единственное поле.
+Начиная с v3.8.3, `pipeline_run_agent()` возвращает `call_args = {'goal': prompt}` — единственное поле.
 **Никаких** `prompt`, `provider`, `model`, `description` в call_args. Всё, что нужно агенту — в самом промпте.
 
 ```text
@@ -380,7 +381,7 @@ display:
 
 ---|---|---
 
-## Инструменты плагина (v3.8.2 — 12 штук)
+## Инструменты плагина (v3.8.3 — 12 штук)
 
 | Инструмент | Что делает |
 |-----------|------------|

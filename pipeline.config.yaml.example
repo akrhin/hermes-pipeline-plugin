@@ -1,15 +1,10 @@
-# Pipeline Plugin — пример конфига
+# Pipeline Plugin v3.8.3 — конфиг
 # Скопируй в ~/.hermes/plugins/pipeline/config.yaml
 pipeline:
   models:
     defaults:
-      direct:
-        model: deepseek-v4-flash
       delegate:
-        provider: direct
-        model: deepseek-v4-flash
-      delegate_free:
-        provider: direct
+        provider: polza
         model: deepseek-v4-flash
     agents:
       security:
@@ -35,4 +30,4 @@ pipeline:
     enabled: true
     dir: ~/.hermes/plugins/pipeline/retro
     max_files: 100
-    auto_analyze: false
+    auto_analyze: true
