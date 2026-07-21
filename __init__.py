@@ -40,12 +40,23 @@ from handlers import (
     handle_ensemble_run,
     handle_load,
     handle_model,
+    handle_pipeline_cli,
     handle_pipeline_command,
     handle_prompt,
     handle_resume,
     handle_run_agent,
     handle_save,
 )
+
+
+def _ensemble_enabled() -> bool:
+    """check_fn: скрыть ensemble инструменты, если ensemble выключен в config.yaml."""
+    try:
+        from ensemble import read_ensemble_config
+        config = read_ensemble_config()
+        return bool(config.get("enabled", True))
+    except Exception:
+        return True  # fail open — если конфиг не читается, показываем инструменты
 
 
 # ── Tool schemas ──────────────────────────────────────────────────────────────
@@ -354,25 +365,26 @@ def register(ctx):
                 except Exception:
                     logger.warning("Could not register skill %s", child.name)
 
-    for name, schema, handler in [
-        ("pipeline_classify", CLASSIFY_SCHEMA, handle_classify),
-        ("pipeline_convergence", CONVERGENCE_SCHEMA, handle_convergence),
-        ("pipeline_save", SAVE_SCHEMA, handle_save),
-        ("pipeline_load", LOAD_SCHEMA, handle_load),
-        ("pipeline_clear", CLEAR_SCHEMA, handle_clear),
-        ("pipeline_resume", RESUME_SCHEMA, handle_resume),
-        ("pipeline_advance", ADVANCE_SCHEMA, handle_advance),
-        ("agent_prompt", PROMPT_SCHEMA, handle_prompt),
-        ("agent_model", MODEL_SCHEMA, handle_model),
-        ("pipeline_run_agent", RUN_AGENT_SCHEMA, handle_run_agent),
-        ("pipeline_ensemble_run", ENSEMBLE_RUN_SCHEMA, handle_ensemble_run),
-        ("pipeline_ensemble_judge", ENSEMBLE_JUDGE_SCHEMA, handle_ensemble_judge),
+    for name, schema, handler, check_fn in [
+        ("pipeline_classify", CLASSIFY_SCHEMA, handle_classify, None),
+        ("pipeline_convergence", CONVERGENCE_SCHEMA, handle_convergence, None),
+        ("pipeline_save", SAVE_SCHEMA, handle_save, None),
+        ("pipeline_load", LOAD_SCHEMA, handle_load, None),
+        ("pipeline_clear", CLEAR_SCHEMA, handle_clear, None),
+        ("pipeline_resume", RESUME_SCHEMA, handle_resume, None),
+        ("pipeline_advance", ADVANCE_SCHEMA, handle_advance, None),
+        ("agent_prompt", PROMPT_SCHEMA, handle_prompt, None),
+        ("agent_model", MODEL_SCHEMA, handle_model, None),
+        ("pipeline_run_agent", RUN_AGENT_SCHEMA, handle_run_agent, None),
+        ("pipeline_ensemble_run", ENSEMBLE_RUN_SCHEMA, handle_ensemble_run, _ensemble_enabled),
+        ("pipeline_ensemble_judge", ENSEMBLE_JUDGE_SCHEMA, handle_ensemble_judge, _ensemble_enabled),
     ]:
         ctx.register_tool(
             name=name,
             toolset="pipeline",
             schema=schema,
             handler=handler,
+            check_fn=check_fn,
         )
 
     # Register slash-commands (in-session, works in CLI + gateway)
@@ -381,4 +393,19 @@ def register(ctx):
         handler=handle_pipeline_command,
         description="Show pipeline kanban status. Usage: /pipeline [status|show|clear]",
         args_hint="[status|show|clear]",
+    )
+
+    # Register CLI command (hermes pipeline <subcommand>)
+    def _setup_pipeline_argparse(subparser):
+        subs = subparser.add_subparsers(dest="pipeline_subcommand")
+        subs.add_parser("status", help="Show pipeline kanban status")
+        subs.add_parser("show", help="Show pipeline kanban status (alias)")
+        subs.add_parser("clear", help="Clear active pipeline board")
+        subparser.set_defaults(func=handle_pipeline_cli)
+
+    ctx.register_cli_command(
+        name="pipeline",
+        help="Pipeline plugin commands — status, show, clear",
+        setup_fn=_setup_pipeline_argparse,
+        handler_fn=handle_pipeline_cli,
     )

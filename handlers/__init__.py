@@ -549,6 +549,21 @@ def handle_pipeline_command(raw_args: str) -> str:
     args = raw_args.strip().lower().split()
     cmd = args[0] if args else "status"
 
+    return _render_pipeline_status(cmd)
+
+
+def handle_pipeline_cli(args):
+    """CLI command handler for 'hermes pipeline <subcommand>'.
+
+    Receives argparse Namespace with pipeline_subcommand field.
+    """
+    cmd = getattr(args, "pipeline_subcommand", "status") or "status"
+    result = _render_pipeline_status(cmd)
+    print(result)
+
+
+def _render_pipeline_status(cmd: str) -> str:
+    """Shared rendering for both slash and CLI commands."""
     if cmd == "clear":
         state = kb.scan_board()
         if state:
@@ -600,5 +615,6 @@ __all__ = [
     "handle_ensemble_run",
     "handle_ensemble_judge",
     "handle_pipeline_command",
+    "handle_pipeline_cli",
     "get_model_map",
 ]

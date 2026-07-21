@@ -7,13 +7,13 @@
 
 ## Очередь разработки (приоритет)
 
-### 🔴 P1 — Сейчас
+### 🔴 P1 — Сейчас ✅
 
-| # | Задача | Тип | Описание |
-|---|--------|-----|----------|
-| 1 | Slash-команда `/pipeline` | feature | `ctx.register_command()` — status, show, cancel в чате |
-| 2 | CLI-команда `hermes pipeline` | feature | `ctx.register_cli_command()` — то же в терминале |
-| 3 | `check_fn` для инструментов | perf | Скрывать `pipeline_ensemble_judge`, если ensemble выключен |
+| # | Задача | Тип | Описание | Статус |
+|---|--------|-----|----------|--------|
+| 1 | Slash-команда `/pipeline` | feature | `ctx.register_command()` — status, show, clear в чате | ✅ |
+| 2 | CLI-команда `hermes pipeline` | feature | `ctx.register_cli_command()` — то же в терминале | ✅ |
+| 3 | `check_fn` для инструментов | perf | Скрывать `pipeline_ensemble_run`/`pipeline_ensemble_judge`, если ensemble выключен | ✅ |
 
 ### 🟡 P2 — Скоро
 
