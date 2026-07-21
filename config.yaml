@@ -1,8 +1,12 @@
-# Pipeline Plugin Config v3.8.2
-# Все агенты на delegate через polza/deepseek-v4-flash.
-# Приоритет: agents > defaults > BUILTIN_MODEL_MAP (models.py)
+# Pipeline Plugin Config v3.8.4
+# Два режима kanban: 'native' (Hermes канаан через dispatch_tool, по умолчанию)
+# или 'legacy' (прямой SQLite через kanban_legacy.py).
+# Приоритет моделей: agents > defaults > BUILTIN_MODEL_MAP (models.py)
 
 pipeline:
+  # Режим kanban: native | legacy
+  kanban_mode: native
+
   models:
     defaults:
       delegate:

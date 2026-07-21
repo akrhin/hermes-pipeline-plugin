@@ -13,6 +13,26 @@
 - **plugin.yaml compliance**: добавлен provides_hooks (пустой), register_skill для bundled skills
 - **Hermes docs audit**: подтверждено соответствие Handler SDK — **kwargs, JSON return, try/except, toolset
 
+## v3.8.4 (2026-07-22)
+
+### Native kanban adapter — full feature parity with legacy engine
+
+- **`kanban_adapter.py`** — добавлены 3 недостающие функции:
+  - `_cleanup_stale_pipelines()` — архивация давно зависших pipeline-родителей в статусе `ready`
+  - `_claim_and_assign()` — атомарный claim задачи через `kanban_claim` / `kanban_update`
+  - `block_task` — alias для `block` (обратная совместимость с legacy engine)
+- **`advance()`** — добавлен lifecycle parent status tracking:
+  - Первый вызов → parent promoted to `running`
+  - Последний вызов → parent comment "✅ Пайплайн завершён"
+  - Соответствует поведению `kanban_legacy.py`
+- **`show_task()`** — enrichment детей и комментариев:
+  - Автоматически находит children через `list_tasks()` если `kanban_show` их не вернул
+  - Дополняет `children` и `comments` полями для dashboard-совместимости
+- **`kanban.py`** — убраны лямбда-заглушки `_claim_and_assign`, `_cleanup_stale_pipelines`, `block_task`
+  в native-режиме. Все функции теперь реально импортируются из `kanban_adapter.py`.
+- **Безопасность** — native mode больше не возвращает `False`/`0`/`None` для внутренних вызовов.
+- **Ruff 0, все тесты проходят.**
+
 ## v3.8.3 (2026-07-21)
 
 ### Bugfix: infrastructure & tooling

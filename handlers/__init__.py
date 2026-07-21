@@ -145,12 +145,13 @@ def handle_save(args, **kwargs):
         db_path = kb._db_path()
         conn = kb._get_connection()
         logger = logging.getLogger(__name__)
+        is_native = getattr(kb, '_is_native_mode', lambda: False)()
 
-        if not os.path.isfile(db_path):
+        if not is_native and not os.path.isfile(db_path):
             logger.warning("handle_save: kanban DB not found at %s", db_path)
             return json.dumps({"status": "ok", "kanban_parent_id": None, "kanban_task_ids": {}, "_debug": "db_not_found"})
 
-        if conn is None:
+        if not is_native and conn is None:
             logger.warning("handle_save: _get_connection() returned None for db %s", db_path)
             return json.dumps({"status": "ok", "kanban_parent_id": None, "kanban_task_ids": {}, "_debug": "conn_none"})
 

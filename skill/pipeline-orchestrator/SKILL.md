@@ -1,12 +1,12 @@
 ---
 name: pipeline-orchestrator
-description: "Главный оркестратор-скилл for Pipeline Plugin v3.8.3 — kanban.db SSOT, 17 agents, 8 categories, selective context, LLM Judge ensemble (execute-then-judge), deterministic convergence (now in convergence.py), hot-reload config, forced findings collection, code-review-graph MCP integration."
+description: "Главный оркестратор-скилл for Pipeline Plugin v3.8.4 — kanban.db SSOT, 17 agents, 8 categories, two kanban modes (native/legacy), selective context, LLM Judge ensemble (execute-then-judge), deterministic convergence (now in convergence.py), hot-reload config, forced findings collection, code-review-graph MCP integration."
 author: Hermes Agent + Vladimir
 category: hermes
 tags: [pipeline, orchestrator, ensemble, convergence, kanban, retro, master]
 ---
 
-# Pipeline Orchestrator v3.8.3 — Главный оркестратор-скилл
+# Pipeline Orchestrator v3.8.4 — Главный оркестратор-скилл
 
 ## ⚠️ ПРАВИЛА РАБОТЫ С ПРОЕКТОМ (читать ПЕРЕД КАЖДЫМ ПРОГОНОМ)
 
@@ -71,7 +71,50 @@ tags: [pipeline, orchestrator, ensemble, convergence, kanban, retro, master]
 - Если @quality вернул FAIL — идёт новый раунд с @fixer/@coder
 - CI-гейты: ruff → bandit → compileall → pytest
 
-### Фаза 4: Документация (В КОНЦЕ ПРОГОНА, ПЕРЕД ПУШЕМ)
+### Фаза 4: Kanban — два режима (v3.8.4)
+
+Начиная с v3.8.4, kanban.py работает как **роутер** между двумя движками:
+
+| Режим | Движок | Когда использовать |
+|-------|--------|-------------------|
+| `legacy` (default) | Прямой SQLite (`kanban.py` — прямой `sqlite3` API) | Изолированные окружения, без Hermes kanban CLI |
+| `native` | Hermes встроенные kanban инструменты (`ctx.dispatch_tool` → `kanban_*`) | Когда есть Hermes Kanban (dashboard, web-ui) |
+
+**Роутинг (`kanban_router.py`):**
+- `kanban_mode: legacy` → вызовы идут в `kanban.py` (прямой SQLite)
+- `kanban_mode: native` → вызовы идут в `kanban_adapter.py` (через `kanban_claim`, `kanban_update`, `kanban_create`, etc.)
+- Полная feature parity: `_cleanup_stale_pipelines()`, `_claim_and_assign()`, `block_task()`, lifecycle parent status tracking, `show_task()` enrichment
+
+**Как настроить:**
+```yaml
+# config.yaml
+kanban_mode: native  # или legacy (по умолчанию)
+```
+
+> Если `kanban_mode: native`, но Hermes kanban не установлен — плагин падает с понятной ошибкой, а не молча возвращает null.
+
+### Фаза 5: Ensemble-цикл (v3.8.4)
+
+Best-of-N ensemble с LLM Judge:
+
+1. **`pipeline_ensemble_run(state, agent_id, n=3)`** — генерирует N кандидатов (каждый как delegation package)
+2. **`pipeline_ensemble_judge(request, candidates, judge_mode='llm')`** — Judge оценивает кандидатов:
+   - `judge_mode='llm'`: LLM Judge — сравнивает все кандидаты, выбирает лучший по критериям: корректность, полнота, безопасность, стиль
+   - `judge_mode='deterministic'`: фиксированные правила (запасной вариант)
+3. Лучший кандидат исполняется как обычный агент
+4. В конце — **convergence check** через `pipeline_convergence(state, findings?)`
+
+**Deterministic convergence** (находится в `convergence.py`):
+- Анализирует findings: если все `status: fixed` — convergence достигнута
+- Если есть открытые findings → новый раунд с @fixer/@coder
+- Максимум 3 цикла, после — escalate to user
+
+**Когда использовать ensemble:**
+- Сложные задачи (архитектура, безопасность, рефакторинг)
+- Когда нужна уверенность в качестве (>1 вариант для сравнения)
+- По умолчанию — single agent (без ensemble), ensemble только по требованию
+
+### Фаза 6: Документация (В КОНЦЕ ПРОГОНА, ПЕРЕД ПУШЕМ)
 - [ ] **Форматирование ответов:** загрузи skills `response-formatting` + `telegram-rich-formatting` перед финальным ответом
 - [ ] Для таблиц используй pipe-синтаксис (`| Header |`), не bullet-списки
 - [ ] **Проверка качества перед пушем (если проект Python):**
@@ -89,13 +132,13 @@ tags: [pipeline, orchestrator, ensemble, convergence, kanban, retro, master]
 > - [ ] **CONTRIBUTORS.md** — если работал с чужим PR
 > - [ ] **README.md** — если изменился quick start, установка, требования
 
-### Фаза 4: Скиллы и инструменты (В КОНЦЕ ПРОГОНА)
+### Фаза 7: Скиллы и инструменты (В КОНЦЕ ПРОГОНА)
 - [ ] **skill/pipeline-orchestrator/SKILL.md** — если изменилась оркестрация, агенты, конфиг, баги
 - [ ] **skill/pipeline-ensemble/SKILL.md** — если ensemble изменился
 - [ ] **skill/pipeline-audit-checklist/SKILL.md** — если добавились баги или проверки
 - [ ] Синхронизировать symlinks: `~/.hermes/skills/hermes/pipeline-orchestrator` → `~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator`
 
-### Фаза 5: Версионность и релиз (обязательно)
+### Фаза 8: Версионность и релиз (обязательно)
 
 Перед пушем — бамп версии по схеме `v3.X.Y`:
 

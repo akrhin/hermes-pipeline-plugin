@@ -1,6 +1,6 @@
 name: pipeline
-version: 3.8.3
-description: "Pipeline Plugin v3.8.3 — skill infrastructure & handle_save debug"
+version: 3.8.4
+description: "Pipeline Plugin v3.8.4 — native kanban adapter, two-mode kanban (native/legacy), full feature parity"
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify

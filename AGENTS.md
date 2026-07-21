@@ -1,10 +1,20 @@
-# AGENTS.md — Pipeline Plugin (v3.8.3, SQLite-native + handlers/)
+# AGENTS.md — Pipeline Plugin (v3.8.4, native kanban, two-mode routing)
 
 ## What This Is
 
 Плагин-оркестратор multi-agent пайплайнов для Hermes Agent.
 **Variant C:** `state.json` удалён. `kanban.db` — единое состояние.
+**v3.8.4:** native kanban adapter, two-mode routing (native/legacy), full feature parity.
 **v3.8.3:** 17 хендлеров в `handlers/__init__.py`, dead code удалён, модели пофикшены, инфраструктура скилов.
+
+### v3.8.4 — native kanban adapter, two-mode routing
+
+- **kanban_adapter.py** добавлен — 3 недостающие функции: `_cleanup_stale_pipelines()`, `_claim_and_assign()`, `block_task()`
+- **kanban_router.py** — роутинг между двумя движками: `legacy` (прямой SQLite) и `native` (через Hermes kanban инструменты)
+- **config.yaml** — `kanban_mode: native | legacy`
+- **advance()** — lifecycle parent status tracking (первый вызов → running, последний → завершён)
+- **show_task()** — enrichment детей и комментариев для dashboard-совместимости
+- **Безопасность** — native mode больше не возвращает `False`/`0`/`None` для внутренних вызовов
 
 ### v3.8.2–v3.8.3 — dead code removal, models fix, skill infra
 
@@ -274,7 +284,10 @@ pipeline:
 | `__init__.py` | Plugin core: 12 tool schemas + register() — handlers extracted to handlers/ |
 | `models.py` | Model config loader: YAML → merge → MODEL_MAP (hot-reload по mtime) |
 | `handlers/__init__.py` | 12 tool handlers + _build_agent_prompt + AGENT_CONTEXT_FIELDS |
-| `kanban.py` | **Прямой SQLite** (create_tree, advance, converge, scan_board, resume, reopen) + ensemble |
+| `kanban.py` | **Kanban router** — выбирает движок по `kanban_mode` |
+| `kanban_common.py` | Shared helpers (`_AGENT_VERB`, `_extract_target`, `_build_state_from_board`) |
+| `kanban_adapter.py` | **Native mode** — через `ctx.dispatch_tool('kanban_*')` |
+| `kanban_legacy.py` | **Legacy mode** — прямой SQLite (DEFAULT) |
 | `retro.py` | Retrospective logging + auto-analysis |
 | `ensemble.py` | Best-of-N: candidate generation + LLM/deterministic judge |
 | `classify.py` | Request classification → 8 категорий (+ quality pipeline) |
@@ -293,9 +306,6 @@ pipeline:
 ## Testing & QA Guide
 
 ### Unit tests
-
-```bash
-# Все тесты
 pytest tests/ -v
 
 # По модулям

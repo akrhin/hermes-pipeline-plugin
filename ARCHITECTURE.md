@@ -230,7 +230,10 @@ pipeline:
 | `__init__.py` | Plugin core: 12 tools + 17 handlers in handlers/ module |
 | `models.py` | v3.2.0 Model config loader: YAML → merge → MODEL_MAP. Hot-reload по mtime |
 | `handlers/__init__.py` | 12 tool handlers + `_build_agent_prompt` + `AGENT_CONTEXT_FIELDS` (вынесены из __init__.py в v3.7.2) |
-| `kanban.py` | **Kanban API — прямой SQLite** (create_tree, advance, converge, scan_board, resume, reopen) + ensemble |
+| `kanban.py` | **Kanban API — роутер** (create_tree, advance, converge, scan_board, resume, reopen) |
+| `kanban_common.py` | Shared constants, helpers, SQLite pool (`_AGENT_VERB`, `_extract_target`, `_build_state_from_board`) |
+| `kanban_adapter.py` | **Native dispatch_tool kanban** — альтернативный движок для `kanban_mode: native`. Полная копия API через Hermes kanban tools |
+| `kanban_legacy.py` | **Legacy SQLite kanban** — прямой SQLite для `kanban_mode: legacy` (DEFAULT)
 | `retro.py` | Retrospective logging + auto-analysis |
 | `ensemble.py` | Best-of-N core: generate_candidates (7 T-variations), judge_candidates (det + LLM), should_use_ensemble |
 | `classify.py` | Keyword-based request classification (8 categories) |

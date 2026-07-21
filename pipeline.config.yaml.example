@@ -1,4 +1,4 @@
-# Pipeline Plugin v3.8.3 — конфиг
+# Pipeline Plugin v3.8.4 — конфиг
 # Скопируй в ~/.hermes/plugins/pipeline/config.yaml
 pipeline:
   models:

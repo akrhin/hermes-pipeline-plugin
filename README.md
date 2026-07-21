@@ -150,16 +150,16 @@ cd ~/git/hermes-pipeline-plugin && git pull
 | **@optimizer** | Flash | `delegate` | `deepseek-v4-flash` | implementation | Оптимизация (только PERFORMANCE) |
 |- **@quality** | Flash | **`delegate`** | **`deepseek-v4-flash`** | implementation | Quality gates (ruff/bandit/compileall/pytest) — всегда в конце |
 
-**Три режима выполнения (v3.8.3):**
+**Три режима выполнения (v3.8.4):**
 - **Flash** (`delegate`) — через Polza: `delegate_task` c `polza/deepseek-v4-flash`. Все 16 Flash-агентов. Быстро, дёшево.
 - **Pro** (`delegate`) — через Polza: `delegate_task` c `deepseek-v4-pro`. Только @security. Дороже, качественнее.
 - **`direct`** — (устарел в v3.8.2) раньше использовался для Flash-агентов в v3.7.x, заменён на `delegate` через Polza.
 
 > **Примечание:** 17 агентов: 16 Flash + @security (Pro) + @quality (Flash). Все Flash-агенты используют Polza-делегацию (`delegate/polza/deepseek-v4-flash`). Без .prompt файла — генерируется default prompt из `AGENT_CONTEXT_FIELDS`.
 
-## call_args контракт (v3.8.3)
+## call_args контракт (v3.8.4)
 
-Начиная с v3.8.3, `pipeline_run_agent()` возвращает `call_args = {'goal': prompt}` — единственное поле.
+Начиная с v3.8.4, `pipeline_run_agent()` возвращает `call_args = {'goal': prompt}` — единственное поле.
 **Никаких** `prompt`, `provider`, `model`, `description` в call_args. Всё, что нужно агенту — в самом промпте.
 
 ```text
@@ -222,20 +222,36 @@ code-review-graph build
 
 Начиная с v3.3.0, **kanban.py работает напрямую с SQLite, без CLI-прослойки**. Это собственный kanban плагина, не путать с `hermes kanban`.
 
-Все 11 функций Kanban API:
-- `create_parent()`, `create_child()` — прямой INSERT
-- `comment()` — прямой INSERT
-- `block_task()` — прямой UPDATE
-- `list_tasks()` — прямой SELECT
-- `show_task()` — SELECT с JOIN
-- `scan_board()` — прямой SELECT (ядро load/resume/clear)
-- `promote()`, `complete()` — напрямую в SQLite
+Начиная с v3.8.4, **kanban.py работает как роутер**: по умолчанию `legacy` (прямой SQLite), но можно включить `native` режим через `kanban_mode: native` в `config.yaml` — тогда все операции идут через Hermes встроенные kanban инструменты (`ctx.dispatch_tool`).
 
-**Что это даёт:**
-- ✅ Нет молчаливых ошибок от `_kanban()` (которая возвращала `{}` при любом сбое)
-- ✅ Нет зависимости от `hermes kanban` CLI (ломающегося при изменении формата)
-- ✅ Работает без daemon (не требует `kanban watch`)
-- ✅ Быстрее: SQLite вместо subprocess для каждого вызова
+### Два режима kanban
+
+Плагин поддерживает два движка, выбираемых через `config.yaml`:
+
+```yaml
+pipeline:
+  kanban_mode: legacy   # DEFAULT — прямой SQLite
+  # kanban_mode: native  # через Hermes dispatch_tool
+```
+
+| Режим | Файл | Механизм | Когда использовать |
+|-------|------|----------|-------------------|
+| **legacy** (DEFAULT) | `kanban_legacy.py` | Прямой SQLite (`sqlite3`) | Максимальная производительность, нет зависимости от Hermes kanban |
+| **native** | `kanban_adapter.py` | `ctx.dispatch_tool('kanban_*')` | Интеграция с Hermes kanban UI/дашбордом |
+
+**Все 11 функций API** доступны в обоих режимах:
+
+- `create_parent()`, `create_child()` — создание иерархии задач
+- `comment()` — добавление комментариев
+- `block()` / `block_task` — блокировка задачи
+- `list_tasks()` — получение списка задач
+- `show_task()` — детали задачи с детьми и комментариями
+- `scan_board()` — ядро load/resume/clear
+- `promote()`, `complete()` — управление статусом
+- `reopen()` — переоткрытие done-задач для convergence-циклов
+- `create_ensemble_subtasks()` — подзадачи для Best-of-N
+- `_cleanup_stale_pipelines()` — архивация зависших пайплайнов
+- `_claim_and_assign()` — атомарный claim задачи
 
 Подробный аудит: [`ARCHITECTURE-FIXES.md`](ARCHITECTURE-FIXES.md) — 20 багов (4 P0 + 7 P1 + 9 P2)
 
@@ -381,7 +397,7 @@ display:
 
 ---|---|---
 
-## Инструменты плагина (v3.8.3 — 12 штук)
+## Инструменты плагина (v3.8.4 — 12 штук)
 
 | Инструмент | Что делает |
 |-----------|------------|
