@@ -589,6 +589,24 @@ def get_pipeline_metrics() -> dict:
 
 def _render_pipeline_status(cmd: str) -> str:
     """Shared rendering for both slash and CLI commands."""
+
+    _cat_emoji = {
+        "BUG_KNOWN": "\U0001f41b",
+        "BUG_UNKNOWN": "\U0001f41b",
+        "SECURITY_RELATED": "\U0001f512",
+        "REFACTORING": "\U0001f527",
+        "PERFORMANCE": "\u26a1",
+        "INFRASTRUCTURE": "\U0001f3d7\ufe0f",
+        "FEATURE": "\u2728",
+        "DOCUMENTATION": "\U0001f4da",
+    }
+
+    def _emoji(cat: str) -> str:
+        return _cat_emoji.get(cat, "\U0001f4cb")
+
+    def _name(cat: str) -> str:
+        return cat.replace("_", " ").title()
+
     if cmd == "clear":
         state = kb.scan_board()
         if state:
@@ -607,17 +625,29 @@ def _render_pipeline_status(cmd: str) -> str:
         current_idx = state.get("current_idx", 0)
         category = state.get("category", "?")
         round_num = state.get("round", 0)
+        total = len(pipeline)
 
-        current = pipeline[current_idx] if current_idx < len(pipeline) else "done"
-        progress = f"{len(completed)}/{len(pipeline)}"
+        current = pipeline[current_idx] if current_idx < total else "done"
+        done_count = len(completed)
+        pct = int(done_count / total * 100) if total else 0
 
+        # Progress bar
+        bar = "█" * done_count + "░" * (total - done_count)
+
+        # Emoji for category
+        cat_emoji = _emoji(category)
         lines = [
-            f"🔷 Pipeline: {state.get('request', '?')[:60]}",
-            f"  Category: {category}  Round: {round_num}  Progress: {progress}",
-            f"  Current: @{current}",
-            f"  Completed: {', '.join(completed) if completed else 'none'}",
-            f"  Remaining: {', '.join(pipeline[current_idx:]) if current_idx < len(pipeline) else 'all done'}",
+            f"{cat_emoji} **Pipeline**: {state.get('request', '?')[:60]}",
+            f"   [{bar}] {done_count}/{total} · {pct}%",
+            f"   🏷️  {_name(category)}  🔄 Round {round_num}",
+            f"   ▶️  @{current}",
         ]
+        if completed:
+            lines.append(f"   ✅ {', '.join(f'@{a}' for a in completed)}")
+        if current_idx < total:
+            remaining = pipeline[current_idx:]
+            lines.append(f"   ⏳ {', '.join(f'@{a}' for a in remaining)}")
+
         return "\n".join(lines)
 
     return "Usage: /pipeline [status|show|clear]"

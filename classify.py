@@ -343,6 +343,17 @@ _CATEGORY_SPECIFIC_AGENTS = {
     "INFRASTRUCTURE": {"devops"},
 }
 
+CATEGORY_EMOJI = {
+    "BUG_KNOWN": "\U0001f41b",
+    "BUG_UNKNOWN": "\U0001f41b",
+    "SECURITY_RELATED": "\U0001f512",
+    "REFACTORING": "\U0001f527",
+    "PERFORMANCE": "\u26a1",
+    "INFRASTRUCTURE": "\U0001f3d7\ufe0f",
+    "FEATURE": "\u2728",
+    "DOCUMENTATION": "\U0001f4da",
+}
+
 # Общие агенты, которые есть почти во всех категориях
 _COMMON_AGENTS = {"finder", "analyst", "architect", "planner", "coder",
                   "reviewer", "integration", "tester", "documenter"}
@@ -448,6 +459,7 @@ def classify(request: str) -> dict:
             "pipeline": CATEGORIES["FEATURE"]["pipeline"],
             "matched_keywords": {},
             "description": "Default feature pipeline (no category matched)",
+            "emoji": "📋",
         }
 
     # ── Multi-label: all matched categories ──
@@ -484,4 +496,5 @@ def classify(request: str) -> dict:
         "pipeline": merged_pipeline,
         "matched_keywords": matched,
         "description": " + ".join(desc_parts),
+        "emoji": CATEGORY_EMOJI.get(primary, "📋"),
     }

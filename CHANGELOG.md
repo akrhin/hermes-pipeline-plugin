@@ -13,6 +13,13 @@
 - **plugin.yaml compliance**: добавлен provides_hooks (пустой), register_skill для bundled skills
 - **Hermes docs audit**: подтверждено соответствие Handler SDK — **kwargs, JSON return, try/except, toolset
 
+### v3.7.2-dev (2026-07-21) — UX + @documenter
+
+- `classify.py`: добавлен `CATEGORY_EMOJI`, возвращает `emoji` в результате классификации
+- `handlers/__init__.py`: `_render_pipeline_status()` — прогресс-бар, emoji категорий, компактный вывод
+- `kanban.py`: добавлен `import retro as rt`, вызов `rt.get_retro().agent_done()` в `advance()`
+- `PLAN.md`: все P1+P2 закрыты, P3 актуализирован
+
 ## v3.7.1 (2026-07-21)
 
 ### Bug fixes — CI quality gates

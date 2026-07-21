@@ -25,12 +25,12 @@
 
 ### 🟢 P3 — Когда-нибудь
 
-| # | Задача | Тип | Описание |
-|---|--------|-----|----------|
-| 7 | `ctx.llm` для ensemble judge | arch | LLM-фасад хоста вместо delegate_task |
-| 8 | `register_auxiliary_task` для classify | arch | Выделить классификатор в настраиваемую подзадачу |
-| 9 | `kanban_task_completed` хук | feature | Автоматическое retro-логирование |
-| 10 | `dispatch_tool` из slash-команд | feature | Из `/pipeline run` запускать pipeline инструменты |
+| # | Задача | Тип | Описание | Статус |
+|---|--------|-----|----------|--------|
+| 7 | UX — прогресс-бар, emoji, @documenter-отчёты | feature | classify.emoji + _render_pipeline_status с прогресс-баром | ✅ |
+| 8 | `dispatch_tool` из slash-команд | feature | Из `/pipeline run` запускать pipeline инструменты | ⏳ |
+| 9 | `ctx.llm` для ensemble judge | arch | LLM-фасад хоста вместо delegate_task | |
+| 10 | `register_auxiliary_task` для classify | arch | Выделить классификатор в настраиваемую подзадачу | |
 
 ## Процесс
 1. Берём задачу из P1

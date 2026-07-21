@@ -21,6 +21,8 @@ import logging
 import os
 import re
 import sqlite3
+
+import retro as rt
 import time
 import uuid
 
@@ -498,6 +500,7 @@ def advance(state: dict, completed_agent: str) -> dict:
     agent_id = task_ids.get(completed_agent)
     if agent_id:
         complete(agent_id, result_summary=f"✅ @{completed_agent} завершён")
+        rt.get_retro().agent_done(completed_agent, duration_s=0)
     # Record as completed
     completed = state.get("completed", [])
     if completed_agent not in completed:
