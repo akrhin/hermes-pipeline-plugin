@@ -40,6 +40,7 @@ from handlers import (
     handle_ensemble_run,
     handle_load,
     handle_model,
+    handle_pipeline_command,
     handle_prompt,
     handle_resume,
     handle_run_agent,
@@ -373,3 +374,11 @@ def register(ctx):
             schema=schema,
             handler=handler,
         )
+
+    # Register slash-commands (in-session, works in CLI + gateway)
+    ctx.register_command(
+        "pipeline",
+        handler=handle_pipeline_command,
+        description="Show pipeline kanban status. Usage: /pipeline [status|show|clear]",
+        args_hint="[status|show|clear]",
+    )

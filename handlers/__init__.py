@@ -541,6 +541,48 @@ def handle_ensemble_judge(args, **kwargs):
         return json.dumps({"error": str(e)}, ensure_ascii=False)
 
 
+def handle_pipeline_command(raw_args: str) -> str:
+    """Slash-command /pipeline — show kanban status.
+
+    Usage: /pipeline [status|show|clear]
+    """
+    args = raw_args.strip().lower().split()
+    cmd = args[0] if args else "status"
+
+    if cmd == "clear":
+        state = kb.scan_board()
+        if state:
+            kb.on_clear(state)
+            rt.reset_retro()
+            return "✅ Pipeline board cleared"
+        return "ℹ️ No active pipeline"
+
+    if cmd in ("status", "show"):
+        state = kb.scan_board()
+        if state is None:
+            return "ℹ️ No active pipeline"
+
+        pipeline = state.get("pipeline", [])
+        completed = state.get("completed", [])
+        current_idx = state.get("current_idx", 0)
+        category = state.get("category", "?")
+        round_num = state.get("round", 0)
+
+        current = pipeline[current_idx] if current_idx < len(pipeline) else "done"
+        progress = f"{len(completed)}/{len(pipeline)}"
+
+        lines = [
+            f"🔷 Pipeline: {state.get('request', '?')[:60]}",
+            f"  Category: {category}  Round: {round_num}  Progress: {progress}",
+            f"  Current: @{current}",
+            f"  Completed: {', '.join(completed) if completed else 'none'}",
+            f"  Remaining: {', '.join(pipeline[current_idx:]) if current_idx < len(pipeline) else 'all done'}",
+        ]
+        return "\n".join(lines)
+
+    return "Usage: /pipeline [status|show|clear]"
+
+
 # ── Exports ──────────────────────────────────────────────────────────────────
 
 
@@ -557,5 +599,6 @@ __all__ = [
     "handle_run_agent",
     "handle_ensemble_run",
     "handle_ensemble_judge",
+    "handle_pipeline_command",
     "get_model_map",
 ]
