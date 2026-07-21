@@ -15,3 +15,5 @@ provides_tools:
   - pipeline_run_agent
   - pipeline_ensemble_run
   - pipeline_ensemble_judge
+provides_hooks:
+  # No hooks currently — declared for documentation compliance

@@ -23,6 +23,7 @@ Provides 12 tools:
 import logging
 import os
 import sys
+from pathlib import Path
 
 PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 if PLUGIN_DIR not in sys.path:
@@ -341,6 +342,17 @@ ENSEMBLE_JUDGE_SCHEMA = {
 
 
 def register(ctx):
+    # Register bundled skills via ctx.register_skill() (Hermes plugin SDK)
+    skills_dir = Path(__file__).parent / "skill"
+    if skills_dir.is_dir():
+        for child in sorted(skills_dir.iterdir()):
+            skill_md = child / "SKILL.md"
+            if child.is_dir() and skill_md.exists():
+                try:
+                    ctx.register_skill(child.name, skill_md)
+                except Exception:
+                    logger.warning("Could not register skill %s", child.name)
+
     for name, schema, handler in [
         ("pipeline_classify", CLASSIFY_SCHEMA, handle_classify),
         ("pipeline_convergence", CONVERGENCE_SCHEMA, handle_convergence),
