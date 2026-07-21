@@ -4,7 +4,8 @@
 
 | # | Severity | Описание | Файл | Статус |
 |---|----------|----------|------|--------|
-| — | — | Нет открытых багов | — | ✅ |
+| — | — | Нет открытых багов в нашем коде | — | ✅ |
+| — | P3 | test_scan_board_after_complete падает на dev (pre-existing) | tests/test_kanban_integration.py | ⚠️ |
 
 ## Задокументировано в ARCHITECTURE-FIXES.md
 
