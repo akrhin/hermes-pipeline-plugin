@@ -3,7 +3,8 @@
 ## Текущее состояние
 - **Версия:** v3.7.2-dev
 - **Ветка:** dev (прототип — не тегировать)
-- **Статус:** 112/112 тестов, Ruff 0
+- **Статус:** 112/112 тестов (1 pre-existing), Ruff 0
+- **P1 P2 P3:** ✅ все задачи закрыты
 
 ## Очередь разработки (приоритет)
 
@@ -30,7 +31,7 @@
 | 7 | UX — прогресс-бар, emoji, @documenter-отчёты | feature | classify.emoji + _render_pipeline_status с прогресс-баром | ✅ |
 | 8 | `dispatch_tool` из slash-команд | feature | Из `/pipeline run <tool>` запускать pipeline инструменты | ✅ |
 | 9 | `ctx.llm` для ensemble judge | arch | LLM-фасад хоста вместо delegate_task через `llm_judge_candidates()` | ✅ |
-| 10 | `register_auxiliary_task` для classify | arch | Выделить классификатор в настраиваемую подзадачу | |
+| 10 | `register_auxiliary_task` для classify | arch | `ctx.register_auxiliary_task("pipeline_classify", ...)` | ✅ |
 
 ## Процесс
 1. Берём задачу из P1

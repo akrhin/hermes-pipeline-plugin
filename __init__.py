@@ -357,6 +357,17 @@ def register(ctx):
     # Store ctx for slash-command dispatch_tool
     from . import _ctx as plugin_ctx
     plugin_ctx.set_ctx(ctx)
+
+    # Register auxiliary task so classify model is independently configurable
+    try:
+        ctx.register_auxiliary_task(
+            key="pipeline_classify",
+            display_name="Pipeline classifier",
+            description="LLM-based request classifier for pipeline routing",
+            defaults={"provider": "auto", "model": "", "timeout": 30},
+        )
+    except Exception:
+        logger.info("register_auxiliary_task not available — skipping (Hermes pre-3.8?)")
     # Register bundled skills via ctx.register_skill() (Hermes plugin SDK)
     skills_dir = Path(__file__).parent / "skill"
     if skills_dir.is_dir():

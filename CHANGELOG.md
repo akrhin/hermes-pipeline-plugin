@@ -13,12 +13,17 @@
 - **plugin.yaml compliance**: добавлен provides_hooks (пустой), register_skill для bundled skills
 - **Hermes docs audit**: подтверждено соответствие Handler SDK — **kwargs, JSON return, try/except, toolset
 
-### v3.7.2-dev (2026-07-21) — ctx.llm для ensemble judge
+### v3.7.2-dev (2026-07-21) — P3 полный комплект
 
-- `ensemble.py`: `llm_judge_candidates()` — оценивает кандидатов через `ctx.llm.complete()` in-process, без `delegate_task`
-- `handlers/__init__.py`: `handle_ensemble_judge` переключён на `llm_judge_candidates()` для LLM-режима
-- Fallback: если ctx недоступен → deterministic (без delegate_task)
-- `PLAN.md`: актуализирован
+- `__init__.py`: `register()` вызывает `ctx.register_auxiliary_task("pipeline_classify", ...)` — классификатор
+  теперь настраивается через `auxiliary.pipeline_classify` в конфиге с независимой моделью
+- `ensemble.py`: `llm_judge_candidates()` — оценивает кандидатов через `ctx.llm.complete()` in-process
+- `handlers`: `handle_ensemble_judge` переключён на `llm_judge_candidates` для LLM-режима
+- `_ctx.py`: module-level ctx reference; `/pipeline run <tool>` через `ctx.dispatch_tool()`
+- `classify.py`: `CATEGORY_EMOJI`, emoji в результате классификации
+- `handlers`: `_render_pipeline_status` с прогресс-баром, emoji категорий
+- `kanban.py`: `import retro`, `agent_done()` в `advance()`
+- `PLAN.md`: весь P3 закрыт ✅
 
 ## v3.7.1 (2026-07-21)
 
