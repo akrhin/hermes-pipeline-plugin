@@ -12,6 +12,12 @@
 - `__init__.py` содержит только 12 tool schemas + `register()`
 - Классификатор: «аудит»/«audit» → REFACTORING (было SECURITY_RELATED)
 
+### v3.7.2 — plugin compliance
+
+- **plugin.yaml**: добавлен `provides_hooks` (пустой, для соответствия SDK)
+- **register()**: добавлена `ctx.register_skill()` для bundled skills (`pipeline-orchestrator`, `pipeline-ensemble`, `pipeline-audit-checklist`)
+- **Аудит по официальной Hermes plugin development docs**: подтверждено — все handler signatures с `**kwargs`, JSON return, try/except, toolset='pipeline'
+
 **v3.6.0:** интеграция с **code-review-graph (CRG)** — локальный граф кода на Tree-sitter. @reviewer и @security используют MCP-инструменты CRG.
 
 ## Quick Start

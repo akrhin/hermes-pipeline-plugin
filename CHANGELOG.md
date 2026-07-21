@@ -10,6 +10,8 @@
   - `__init__.py` теперь содержит только 12 tool schemas + `register()`
   - `handlers._get_plugin_dir()` динамически резолвит PLUGIN_DIR (поддержка тестового monkey-patching)
 - **Тесты**: 22/22 classify, 45 init+models, 112/112 total, Ruff 0 issues
+- **plugin.yaml compliance**: добавлен provides_hooks (пустой), register_skill для bundled skills
+- **Hermes docs audit**: подтверждено соответствие Handler SDK — **kwargs, JSON return, try/except, toolset
 
 ## v3.7.1 (2026-07-21)
 
