@@ -1,12 +1,12 @@
-# AGENTS.md — Pipeline Plugin (v3.8.2, SQLite-native + handlers/)
+# AGENTS.md — Pipeline Plugin (v3.8.3, SQLite-native + handlers/)
 
 ## What This Is
 
 Плагин-оркестратор multi-agent пайплайнов для Hermes Agent.
 **Variant C:** `state.json` удалён. `kanban.db` — единое состояние.
-**v3.8.2:** 17 хендлеров вынесены в `handlers/__init__.py`, dead code удалён, модели пофикшены.
+**v3.8.3:** 17 хендлеров в `handlers/__init__.py`, dead code удалён, модели пофикшены, инфраструктура скилов.
 
-### v3.8.2 — dead code removal + models fix
+### v3.8.2–v3.8.3 — dead code removal, models fix, skill infra
 
 - **Dead code** — `kanban.py::generate_candidates`, `kanban.py::judge_candidates` удалены (дубли из `ensemble.py`). 10 F821 errors устранены.
 - **Модели** — все Flash-агенты переключены на `delegate/polza/deepseek-v4-flash`

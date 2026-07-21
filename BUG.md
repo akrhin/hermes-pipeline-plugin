@@ -4,18 +4,18 @@
 
 | # | Severity | Описание | Файл | Статус |
 |---|----------|----------|------|--------|
-| 1 | P2 | В execute_code() нельзя передавать сложные shell-команды через f-строки с вложенными кавычками — SyntaxError. Решение: писать скрипт на диск (write_file) и запускать terminal("python3 /tmp/script.py") | execute_code / terminal | ⚠️ |
-| 2 | High | test_kanban_integration — 4 теста всегда skip (_has_kanban() проверяет Hermes CLI, а не прямую SQLite) | tests/test_kanban_integration.py | ⚠️ |
-| 3 | Mid | 14 функций > 50 строк (самые критичные: scan_board 134, handle_run_agent 94) | kanban.py, handlers/__init__.py | ⚠️ |
-| 4 | Low | 2 E501 (line > 100) в classify.py (строки 218, 262) | classify.py | ⚠️ |
-| 6 | P0 | `handle_save` возвращает `kanban_parent_id: null` — процесс dashboard держит закешированный модуль `kanban.py` со старым `threading.local()`. Фикс на диске есть, но не подхватывается до перезапуска. Добавлен `_debug` в ответ. | handlers/__init__.py | ⚠️ |
-| 7 | Mid | **Background subagent** не может читать файлы (`read_file denied background whitelist`) — доступны только memory/skill tools. | Hermes config.yaml | ⚠️ |
+|| 1 | P2 | В execute_code() нельзя передавать сложные shell-команды через f-строки с вложенными кавычками — SyntaxError. Решение: писать скрипт на диск (write_file) и запускать terminal("python3 /tmp/script.py") | execute_code / terminal | ⚠️ |
+|| 3 | Mid | 14 функций > 50 строк (самые критические: scan_board 134, handle_run_agent 94) | kanban.py, handlers/__init__.py | ⚠️ |
+|| 7 | Mid | **Background subagent** не может читать файлы (`read_file denied background whitelist`) — доступны только memory/skill tools. **Не баг плагина — ограничение Hermes core config.** Отложено до обновления Hermes. | Hermes config.yaml | ⏳ |
 
 ## Пофикшенные в v3.8.x
 
 | # | Версия | Баг | Статус |
 |---|--------|-----|--------|
-| 1 | v3.8.2 | Dead code в kanban.py удалён — `generate_candidates`, `judge_candidates` (дубли из `ensemble.py`). 97 строк unreachable, 10× F821 | ✅ |
+|| 1 | v3.8.2 | Dead code в kanban.py удалён — `generate_candidates`, `judge_candidates` (дубли из `ensemble.py`). 97 строк unreachable, 10× F821 | ✅ |
+|| 2 | v3.8.3 | [#2] test_kanban_integration — 4 теста всегда skip (_has_kanban() проверяет Hermes CLI, а не прямую SQLite). **Фикс:** _has_kanban() переписана на прямую SQLite проверку. | ✅ |
+|| 3 | v3.8.3 | [#4] 2 E501 (line > 100) в classify.py (строки 218, 262). **Фикс:** строки обрезаны или разбиты. | ✅ |
+|| 4 | v3.8.3 | [#6] `handle_save` возвращает `kanban_parent_id: null` — dashboard кеширует модуль kanban.py. **Фикс:** threading.local() → модульная переменная + _debug в ответе. | ✅ |
 | 2 | v3.8.2 | Модели fix — все Flash-агенты переключены на `delegate/polza/deepseek-v4-flash`. 5 тестов починены (проверка контракта вместо жёстких значений) | ✅ |
 | 3 | v3.8.1 | Quality gates не запускались до пуша — @quality агент | ✅ |
 | 4 | v3.8.1 | Потеря контекста после рестарта — persona permanent auto-resume | ✅ |
