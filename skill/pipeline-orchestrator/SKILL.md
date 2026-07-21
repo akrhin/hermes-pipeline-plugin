@@ -1,12 +1,12 @@
 ---
 name: pipeline-orchestrator
-description: "Главный оркестратор-скилл for Pipeline Plugin v3.8.2 — kanban.db SSOT, 17 agents, 8 categories, selective context, LLM Judge ensemble (execute-then-judge), deterministic convergence (now in convergence.py), hot-reload config, forced findings collection, code-review-graph MCP integration."
+description: "Главный оркестратор-скилл for Pipeline Plugin v3.8.3 — kanban.db SSOT, 17 agents, 8 categories, selective context, LLM Judge ensemble (execute-then-judge), deterministic convergence (now in convergence.py), hot-reload config, forced findings collection, code-review-graph MCP integration."
 author: Hermes Agent + Vladimir
 category: hermes
 tags: [pipeline, orchestrator, ensemble, convergence, kanban, retro, master]
 ---
 
-# Pipeline Orchestrator v3.8.2 — Главный оркестратор-скилл
+# Pipeline Orchestrator v3.8.3 — Главный оркестратор-скилл
 
 ## ⚠️ ПРАВИЛА РАБОТЫ С ПРОЕКТОМ (читать ПЕРЕД КАЖДЫМ ПРОГОНОМ)
 
@@ -79,6 +79,21 @@ tags: [pipeline, orchestrator, ensemble, convergence, kanban, retro, master]
 - [ ] **skill/pipeline-audit-checklist/SKILL.md** — если добавились баги или проверки
 - [ ] Синхронизировать symlinks: `~/.hermes/skills/hermes/pipeline-orchestrator` → `~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator`
 
-> ⚠️ **Hotfix для execute-then-judge:** каждому кандидату — уникальный output-файл.
+### Фаза 5: Версионность и релиз (обязательно)
+
+Перед пушем — бамп версии по схеме `v3.X.Y`:
+
+1. **plugin.yaml** — поднять `version:` на следующий номер
+2. **CHANGELOG.md** — новая запись с датой, списком изменений (что, почему)
+3. **AGENTS.md** — обновить все упоминания версии в таблицах
+4. **skill/pipeline-orchestrator/SKILL.md** — обновить версию в заголовке и description
+5. **skill/pipeline-ensemble/SKILL.md** — обновить ссылки на версию
+6. **skill/pipeline-audit-checklist/SKILL.md** — обновить ссылки на версию
+7. **pytest -q** — убедиться что тесты проходят
+8. **ruff check .** — убедиться что линтер чист
+9. **git add -A && git commit -m "v{X.Y.Z}: краткое описание"**
+10. **git tag v{X.Y.Z} && git push origin main --tags**
+
+> ❗ Если изменение затрагивает только один компонент, бамп не нужен. Бамп — про релизный цикл.
 > В задаче кандидата укажи `tools/retro-summary.candidate_N` вместо `tools/retro-summary`.
 > `N` — номер кандидата (1–5). Так Judge увидит все 5 реализаций, а не только последнюю.

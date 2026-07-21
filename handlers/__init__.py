@@ -142,6 +142,18 @@ def handle_save(args, **kwargs):
     """Create/update kanban task tree. Idempotent."""
     try:
         state = args["state"]
+        db_path = kb._db_path()
+        conn = kb._get_connection()
+        logger = logging.getLogger(__name__)
+
+        if not os.path.isfile(db_path):
+            logger.warning("handle_save: kanban DB not found at %s", db_path)
+            return json.dumps({"status": "ok", "kanban_parent_id": None, "kanban_task_ids": {}, "_debug": "db_not_found"})
+
+        if conn is None:
+            logger.warning("handle_save: _get_connection() returned None for db %s", db_path)
+            return json.dumps({"status": "ok", "kanban_parent_id": None, "kanban_task_ids": {}, "_debug": "conn_none"})
+
         state = kb.create_task_tree(state)
 
         parent_id = state.get("kanban_parent_id")

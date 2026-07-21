@@ -13,6 +13,16 @@
 - **plugin.yaml compliance**: добавлен provides_hooks (пустой), register_skill для bundled skills
 - **Hermes docs audit**: подтверждено соответствие Handler SDK — **kwargs, JSON return, try/except, toolset
 
+## v3.8.3 (2026-07-21)
+
+### Bugfix: infrastructure & tooling
+
+- **handle_save debug** — добавлено `_debug` поле (`db_not_found`/`conn_none`) когда `kanban_parent_id: null`. Больше не молчит.
+- **Duplicate skills cleaned** — удалены дубликаты из `~/.hermes/skills/default/` и корня `~/.hermes/skills/`, вложенные symlink-матрешки в `hermes/pipeline-*`. Все три скила грузятся без `Ambiguous` ошибок.
+- **documenter.prompt fix** — явно указано `write_file()`, не `skill_manage()`. Предотвращает `skill_manage` c пустым именем.
+- **versioning workflow** — в `pipeline-orchestrator/SKILL.md` добавлена Фаза 5: релизный цикл с бампом версии (plugin.yaml + CHANGELOG + git tag).
+- **CI:** 311/311 tests, Ruff 0 errors.
+
 ## v3.8.2 (2026-07-21)
 
 ### Fix #1: threading.local() → модульная переменная (kanban.py)

@@ -39,7 +39,7 @@
 | `BUG.md` | Активные/пофикшенные баги |
 | `CONTRIBUTORS.md` | Если работали с чужим PR |
 | `README.md` | Если изменился quick start, установка, требования |
-| `skill/pipeline-orchestrator/SKILL.md` | Если изменилась оркестрация, агенты, конфиг |
+| | `~/git/hermes-pipeline-plugin/skill/pipeline-orchestrator/SKILL.md` | Если изменилась оркестрация — через `write_file()`, не `skill_manage()` |
 
 ## Формат ответа
 

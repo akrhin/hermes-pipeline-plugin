@@ -1,6 +1,6 @@
 name: pipeline
-version: 3.8.2
-description: "Pipeline Plugin v3.8.2 — Mnemosyne memory, docs cleanup, formatting fix, @quality agent, CRG integration"
+version: 3.8.3
+description: "Pipeline Plugin v3.8.3 — skill infrastructure & handle_save debug"
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify

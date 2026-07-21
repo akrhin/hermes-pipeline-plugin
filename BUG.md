@@ -8,7 +8,8 @@
 | 2 | High | test_kanban_integration — 4 теста всегда skip (_has_kanban() проверяет Hermes CLI, а не прямую SQLite) | tests/test_kanban_integration.py | ⚠️ |
 | 3 | Mid | 14 функций > 50 строк (самые критичные: scan_board 134, handle_run_agent 94) | kanban.py, handlers/__init__.py | ⚠️ |
 | 4 | Low | 2 E501 (line > 100) в classify.py (строки 218, 262) | classify.py | ⚠️ |
-| 5 | Mid | plugin.yaml — pre_tool_call hook не реализован | plugin.yaml | ⚠️ |
+| 6 | P0 | `handle_save` возвращает `kanban_parent_id: null` — процесс dashboard держит закешированный модуль `kanban.py` со старым `threading.local()`. Фикс на диске есть, но не подхватывается до перезапуска. Добавлен `_debug` в ответ. | handlers/__init__.py | ⚠️ |
+| 7 | Mid | **Background subagent** не может читать файлы (`read_file denied background whitelist`) — доступны только memory/skill tools. | Hermes config.yaml | ⚠️ |
 
 ## Пофикшенные в v3.8.x
 
