@@ -6,6 +6,14 @@
 |---|----------|----------|------|--------|
 | — | — | Нет открытых багов в нашем коде | — | ✅ |
 | — | P3 | test_scan_board_after_complete падает на dev (pre-existing) | tests/test_kanban_integration.py | ⚠️ |
+| — | P3 | SQLite без WAL-mode — нет PRAGMA journal_mode=WAL при connect | kanban.py | ⚠️ |
+| — | P3 | SQLite нет check_same_thread=False — race при threading | kanban.py | ⚠️ |
+| — | P3 | `ensemble.py` import `_ctx` вместо `from _ctx` — сломается при pytest без mocker | ensemble.py | ⚠️ |
+| — | P3 | `ensemble.py` import `retro` внутри `llm_judge_candidates` — late import | ensemble.py | ⚠️ |
+| — | P3 | `kanban.py` — `sqlite3.connect` каждый вызов (нет connection pool) | kanban.py | ⚠️ |
+| — | P3 | `_sqlite_select` молча возвращает [] при ошибке — диагностика невозможна | kanban.py | ⚠️ |
+| — | P3 | `_sqlite_update` silent fail на любой ошибке — скрывает проблемы | kanban.py | ⚠️ |
+| — | P4 | Нет тестов на `llm_judge_candidates()` — новый код без покрытия | ensemble.py | ⬜ |
 
 ## Задокументировано в ARCHITECTURE-FIXES.md
 
