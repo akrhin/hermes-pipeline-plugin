@@ -1,5 +1,5 @@
 """
-Pipeline Plugin v3.7.2 — Kanban-native multi-agent orchestration.
+Pipeline Plugin v3.8.0 — P1+P2+P3 complete, SQLite WAL+pool, ctx.llm, dispatch_tool, register_auxiliary_task
 Handlers extracted to handlers/ module (was 892 lines in one file).
 
 Variant C: state.json eliminated. kanban.db = single source of truth.

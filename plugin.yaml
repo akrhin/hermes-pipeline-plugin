@@ -1,6 +1,6 @@
 name: pipeline
-version: 3.7.2
-description: "Pipeline Plugin v3.7.2 — classify audit fix, handlers extracted from __init__.py (892→~280 lines)."
+version: 3.8.0
+description: "Pipeline Plugin v3.8.0 — P1+P2+P3 complete, SQLite WAL+pool, ctx.llm, dispatch_tool, register_auxiliary_task"
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify
