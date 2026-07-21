@@ -77,12 +77,12 @@ tags: [pipeline, orchestrator, ensemble, convergence, kanban, retro, master]
 
 | Режим | Движок | Когда использовать |
 |-------|--------|-------------------|
-| `legacy` (default) | Прямой SQLite (`kanban.py` — прямой `sqlite3` API) | Изолированные окружения, без Hermes kanban CLI |
-| `native` | Hermes встроенные kanban инструменты (`ctx.dispatch_tool` → `kanban_*`) | Когда есть Hermes Kanban (dashboard, web-ui) |
+| `native` (DEFAULT v3.8.4+) | `subprocess → hermes kanban` CLI (`kanban_adapter.py`) | Интеграция с Hermes kanban UI/дашбордом |
+| `legacy` | Прямой SQLite (`kanban_legacy.py` — прямой `sqlite3` API) | Изолированные окружения, без Hermes kanban CLI |
 
 **Роутинг (`kanban_router.py`):**
-- `kanban_mode: legacy` → вызовы идут в `kanban.py` (прямой SQLite)
-- `kanban_mode: native` → вызовы идут в `kanban_adapter.py` (через `kanban_claim`, `kanban_update`, `kanban_create`, etc.)
+- `kanban_mode: native` (DEFAULT) → вызовы идут в `kanban_adapter.py` (через `subprocess → hermes kanban` CLI)
+- `kanban_mode: legacy` → вызовы идут в `kanban_legacy.py` (прямой SQLite)
 - Полная feature parity: `_cleanup_stale_pipelines()`, `_claim_and_assign()`, `block_task()`, lifecycle parent status tracking, `show_task()` enrichment
 
 **Как настроить:**

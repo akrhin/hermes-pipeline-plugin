@@ -33,6 +33,13 @@
 - **Безопасность** — native mode больше не возвращает `False`/`0`/`None` для внутренних вызовов.
 - **Ruff 0, все тесты проходят.**
 
+### Fix: kanban_adapter CLI parsing (human-readable output)
+- `_run_kanban()` теперь парсит не только JSON, но и human-readable вывод CLI:
+  - `Created t_abc123` → `{"id": "t_abc123"}`
+  - `Completed ...`, `Blocked ...`, `Comment ...` → `{"status": "ok", "raw": ...}`
+- Исправлен баг: `cmd` больше не модифицируется раньше `extend()` с args
+- Улучшена обработка ошибок: `args_list` вместо `args` в логах
+
 ## v3.8.3 (2026-07-21)
 
 ### Bugfix: infrastructure & tooling

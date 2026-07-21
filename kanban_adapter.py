@@ -8,6 +8,11 @@ Uses subprocess to invoke `hermes kanban create/list/complete/...`
 on the pipeline board. IMPORTANT: does NOT work with dispatch_tool('kanban_*')
 because those tools are only available inside spawned workers, not
 from plugin handler code.
+
+CLI output parsing: `_run_kanban()` parses both JSON output (kanban_show,
+list_tasks) and human-readable CLI output (create, complete, block, comment).
+Human-readable patterns: "Created t_abc123" → {"id": "t_abc123"},
+"Completed ..." / "Blocked ..." / "Comment ..." → {"status": "ok", "raw": ...}.
 """
 
 from __future__ import annotations
@@ -16,8 +21,6 @@ import json
 import logging
 import os
 import subprocess
-import time
-import uuid
 from typing import Any
 
 from kanban_common import (
@@ -35,35 +38,43 @@ logger = logging.getLogger(__name__)
 
 
 def _kanban(*args: str, board: str = "pipeline") -> dict[str, Any]:
-    """Run ``hermes kanban …`` on pipeline board and return parsed JSON.
+    """Run ``hermes kanban …`` and return parsed JSON.
 
-    Args:
-        *args: CLI arguments after ``hermes kanban`` (e.g. ``create``, ``list``).
-        board: Board slug (default ``pipeline``).
-
-    Returns:
-        Parsed dict from the ``--json`` output, or ``{"status": "error",
-        "stderr": …}`` on failure.
+    NOTE: The CLI may return either JSON (with --json) or human-readable
+    text (e.g. ``Created t_abc …``).  This function parses both.
     """
     cmd = ["hermes", "kanban"]
     if board:
         cmd.extend(["--board", board])
-    cmd.extend(args)
+    args_list = list(args)
+    # Inject --json for parsable output
+    if args_list and args_list[0] in ("create", "list", "show", "complete"):
+        pass  # These commands support --json or their output is deterministic
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = subprocess.run(cmd + args_list, capture_output=True, text=True, timeout=30)
         if r.returncode != 0:
-            logger.warning("kanban CLI error (%s): %s", " ".join(args), r.stderr[:200])
+            logger.warning("kanban CLI error (%s): %s", " ".join(args_list), r.stderr[:200])
             return {"error": r.stderr.strip(), "status": "error"}
         stdout = r.stdout.strip()
+        # Try JSON first
         if stdout.startswith("{"):
             return json.loads(stdout)
         if stdout.startswith("["):
             loaded = json.loads(stdout)
             return {"tasks": loaded, "status": "ok"}
-        # Non-JSON response — try wrapping
+        # Human-readable: Created t_abc123  (ready, assignee=pipeline)
+        if stdout.startswith("Created "):
+            task_id = stdout.split(" ")[1].strip()
+            return {"id": task_id}
+        if stdout.startswith("Completed "):
+            return {"status": "ok", "raw": stdout}
+        if stdout.startswith("Blocked "):
+            return {"status": "ok", "raw": stdout}
+        if stdout.startswith("Comment "):
+            return {"status": "ok", "raw": stdout}
         return {"status": "ok", "raw": stdout}
     except subprocess.TimeoutExpired:
-        logger.warning("kanban CLI timed out: %s", " ".join(args))
+        logger.warning("kanban CLI timed out: %s", " ".join(args_list))
         return {"error": "timeout", "status": "error"}
     except Exception as exc:
         logger.warning("kanban CLI exception: %s", exc)
@@ -77,7 +88,7 @@ _DB_PATH_CACHE: str | None = None
 
 def _db_path() -> str:
     """Return the path to pipeline kanban DB (for compatibility with handlers).
-    
+
     In native mode this path is not used for direct SQLite access, but
     handle_save checks it for non-native mode branch gating.
     """

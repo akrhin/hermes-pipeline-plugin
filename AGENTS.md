@@ -10,7 +10,7 @@
 ### v3.8.4 — native kanban adapter, two-mode routing
 
 - **kanban_adapter.py** добавлен — 3 недостающие функции: `_cleanup_stale_pipelines()`, `_claim_and_assign()`, `block_task()`
-- **kanban_router.py** — роутинг между двумя движками: `legacy` (прямой SQLite) и `native` (через Hermes kanban инструменты)
+- **kanban_router.py** — роутинг между двумя движками: `legacy` (прямой SQLite) и `native` (через `subprocess → hermes kanban` CLI)
 - **config.yaml** — `kanban_mode: native | legacy`
 - **advance()** — lifecycle parent status tracking (первый вызов → running, последний → завершён)
 - **show_task()** — enrichment детей и комментариев для dashboard-совместимости
@@ -40,7 +40,7 @@ hermes plugins enable pipeline
 
 ## How It Works
 
-Плагин регистрирует **12 инструментов**. Состояние — в `kanban.board` (прямой SQLite, без CLI):
+Плагин регистрирует **12 инструментов**. Состояние — в `kanban.board` (через `kanban_router.py`, two-mode):
 
 - Parent task «🔷 Пайплайн: ...» с дочерними тасками для каждого агента
 - Статус агента: `ready` → `running` → `done`
@@ -286,8 +286,8 @@ pipeline:
 | `handlers/__init__.py` | 12 tool handlers + _build_agent_prompt + AGENT_CONTEXT_FIELDS |
 | `kanban.py` | **Kanban router** — выбирает движок по `kanban_mode` |
 | `kanban_common.py` | Shared helpers (`_AGENT_VERB`, `_extract_target`, `_build_state_from_board`) |
-| `kanban_adapter.py` | **Native mode** — через `ctx.dispatch_tool('kanban_*')` |
-| `kanban_legacy.py` | **Legacy mode** — прямой SQLite (DEFAULT) |
+| `kanban_adapter.py` | **Native mode** (DEFAULT v3.8.4+) — через `subprocess → hermes kanban` CLI |
+| `kanban_legacy.py` | **Legacy mode** — прямой SQLite |
 | `retro.py` | Retrospective logging + auto-analysis |
 | `ensemble.py` | Best-of-N: candidate generation + LLM/deterministic judge |
 | `classify.py` | Request classification → 8 категорий (+ quality pipeline) |

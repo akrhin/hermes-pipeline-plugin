@@ -1,4 +1,4 @@
-# Pipeline Plugin v3.8.2 — Architecture (SQLite Kanban + Ensemble + CRG + Quality Gates)
+# Pipeline Plugin v3.8.4 — Architecture (SQLite Kanban + Ensemble + CRG + Quality Gates + Two-mode kanban)
 
 ## Purpose
 
@@ -22,6 +22,7 @@
 11. **Quality Gates (v3.8.1)** — @quality агент запускает ruff/bandit/compileall/pytest в конце пайплайна.
 12. **Handlers extraction (v3.7.2)** — 17 хендлеров вынесены в `handlers/__init__.py`, `__init__.py` 892→280 строк.
 13. **Auto-resume (v3.8.1)** — Mnemosyne persona permanent с правилом pipeline_resume() при старте сессии.
+14. **Two-mode kanban (v3.8.4)** — `kanban_router.py` роутит между `native` (DEFAULT, `subprocess → hermes kanban` CLI) и `legacy` (прямой SQLite) движками через `kanban_mode` конфиг. `kanban_adapter.py` — native engine, `kanban_legacy.py` — legacy engine.
 
 ## Architecture
 
@@ -73,12 +74,18 @@
 │  │  keyword-based категоризация           │                                   │
 │  │  8 категорий + pipelines               │                                   │
 │  └────────────────────────────────────────┘                                   │
-│  ┌─── kanban.py ──────────────────────────┐                                   │
-│  │  create_task_tree                      │                                   │
-│  │  advance / evaluate_convergence        │                                   │
-│  │  on_convergence / on_clear             │                                   │
-│  │  scan_board / show_task / list         │                                   │
-│  │  create_ensemble_subtasks              │  ← NEW: N подтасков под ensemble  │
+│  ┌─── kanban_router.py ───────────────────┐                                   │
+│  │  роутинг: native / legacy              │                                   │
+│  │  (kanban_mode config)                   │                                   │
+│  │  ├── kanban_adapter.py (native)         │                                   │
+│  │  │   subprocess → hermes kanban CLI     │                                   │
+│  │  └── kanban_legacy.py (legacy)          │                                   │
+│  │      прямой SQLite                      │                                   │
+│  │  create_task_tree                       │                                   │
+│  │  advance / evaluate_convergence         │                                   │
+│  │  on_convergence / on_clear              │                                   │
+│  │  scan_board / show_task / list          │                                   │
+│  │  create_ensemble_subtasks               │  ← NEW: N подтасков под ensemble  │
 │  └────────────────────────────────────────┘                                   │
 │  ┌─── ensemble.py ────────────────────────┐                                   │
 │  │  generate_candidates() — 7 T-variations │  ← NEW v3.0                      │
@@ -232,8 +239,8 @@ pipeline:
 | `handlers/__init__.py` | 12 tool handlers + `_build_agent_prompt` + `AGENT_CONTEXT_FIELDS` (вынесены из __init__.py в v3.7.2) |
 | `kanban.py` | **Kanban API — роутер** (create_tree, advance, converge, scan_board, resume, reopen) |
 | `kanban_common.py` | Shared constants, helpers, SQLite pool (`_AGENT_VERB`, `_extract_target`, `_build_state_from_board`) |
-| `kanban_adapter.py` | **Native dispatch_tool kanban** — альтернативный движок для `kanban_mode: native`. Полная копия API через Hermes kanban tools |
-| `kanban_legacy.py` | **Legacy SQLite kanban** — прямой SQLite для `kanban_mode: legacy` (DEFAULT)
+| `kanban_adapter.py` | **Native mode** (DEFAULT v3.8.4+) — `subprocess → hermes kanban` CLI. Полная копия API с парсингом human-readable вывода |
+| `kanban_legacy.py` | **Legacy mode** — прямой SQLite для `kanban_mode: legacy`
 | `retro.py` | Retrospective logging + auto-analysis |
 | `ensemble.py` | Best-of-N core: generate_candidates (7 T-variations), judge_candidates (det + LLM), should_use_ensemble |
 | `classify.py` | Keyword-based request classification (8 categories) |

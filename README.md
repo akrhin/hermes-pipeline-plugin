@@ -220,9 +220,7 @@ code-review-graph build
 ## Retro logging (v3.5.1)
 Начиная с v3.5.1, **ретро-логирование фиксирует полные метаданные**: agent_done пишет duration_s/tokens_response/status, tokens_prompt считается от реального промпта, pipeline_resume логирует категорию/round/агентов.
 
-Начиная с v3.3.0, **kanban.py работает напрямую с SQLite, без CLI-прослойки**. Это собственный kanban плагина, не путать с `hermes kanban`.
-
-Начиная с v3.8.4, **kanban.py работает как роутер**: по умолчанию `legacy` (прямой SQLite), но можно включить `native` режим через `kanban_mode: native` в `config.yaml` — тогда все операции идут через Hermes встроенные kanban инструменты (`ctx.dispatch_tool`).
+Начиная с v3.8.4, **kanban.py работает как роутер** (`kanban_router.py`): по умолчанию `native` (через `subprocess → hermes kanban CLI`), но можно включить `legacy` режим через `kanban_mode: legacy` в `config.yaml` — тогда все операции идут напрямую через SQLite без CLI-прослойки.
 
 ### Два режима kanban
 
@@ -230,14 +228,14 @@ code-review-graph build
 
 ```yaml
 pipeline:
-  kanban_mode: legacy   # DEFAULT — прямой SQLite
-  # kanban_mode: native  # через Hermes dispatch_tool
+  kanban_mode: native   # DEFAULT (v3.8.4+) — subprocess → hermes kanban CLI
+  # kanban_mode: legacy  # прямой SQLite, без CLI
 ```
 
 | Режим | Файл | Механизм | Когда использовать |
 |-------|------|----------|-------------------|
-| **legacy** (DEFAULT) | `kanban_legacy.py` | Прямой SQLite (`sqlite3`) | Максимальная производительность, нет зависимости от Hermes kanban |
-| **native** | `kanban_adapter.py` | `ctx.dispatch_tool('kanban_*')` | Интеграция с Hermes kanban UI/дашбордом |
+| **native** (DEFAULT v3.8.4+) | `kanban_adapter.py` | `subprocess → hermes kanban CLI` | Интеграция с Hermes kanban UI/дашбордом |
+| **legacy** | `kanban_legacy.py` | Прямой SQLite (`sqlite3`) | Максимальная производительность, нет зависимости от Hermes kanban |
 
 **Все 11 функций API** доступны в обоих режимах:
 
