@@ -519,7 +519,11 @@ def handle_ensemble_run(args, **kwargs):
 
 
 def handle_ensemble_judge(args, **kwargs):
-    """Evaluate candidates and select best one."""
+    """Evaluate candidates and select best one.
+
+    Uses ctx.llm.complete() for LLM mode (in-process, no delegate_task).
+    Falls back to deterministic when ctx unavailable or LLM mode disabled.
+    """
     try:
         request = args["request"]
         candidates = args["candidates"]
@@ -527,7 +531,13 @@ def handle_ensemble_judge(args, **kwargs):
 
         config = read_ensemble_config()
         judge_cfg = config.get("judge", {}) if isinstance(config, dict) else {}
-        result = ensemble_judge_candidates(request, candidates, judge_mode, judge_cfg)
+
+        # LLM mode: use ctx.llm in-process
+        if judge_mode == "llm":
+            from ensemble import llm_judge_candidates
+            result = llm_judge_candidates(request, candidates, judge_cfg)
+        else:
+            result = ensemble_judge_candidates(request, candidates, judge_mode, judge_cfg)
 
         retro = rt.get_retro()
         retro.ensemble_judge(

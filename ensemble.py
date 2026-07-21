@@ -213,6 +213,84 @@ def judge_candidates(
     }
 
 
+def llm_judge_candidates(
+    request: str,
+    candidates: list[dict],
+    judge_config: dict | None = None,
+) -> dict:
+    """Evaluate candidates via ctx.llm.complete() — in-process, no delegate_task.
+
+    Uses the same judge prompt as judge_candidates(llm) but calls LLM directly
+    through the host's PluginLlm facade. Returns same shape as judge_candidates.
+    """
+    prompt = _build_judge_prompt(request, candidates)
+    judge_cfg = judge_config or read_ensemble_config().get("judge", {})
+
+    # Get ctx from the shared module-level reference
+    try:
+        from _ctx import get_ctx as _get_ctx
+
+        ctx = _get_ctx()
+        if ctx is None:
+            # Fallback: return deterministic result
+            return judge_candidates(
+                request, candidates, judge_mode="deterministic", judge_config=judge_config
+            )
+
+        # Call LLM via host-owned facade
+        result = ctx.llm.complete(
+            messages=[{"role": "user", "content": prompt}],
+            model=judge_cfg.get("model", "deepseek-v4-flash"),
+            provider=judge_cfg.get("provider", "polza"),
+            max_tokens=2000,
+            temperature=0.3,
+        )
+        text = result.text.strip()
+
+        # Parse JSON response
+        import json as _json
+        import re as _re
+
+        fence_re = _re.compile(r"```(?:json)?\s*(.+?)```", _re.DOTALL | _re.IGNORECASE)
+        match = fence_re.search(text)
+        if match:
+            text = match.group(1).strip()
+        parsed = _json.loads(text)
+
+        winner_id = parsed.get("winner_id", candidates[0]["id"])
+        rationale = parsed.get("rationale", "LLM Judge")
+        scores = parsed.get("scores", [])
+
+        # Log to retro
+        try:
+            import retro as rt
+            rt.get_retro().ensemble_judge(
+                winner=winner_id,
+                mode="llm",
+                rationale=rationale,
+            )
+        except Exception:
+            pass
+
+        return {
+            "winner_id": winner_id,
+            "scores": scores,
+            "rationale": rationale,
+            "mode": "llm",
+            "usage": {
+                "input_tokens": getattr(result.usage, "input_tokens", 0),
+                "output_tokens": getattr(result.usage, "output_tokens", 0),
+            },
+        }
+    except Exception as e:
+        logger.warning(
+            "llm_judge_candidates failed: %s — falling back to deterministic", e
+        )
+        return judge_candidates(
+            request, candidates, judge_mode="deterministic", judge_config=judge_config
+        )
+
+
 def build_judge_call_args(prompt: str, config: dict) -> dict:
     """Build delegate_task call args for LLM Judge execution."""
     judge_cfg = config.get("judge", {})

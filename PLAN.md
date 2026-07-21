@@ -29,7 +29,7 @@
 |---|--------|-----|----------|--------|
 | 7 | UX — прогресс-бар, emoji, @documenter-отчёты | feature | classify.emoji + _render_pipeline_status с прогресс-баром | ✅ |
 | 8 | `dispatch_tool` из slash-команд | feature | Из `/pipeline run <tool>` запускать pipeline инструменты | ✅ |
-| 9 | `ctx.llm` для ensemble judge | arch | LLM-фасад хоста вместо delegate_task | |
+| 9 | `ctx.llm` для ensemble judge | arch | LLM-фасад хоста вместо delegate_task через `llm_judge_candidates()` | ✅ |
 | 10 | `register_auxiliary_task` для classify | arch | Выделить классификатор в настраиваемую подзадачу | |
 
 ## Процесс

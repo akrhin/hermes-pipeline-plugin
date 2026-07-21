@@ -13,12 +13,12 @@
 - **plugin.yaml compliance**: добавлен provides_hooks (пустой), register_skill для bundled skills
 - **Hermes docs audit**: подтверждено соответствие Handler SDK — **kwargs, JSON return, try/except, toolset
 
-### v3.7.2-dev (2026-07-21) — dispatch_tool из slash-команд
+### v3.7.2-dev (2026-07-21) — ctx.llm для ensemble judge
 
-- `_ctx.py`: новый модуль — module-level ctx reference (без циркулярных импортов)
-- `__init__.py`: `register()` сохраняет ctx в `_ctx.set_ctx()`
-- `handlers/__init__.py`: `/pipeline run <tool> [key=val...]` вызывает `ctx.dispatch_tool()`
-- `PLAN.md`, `BUG.md`: актуализированы
+- `ensemble.py`: `llm_judge_candidates()` — оценивает кандидатов через `ctx.llm.complete()` in-process, без `delegate_task`
+- `handlers/__init__.py`: `handle_ensemble_judge` переключён на `llm_judge_candidates()` для LLM-режима
+- Fallback: если ctx недоступен → deterministic (без delegate_task)
+- `PLAN.md`: актуализирован
 
 ## v3.7.1 (2026-07-21)
 
