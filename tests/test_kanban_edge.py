@@ -5,11 +5,40 @@ from __future__ import annotations
 import json
 import os
 import sys
+from contextlib import contextmanager
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import kanban as kb
+
+
+# ── Helper: switch kanban mode for SQLite-specific tests ───────────────────────
+
+
+@contextmanager
+def _kanban_mode(mode: str):
+    """Temporarily switch config.yaml kanban_mode and reload kanban module."""
+    import importlib
+    import re
+    cfg_path = os.path.join(os.path.dirname(kb.__file__), "config.yaml")
+    with open(cfg_path) as f:
+        orig = f.read()
+    if re.search(r"kanban_mode:\s*\w+", orig):
+        new = re.sub(r"kanban_mode:\s*\w+", f"kanban_mode: {mode}", orig)
+    else:
+        new = orig + f"\npipeline:\n  kanban_mode: {mode}\n"
+    with open(cfg_path, "w") as f:
+        f.write(new)
+    kb._KANBAN_MODE = None
+    importlib.reload(kb)
+    try:
+        yield
+    finally:
+        with open(cfg_path, "w") as f:
+            f.write(orig)
+        kb._KANBAN_MODE = None
+        importlib.reload(kb)
 
 
 class TestExtractTarget:
@@ -760,15 +789,17 @@ class TestCleanupStalePipelines:
 
     def test_stale_pipeline_with_children_is_archived(self):
         """Bug #15: pipeline with 1+ children should be archived."""
-        with mock.patch("kanban_legacy._sqlite_select") as mock_select, \
-             mock.patch("kanban_legacy._sqlite_update", return_value=True) as mock_update:
-            mock_select.side_effect = [
-                [{"id": "stale_1"}],  # stale parents
-                [{"child_id": "child_1"}, {"child_id": "child_2"}],  # has children
-            ]
-            result = kb._cleanup_stale_pipelines(max_age_hours=24)
-        assert result == 1
-        # Should have completed 2 children + 1 parent = 3 updates
+        # Switch to legacy mode for this SQLite-specific test
+        with _kanban_mode("legacy"):
+            import kanban_legacy
+            with mock.patch.object(kanban_legacy, "_sqlite_select") as mock_select, \
+                 mock.patch.object(kanban_legacy, "_sqlite_update", return_value=True) as mock_update:
+                mock_select.side_effect = [
+                    [{"id": "stale_1"}],  # stale parents
+                    [{"child_id": "child_1"}, {"child_id": "child_2"}],  # has children
+                ]
+                result = kb._cleanup_stale_pipelines(max_age_hours=24)
+                assert result == 1
 
 
 class TestAgentDescriptions:
