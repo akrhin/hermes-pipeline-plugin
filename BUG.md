@@ -13,7 +13,7 @@
 | — | P3 | `kanban.py` — `sqlite3.connect` каждый вызов (нет connection pool) | kanban.py | ✅ v3.7.2 |
 | — | P3 | `_sqlite_select` молча возвращает [] при ошибке — диагностика невозможна | kanban.py | ✅ v3.7.2 |
 | — | P3 | `_sqlite_update` silent fail на любой ошибке — скрывает проблемы | kanban.py | ✅ v3.7.2 |
-| — | P4 | Нет тестов на `llm_judge_candidates()` — новый код без покрытия | ensemble.py | ⬜ |
+| — | P4 | Нет тестов на `llm_judge_candidates()` — новый код без покрытия | ensemble.py | ✅ v3.7.2 |
 
 ## Задокументировано в ARCHITECTURE-FIXES.md
 

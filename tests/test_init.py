@@ -456,3 +456,114 @@ def test_ensemble_judge_empty_candidates():
     result = judge_candidates("test", [], judge_mode="deterministic")
     assert result["winner_id"] is None
     print("OK: Empty candidates handled")
+
+
+# ── llm_judge_candidates tests ──────────────────────────────────────────────
+
+
+@mock.patch("ensemble.rt.get_retro")
+@mock.patch("_ctx.get_ctx")
+def test_llm_judge_candidates_success(mock_get_ctx, mock_get_retro):
+    """LLM Judge parses valid JSON response correctly."""
+    mock_retro = mock.MagicMock()
+    mock_get_retro.return_value = mock_retro
+    mock_ctx = mock.MagicMock()
+    mock_get_ctx.return_value = mock_ctx
+
+    # Mock .llm.complete() to return a PluginLlmCompleteResult-like object
+    mock_result = mock.MagicMock()
+    mock_result.text = '{"winner_id": "candidate_3", "rationale": "Best quality", "scores": []}'
+    mock_result.usage.input_tokens = 150
+    mock_result.usage.output_tokens = 50
+    mock_ctx.llm.complete.return_value = mock_result
+
+    from ensemble import llm_judge_candidates
+
+    candidates = [
+        {"id": "candidate_1", "temperature": 0.3},
+        {"id": "candidate_2", "temperature": 0.5},
+        {"id": "candidate_3", "temperature": 0.7},
+    ]
+    result = llm_judge_candidates("test request", candidates)
+
+    assert result["winner_id"] == "candidate_3"
+    assert result["rationale"] == "Best quality"
+    assert result["mode"] == "llm"
+    assert result["usage"]["input_tokens"] == 150
+    assert result["usage"]["output_tokens"] == 50
+    mock_ctx.llm.complete.assert_called_once()
+    mock_retro.ensemble_judge.assert_called_once_with(
+        winner="candidate_3", mode="llm", rationale="Best quality"
+    )
+    print("OK: llm_judge_candidates parses valid JSON")
+
+
+@mock.patch("ensemble.rt.get_retro")
+@mock.patch("_ctx.get_ctx")
+def test_llm_judge_candidates_json_fence(mock_get_ctx, mock_get_retro):
+    """LLM Judge handles JSON wrapped in ```json fences."""
+    mock_retro = mock.MagicMock()
+    mock_get_retro.return_value = mock_retro
+    mock_ctx = mock.MagicMock()
+    mock_get_ctx.return_value = mock_ctx
+
+    mock_result = mock.MagicMock()
+    mock_result.text = "```json\n{\"winner_id\": \"candidate_1\"}\n```"
+    mock_result.usage.input_tokens = 100
+    mock_result.usage.output_tokens = 30
+    mock_ctx.llm.complete.return_value = mock_result
+
+    from ensemble import llm_judge_candidates
+
+    candidates = [
+        {"id": "candidate_1", "temperature": 0.3},
+        {"id": "candidate_2", "temperature": 0.5},
+    ]
+    result = llm_judge_candidates("test", candidates)
+    assert result["winner_id"] == "candidate_1"
+    assert result["mode"] == "llm"
+    print("OK: llm_judge_candidates handles fenced JSON")
+
+
+@mock.patch("ensemble.rt.get_retro")
+@mock.patch("_ctx.get_ctx")
+def test_llm_judge_candidates_no_ctx(mock_get_ctx, mock_get_retro):
+    """When ctx is None, falls back to deterministic."""
+    mock_get_ctx.return_value = None
+
+    from ensemble import llm_judge_candidates
+
+    candidates = [
+        {"id": "c_0", "temperature": 0.3},
+        {"id": "c_1", "temperature": 0.5},
+        {"id": "c_2", "temperature": 0.7},
+        {"id": "c_3", "temperature": 0.9},
+        {"id": "c_4", "temperature": 1.1},
+    ]
+    result = llm_judge_candidates("test", candidates)
+    assert result["winner_id"] == "c_2"  # deterministic middle
+    assert result["mode"] == "deterministic"
+    print("OK: llm_judge_candidates falls back to deterministic when no ctx")
+
+
+@mock.patch("ensemble.rt.get_retro")
+@mock.patch("_ctx.get_ctx")
+def test_llm_judge_candidates_llm_error(mock_get_ctx, mock_get_retro):
+    """When ctx.llm.complete() raises, falls back to deterministic."""
+    mock_retro = mock.MagicMock()
+    mock_get_retro.return_value = mock_retro
+    mock_ctx = mock.MagicMock()
+    mock_get_ctx.return_value = mock_ctx
+    mock_ctx.llm.complete.side_effect = RuntimeError("LLM unavailable")
+
+    from ensemble import llm_judge_candidates
+
+    candidates = [
+        {"id": "c_0", "temperature": 0.3},
+        {"id": "c_1", "temperature": 0.5},
+        {"id": "c_2", "temperature": 0.7},
+    ]
+    result = llm_judge_candidates("test", candidates)
+    assert result["winner_id"] == "c_1"  # deterministic middle
+    assert result["mode"] == "deterministic"
+    print("OK: llm_judge_candidates falls back on LLM error")
