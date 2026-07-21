@@ -16,22 +16,23 @@ logger = logging.getLogger(__name__)
 # ── Built-in fallback MODEL_MAP (неизменный хардкод) ──
 
 BUILTIN_MODEL_MAP: dict[str, dict[str, str]] = {
-    "finder": {"provider": "direct", "model": "deepseek-v4-flash"},
-    "analyst": {"provider": "direct", "model": "deepseek-v4-flash"},
-    "planner": {"provider": "direct", "model": "deepseek-v4-flash"},
-    "coder": {"provider": "direct", "model": "deepseek-v4-flash"},
-    "fixer": {"provider": "direct", "model": "deepseek-v4-flash"},
-    "refactorer": {"provider": "direct", "model": "deepseek-v4-flash"},
-    "tester": {"provider": "direct", "model": "deepseek-v4-flash"},
-    "debugger": {"provider": "direct", "model": "deepseek-v4-flash"},
-    "documenter": {"provider": "direct", "model": "deepseek-v4-flash"},
-    "devops": {"provider": "direct", "model": "deepseek-v4-flash"},
-    "optimizer": {"provider": "direct", "model": "deepseek-v4-flash"},
-    "architect": {"provider": "delegate", "model": "deepseek-v4-pro"},
-    "reviewer": {"provider": "delegate", "model": "deepseek-v4-pro"},
+    "finder": {"provider": "delegate", "model": "deepseek-v4-flash"},
+    "analyst": {"provider": "delegate", "model": "deepseek-v4-flash"},
+    "planner": {"provider": "delegate", "model": "deepseek-v4-flash"},
+    "coder": {"provider": "delegate", "model": "deepseek-v4-flash"},
+    "fixer": {"provider": "delegate", "model": "deepseek-v4-flash"},
+    "refactorer": {"provider": "delegate", "model": "deepseek-v4-flash"},
+    "tester": {"provider": "delegate", "model": "deepseek-v4-flash"},
+    "debugger": {"provider": "delegate", "model": "deepseek-v4-flash"},
+    "documenter": {"provider": "delegate", "model": "deepseek-v4-flash"},
+    "devops": {"provider": "delegate", "model": "deepseek-v4-flash"},
+    "optimizer": {"provider": "delegate", "model": "deepseek-v4-flash"},
+    "architect": {"provider": "delegate", "model": "deepseek-v4-flash"},
+    "reviewer": {"provider": "delegate", "model": "deepseek-v4-flash"},
     "security": {"provider": "delegate", "model": "deepseek-v4-pro"},
-    "integration": {"provider": "delegate", "model": "deepseek-v4-pro"},
-    "researcher": {"provider": "delegate_free", "model": "openrouter/free"},
+    "integration": {"provider": "delegate", "model": "deepseek-v4-flash"},
+    "researcher": {"provider": "delegate", "model": "deepseek-v4-flash"},
+    "quality": {"provider": "delegate", "model": "deepseek-v4-flash"},
 }
 
 # Провайдер-типы, для которых defaults применимы

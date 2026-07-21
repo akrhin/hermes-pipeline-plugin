@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import traceback
 
 import classify
@@ -34,19 +35,26 @@ def _get_plugin_dir() -> str:
 
 
 def _import_ensemble():
-    """Import ensemble functions — works both as plugin and direct import."""
+    """Import ensemble functions from the pipeline package.
+
+    Uses relative imports which work when loaded as a Hermes plugin.
+    Falls back to direct import with sys.path manipulation for standalone/test use.
+    """
     try:
         from .ensemble import generate_candidates as ec
         from .ensemble import judge_candidates as ej
         from .ensemble import should_use_ensemble as se
         from .ensemble import read_ensemble_config as re
-        return ec, ej, se, re
     except ImportError:
+        # Standalone/test: add plugin dir to sys.path
+        plugin_dir = _get_plugin_dir()
+        if plugin_dir not in sys.path:
+            sys.path.insert(0, plugin_dir)
         from ensemble import generate_candidates as ec
         from ensemble import judge_candidates as ej
         from ensemble import should_use_ensemble as se
         from ensemble import read_ensemble_config as re
-        return ec, ej, se, re
+    return ec, ej, se, re
 
 
 (
@@ -242,6 +250,7 @@ AGENT_CONTEXT_FIELDS = {
     "documenter": ["implementation", "documentation"],
     "devops": ["infrastructure"],
     "optimizer": ["implementation"],
+    "quality": ["implementation"],
 }
 
 
@@ -334,6 +343,7 @@ def handle_prompt(args, **kwargs):
 
 _MODEL_MAP_CACHE: dict[str, dict[str, str]] = {}
 _CONFIG_MTIME: int = 0
+_MODEL_MAP_LOCK = threading.Lock()
 
 
 def _load_model_map() -> dict[str, dict[str, str]]:
@@ -348,10 +358,11 @@ def _load_model_map() -> dict[str, dict[str, str]]:
         current_mtime = 0
 
     global _CONFIG_MTIME, _MODEL_MAP_CACHE
-    if current_mtime > _CONFIG_MTIME or not _MODEL_MAP_CACHE:
-        _MODEL_MAP_CACHE = load_model_config()
-        _CONFIG_MTIME = current_mtime
-        logger.info("Loaded MODEL_MAP from config.yaml (%d agents)", len(_MODEL_MAP_CACHE))
+    with _MODEL_MAP_LOCK:
+        if current_mtime > _CONFIG_MTIME or not _MODEL_MAP_CACHE:
+            _MODEL_MAP_CACHE = load_model_config()
+            _CONFIG_MTIME = current_mtime
+            logger.info("Loaded MODEL_MAP from config.yaml (%d agents)", len(_MODEL_MAP_CACHE))
 
     return _MODEL_MAP_CACHE
 
@@ -443,10 +454,7 @@ def handle_run_agent(args, **kwargs):
             )
 
         call_args = {
-            "prompt": prompt,
-            "provider": provider,
-            "model": model,
-            "description": f"Pipeline agent: {agent_id}",
+            "goal": prompt,
         }
 
         return json.dumps(
@@ -527,10 +535,12 @@ def handle_ensemble_judge(args, **kwargs):
     try:
         request = args["request"]
         candidates = args["candidates"]
-        judge_mode = args.get("judge_mode", "deterministic")
 
         config = read_ensemble_config()
         judge_cfg = config.get("judge", {}) if isinstance(config, dict) else {}
+        # Read judge_mode from config first, then from args, default to deterministic
+        config_default = judge_cfg.get("mode", "deterministic") if isinstance(judge_cfg, dict) else "deterministic"
+        judge_mode = args.get("judge_mode", config_default)
 
         # LLM mode: use ctx.llm in-process
         if judge_mode == "llm":
@@ -585,7 +595,6 @@ def _handle_pipeline_run(tool_name: str, raw_kv_args: list[str]) -> str:
             tool_args[kv] = True
 
     try:
-        import json
         result = ctx.dispatch_tool(tool_name, tool_args)
         return result
     except Exception as e:

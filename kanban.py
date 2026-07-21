@@ -22,12 +22,8 @@ import os
 import re
 import sqlite3
 import threading
-
-import retro as rt
 import time
 import uuid
-
-from ensemble import generate_candidates as ensemble_gen_candidates, judge_candidates as ensemble_judge_candidates
 
 
 logger = logging.getLogger(__name__)
@@ -37,40 +33,53 @@ NEXT_ACTION_STATUSES = {"ready", "todo"}
 
 # ── SQLite connection pool ───────────────────────────────────────────────────
 
-_KANBAN_CONN_LOCAL = threading.local()
-"""Thread-local SQLite connection for kanban operations.
-WAL-mode enabled, check_same_thread=True (thread-local)."""
+_KANBAN_CONN: sqlite3.Connection | None = None
+"""Module-level SQLite connection for kanban operations.
+WAL-mode enabled. check_same_thread=True (single-threaded access)."""
+_KANBAN_LOCK = threading.Lock()
 
 
 def _get_connection() -> sqlite3.Connection | None:
-    """Get or create a thread-local SQLite connection with WAL mode."""
+    """Get or create a module-level SQLite connection with WAL mode.
+    Verifies the connection is alive before returning — recreates if stale."""
+    global _KANBAN_CONN
     db_path = _db_path()
     if not os.path.isfile(db_path):
         return None
-    conn = getattr(_KANBAN_CONN_LOCAL, "conn", None)
-    if conn is None:
+
+    with _KANBAN_LOCK:
+        # Check if existing conn is still alive
+        if _KANBAN_CONN is not None:
+            try:
+                _KANBAN_CONN.execute("SELECT 1")
+                return _KANBAN_CONN
+            except (sqlite3.Error, AttributeError):
+                logger.debug("kanban: stale connection detected, reconnecting")
+                _KANBAN_CONN = None
+
         try:
             conn = sqlite3.connect(db_path, timeout=5.0)
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA busy_timeout=5000")
             conn.row_factory = sqlite3.Row
-            _KANBAN_CONN_LOCAL.conn = conn
+            _KANBAN_CONN = conn
             logger.debug("kanban: opened SQLite connection (WAL) to %s", db_path)
         except sqlite3.Error as exc:
             logger.warning("kanban: failed to open DB %s: %s", db_path, exc)
             return None
-    return conn
+    return _KANBAN_CONN
 
 
 def _close_connection():
-    """Close the thread-local connection (if any)."""
-    conn = getattr(_KANBAN_CONN_LOCAL, "conn", None)
-    if conn:
+    """Close the module-level connection (if any)."""
+    global _KANBAN_CONN
+    if _KANBAN_CONN is not None:
         try:
-            conn.close()
+            _KANBAN_CONN.close()
         except Exception:
             pass
-        _KANBAN_CONN_LOCAL.conn = None
+        _KANBAN_CONN = None
+
 
 
 
@@ -134,6 +143,7 @@ _AGENT_VERB: dict[str, str] = {
     "documenter": "документация",
     "devops": "деплой",
     "optimizer": "оптимизация",
+    "quality": "quality check",
 }
 
 
@@ -157,6 +167,7 @@ AGENT_DESCRIPTIONS: dict[str, str] = {
     "documenter": "Документация: README, AGENTS.md, комментарии в коде, changelog, инструкции",
     "devops": "Инфраструктура: CI/CD, Docker, деплой, системные юниты, мониторинг",
     "optimizer": "Оптимизация: производительность, память, асинхронность, кэширование, регрессия",
+    "quality": "Quality gates: запуск ruff/bandit/compileall/pytest — проверка CI перед пушем",
 }
 
 
@@ -252,13 +263,10 @@ def _sqlite_select(query: str, params: tuple = ()) -> list[dict]:
         return []
 
 
-def promote(task_id: str, force: bool = False) -> bool:
+def promote(task_id: str) -> bool:
     """Promote task to ``ready`` via direct SQLite.
 
-    ``force`` is accepted for backward compatibility but has no effect —
-    direct SQLite has no parent-dependency gate.  The CLI ``promote``
-    command (which does enforce gates) has been replaced because it
-    silently returns ``{}`` when it fails (no error, no warning).
+    Direct SQLite has no parent-dependency gate.
     """
     # Bug #1 + Bug #5: kanban promote CLI молча падает — прямой SQLite
     return _sqlite_update(
@@ -276,11 +284,10 @@ def comment(task_id: str, text: str) -> bool:
     )
 
 
-def complete(task_id: str, result_summary: str = "", metadata: dict | None = None) -> bool:
+def complete(task_id: str, result_summary: str = "") -> bool:
     """Mark task done via direct SQLite.
 
-    ``result_summary`` and ``metadata`` are accepted for backward
-    compatibility but stored as a comment (since kanban comments are the
+    ``result_summary`` is stored as a comment (since kanban comments are the
     universal audit trail).  The CLI ``complete`` command silently
     returns ``{}`` on failure, so we now write directly to the DB.
     """
@@ -299,7 +306,7 @@ def complete(task_id: str, result_summary: str = "", metadata: dict | None = Non
     return ok
 
 
-def block_task(task_id: str, reason: str = "", kind: str = "needs_input") -> bool:
+def block_task(task_id: str, kind: str = "needs_input") -> bool:
     """Block a task via direct SQLite. Returns True if succeeded.
 
     ``kind`` controls the resulting status:
@@ -311,11 +318,6 @@ def block_task(task_id: str, reason: str = "", kind: str = "needs_input") -> boo
         "UPDATE tasks SET status=?, block_kind=COALESCE(?, block_kind) WHERE id=?",
         (status, kind, task_id),
     )
-
-
-def unblock(task_id: str) -> bool:
-    """Unblock a task (for next convergence round). Needs --force."""
-    return promote(task_id, force=True)
 
 
 def reopen(task_id: str) -> bool:
@@ -331,18 +333,6 @@ def reopen(task_id: str) -> bool:
     )
 
 
-def list_tasks(status: str = "", include_archived: bool = False) -> list[dict]:
-    """List tasks via direct SQLite, optionally filtered by status."""
-    sql = "SELECT id, title, body, assignee, status, priority, created_by, created_at," \
-          " started_at, completed_at, block_kind, block_recurrences FROM tasks WHERE 1=1"
-    params: list[str] = []
-    if status:
-        sql += " AND status=?"
-        params.append(status)
-    if not include_archived:
-        sql += " AND status!='archived'"
-    sql += " ORDER BY created_at DESC"
-    return _sqlite_select(sql, tuple(params))
 
 
 def show_task(task_id: str) -> dict:
@@ -428,7 +418,7 @@ def create_task_tree(state: dict) -> dict:
         first_agent = pipeline[0]
         first_id = state["kanban_task_ids"].get(first_agent)
         if first_id:
-            promote(first_id, force=True)
+            promote(first_id)
             _claim_and_assign(first_id, f"@{first_agent}")
             logger.info("promoted first agent %s → ready (assignee=%s)", first_agent, first_agent)
     # ══ Log the pipeline start on the parent task ════════════════════════
@@ -518,7 +508,6 @@ def advance(state: dict, completed_agent: str) -> dict:
     agent_id = task_ids.get(completed_agent)
     if agent_id:
         complete(agent_id, result_summary=f"✅ @{completed_agent} завершён")
-        rt.get_retro().agent_done(completed_agent, duration_s=0)
     # Record as completed
     completed = state.get("completed", [])
     if completed_agent not in completed:
@@ -545,7 +534,7 @@ def advance(state: dict, completed_agent: str) -> dict:
         next_id = task_ids.get(next_agent)
         if next_id:
             # Pipeline lifecycle: promote(todo→ready) then claim(ready→running)
-            promote(next_id, force=True)
+            promote(next_id)
             _claim_and_assign(
                 next_id, f"@{next_agent}"
             )  # Bug #2: ранее claim не делался — started_at был пуст
@@ -604,30 +593,16 @@ def on_convergence(state: dict, convergence_result: dict) -> None:
     _update_parent_body(parent_id, state)
 
     if decision == "converged":
-        metadata = {
-            "decision": "converged",
-            "round": round_num,
-            "p0": p0,
-            "p1": p1,
-            "p2": p2,
-        }
-        complete(parent_id, result_summary=reason, metadata=metadata)
+        complete(parent_id, result_summary=reason)
         # Close all child tasks too
         for agent, tid in task_ids.items():
             complete(tid, result_summary=f"✅ @{agent} done")
 
     elif decision == "stuck":
-        block_task(parent_id, reason=f"Stuck after round {round_num}: {reason}", kind="needs_input")
+        block_task(parent_id, kind="needs_input")
 
     elif decision == "maxed_out":
-        metadata = {
-            "decision": "maxed_out",
-            "round": round_num,
-            "p0": p0,
-            "p1": p1,
-            "p2": p2,
-        }
-        complete(parent_id, result_summary=f"Maxed out: {reason}", metadata=metadata)
+        complete(parent_id, result_summary=f"Maxed out: {reason}")
         # Close all child tasks too (Bug #11: was missing)
         for agent, tid in task_ids.items():
             complete(tid, result_summary=f"⛔ @{agent} maxed out")
@@ -651,6 +626,8 @@ def on_clear(state: dict) -> None:
         complete(parent_id, result_summary="Cancelled")
     for tid in task_ids.values():
         complete(tid, result_summary="Cancelled")
+    # Close the module-level SQLite connection
+    _close_connection()
 
 
 # ── Resume from board ───────────────────────────────────────────────────────┘
@@ -692,24 +669,12 @@ def _cleanup_stale_pipelines(max_age_hours: int = 24) -> int:
     return archived
 
 
-def scan_board() -> dict | None:
-    """Scan the pipeline board for an active pipeline run.
-
-    Returns state dict reconstructed from kanban tasks, or None if idle.
-    Uses direct SQLite instead of round-tripped list/show_task calls.
-
-    Before scanning, archives any stale zombie pipelines that were
-    created but never started (first promote silently failed pre-fix,
-    or the session was reset before any agent ran).
-    """
-    # Garbage-collect stale pipelines before scanning
-    cleaned = _cleanup_stale_pipelines(max_age_hours=24)  # Bug #4: мёртвые пайплайны накапливались
+def _find_active_parent(max_age_hours: int = 24) -> dict | None:
+    """Find the most recent active pipeline parent in the board."""
+    cleaned = _cleanup_stale_pipelines(max_age_hours=max_age_hours)
     if cleaned:
         logger.info("cleaned up %d stale pipeline(s) before scan", cleaned)
-
-    # Find parents with children — pipeline parents in any active status.
-    # LIMIT 1: process only the most recent (Bug #20: старые неактивные пайплайны не мешают)
-    parent_rows = _sqlite_select(
+    rows = _sqlite_select(
         "SELECT t.id, t.title, t.body, t.status, t.created_at "
         "FROM tasks t "
         "WHERE EXISTS (SELECT 1 FROM task_links l WHERE l.parent_id=t.id) "
@@ -717,94 +682,75 @@ def scan_board() -> dict | None:
         "ORDER BY t.created_at DESC "
         "LIMIT 1",
     )
+    return rows[0] if rows else None
 
-    if not parent_rows:
-        return None
 
-    # Process the first (most recent) active parent
-    t = parent_rows[0]
-    parent_id = t["id"]
-    title = t["title"] or ""
-    body = t["body"] or ""
-    parent_status = t["status"]
+def _parse_categories(body: str) -> tuple[list[str], str]:
+    """Parse category list and primary category from body."""
+    categories = []
+    for line in body.split("\n"):
+        if line.startswith("Категория:"):
+            cat = line.split(":", 1)[1].strip()
+            if cat:
+                categories.append(cat)
+        if line.startswith("Категории:"):
+            for c in line.split(":", 1)[1].strip().split(","):
+                c = c.strip()
+                if c:
+                    categories.append(c)
+    return categories, categories[0] if categories else ""
 
-    # Get children via task_links + tasks join (pipeline order comes from body, not DB)
-    children = _sqlite_select(
-        "SELECT c.id, c.title, c.status "
-        "FROM tasks c "
-        "JOIN task_links l ON l.child_id=c.id "
-        "WHERE l.parent_id=? "
-        "ORDER BY c.created_at ASC",
-        (parent_id,),
-    )
+
+def _parse_pipeline_order(body: str, children: list[dict]) -> list[str]:
+    """Parse agent pipeline order from body, fallback to children titles."""
+    for line in body.split("\n"):
+        if line.startswith("Агенты:") or line.startswith("Агенты :"):
+            agents_part = line.split(":", 1)[1].strip()
+            return [
+                a.strip().lstrip("@").strip()
+                for a in agents_part.split("→")
+                if a.strip()
+            ]
+    # Fallback: from child @-titles
+    pipeline = []
+    for child in children:
+        ctitle = (child["title"] or "") if isinstance(child, dict) else ""
+        if ctitle.startswith("@"):
+            agent = ctitle.split(":", 1)[0].lstrip("@").strip()
+            if agent:
+                pipeline.append(agent)
+    return pipeline
+
+
+def _build_state_from_board(parent_row: dict, children: list[dict]) -> dict:
+    """Reconstruct pipeline state dict from parent and children rows."""
+    parent_id = parent_row["id"]
+    title = parent_row["title"] or ""
+    body = parent_row["body"] or ""
+    parent_status = parent_row["status"]
 
     # Extract request from title/body
     request = title.replace("🔷  Пайплайн: ", "", 1)
     if "Запрос: " in body:
         request = body.split("Запрос: ", 1)[1]
 
-    # ══ Parse categories from body (now supports multiple) ══════════════
-    categories = []
-    # Single line: "Категория: FEATURE"
-    for line in body.split("\n"):
-        if line.startswith("Категория:"):
-            cat = line.split(":", 1)[1].strip()
-            if cat:
-                categories.append(cat)
-    # Multi-line: "Категории: FEATURE, SECURITY_RELATED"
-    for line in body.split("\n"):
-        if line.startswith("Категории:"):
-            cats_part = line.split(":", 1)[1].strip()
-            for c in cats_part.split(","):
-                c = c.strip()
-                if c:
-                    categories.append(c)
-    if not categories:
-        category = ""
-    else:
-        # Primary is the first listed category
-        category = categories[0]
+    categories, category = _parse_categories(body)
+    pipeline = _parse_pipeline_order(body, children)
 
-    # ══ ПРАВИЛЬНЫЙ ПОРЯДОК — из родительского body, не из ORDER BY ═══════
-    # Все дети создаются за ~миллисекунды, их created_at одинаков —
-    # ORDER BY ASC возвращает недетерминированный порядок.
-    # Парсим «Агенты: @finder → @analyst → ...» из body.
-    pipeline = []
-    for line in body.split("\n"):
-        if line.startswith("Агенты:") or line.startswith("Агенты :"):
-            agents_part = line.split(":", 1)[1].strip()
-            pipeline = [
-                a.strip().lstrip("@").strip()
-                for a in agents_part.split("→")
-                if a.strip()
-            ]
-            break
-    # Fallback: если не нашли в body — парсим из title под @-агентов
-    if not pipeline:
-        for child in children:
-            ctitle = child["title"] or ""
-            if ctitle.startswith("@"):
-                agent = ctitle.split(":", 1)[0].lstrip("@").strip()
-                if agent:
-                    pipeline.append(agent)
-
-    # Build task_ids and reconstruct state
+    # Build task_ids and reconstruct completed/current_idx
     current_idx = -1
     completed = []
     task_ids = {}
-    # Индексируем детей по имени агента и статусу
     child_agents = {}
     for child in children:
         cid = child["id"]
-        ctitle = child["title"] or ""
-        cstatus = child["status"] or ""
-        agent = ""
+        ctitle = (child["title"] or "")
+        cstatus = (child["status"] or "")
         if ctitle.startswith("@"):
             agent = ctitle.split(":", 1)[0].lstrip("@").strip()
-        if agent:
-            child_agents[agent] = {"id": cid, "status": cstatus}
+            if agent:
+                child_agents[agent] = {"id": cid, "status": cstatus}
 
-    # Используем правильный порядок pipeline
     for agent in pipeline:
         info = child_agents.get(agent)
         if info:
@@ -814,7 +760,7 @@ def scan_board() -> dict | None:
             elif info["status"] in ("ready", "todo", "running") and current_idx == -1:
                 current_idx = pipeline.index(agent)
 
-    state = {
+    return {
         "request": request,
         "category": category,
         "pipeline": pipeline,
@@ -826,7 +772,27 @@ def scan_board() -> dict | None:
         "round": 0,
         "findings": _restore_findings_from_body(body),
     }
-    return state
+
+
+def scan_board() -> dict | None:
+    """Scan the pipeline board for an active pipeline run.
+
+    Returns state dict reconstructed from kanban tasks, or None if idle.
+    """
+    parent = _find_active_parent()
+    if not parent:
+        return None
+
+    children = _sqlite_select(
+        "SELECT c.id, c.title, c.status "
+        "FROM tasks c "
+        "JOIN task_links l ON l.child_id=c.id "
+        "WHERE l.parent_id=? "
+        "ORDER BY c.created_at ASC",
+        (parent["id"],),
+    )
+
+    return _build_state_from_board(parent, children)
 
 
 def _restore_findings_from_body(body: str) -> list[dict]:
@@ -849,52 +815,7 @@ def _restore_findings_from_body(body: str) -> list[dict]:
     return []
 
 
-def get_agent_context(state: dict, agent_id: str) -> dict:
-    """⚠️ DEPRECATED v3.0 — kept for backward compat.
-    Use AGENT_CONTEXT_FIELDS in _build_agent_prompt() instead.
-    Selective context routing is now handled in __init__.py._build_agent_prompt().
-    """
-    ctx = state.get("context", {})
-
-    # Build agent-specific context
-    agent_ctx = dict(ctx)  # shallow copy
-    # Highlight the most relevant section
-    if agent_id in ("coder", "fixer", "refactorer"):
-        agent_ctx["_focus"] = "implementation"
-    elif agent_id in ("reviewer", "security", "tester"):
-        agent_ctx["_focus"] = "quality"
-    elif agent_id == "documenter":
-        agent_ctx["_focus"] = "documentation"
-    elif agent_id == "devops":
-        agent_ctx["_focus"] = "infrastructure"
-
-    return agent_ctx
-
-
-# ── Ensemble / Best-of-N ──────────────────────────────────────────────────────
-
-
-def generate_candidates(state: dict, agent_id: str, n: int = 5) -> list[dict]:
-    """Generate N candidate variations for ensemble execution.
-    Delegates to ensemble.py for full implementation.
-    """
-    return ensemble_gen_candidates(state, agent_id, n)
-
-
-def judge_candidates(
-    request: str,
-    candidates: list[dict],
-    judge_mode: str = "deterministic",
-    judge_config: dict | None = None,
-) -> dict:
-    """Select the best candidate from N results.
-    Delegates to ensemble.py for full implementation.
-    """
-    return ensemble_judge_candidates(request, candidates, judge_mode, judge_config)
-
-
 def create_ensemble_subtasks(state: dict, agent_id: str, candidates: list[dict]) -> dict:
-    """Create N sub-tasks on the kanban board under the parent task."""
     parent_id = state.get("kanban_parent_id")
     task_ids = state.get("kanban_task_ids", {}).copy()
     if not parent_id:

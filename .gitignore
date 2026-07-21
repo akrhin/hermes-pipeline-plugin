@@ -11,6 +11,8 @@ dist/
 audit_snapshot_*.json
 code_review_results.json
 retro/
+.ruff_cache/
+.pytest_cache/
 hermes-pipeline-plugin
 skill/pipeline-audit-checklist/pipeline-audit-checklist
 skill/pipeline-ensemble/pipeline-ensemble

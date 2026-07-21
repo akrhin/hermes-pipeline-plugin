@@ -8,10 +8,7 @@ Runs serially (one session) to avoid parent collisions.
 
 from __future__ import annotations
 
-import json
 import os
-import shutil
-import subprocess
 import sys
 import time
 
@@ -23,22 +20,10 @@ import kanban as kb
 
 
 def _has_kanban():
-    hermes = shutil.which("hermes")
-    if not hermes:
-        return False
-    try:
-        r = subprocess.run(
-            [hermes, "kanban", "boards", "ls", "--json"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if r.returncode != 0:
-            return False
-        boards = json.loads(r.stdout)
-        return any(b.get("slug") == "pipeline" for b in boards)
-    except Exception:
-        return False
+    """Check if pipeline kanban.db exists (direct SQLite, not Hermes CLI)."""
+    import os
+    base = os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes"))
+    return os.path.isfile(os.path.join(base, "kanban", "boards", "pipeline", "kanban.db"))
 
 
 def _cleanup(state):

@@ -1,10 +1,11 @@
-# Pipeline Plugin v3.3 — Architecture (SQLite Kanban + Ensemble + 20 bugfixes)
+# Pipeline Plugin v3.8.2 — Architecture (SQLite Kanban + Ensemble + CRG + Quality Gates)
 
 ## Purpose
 
 Плагин-оркестратор для Hermes Agent, реализующий multi-agent пайплайны с quality gates.
 **Variant C:** `state.json` удалён. `kanban.db` — единое состояние.
 После рестарта: `pipeline_resume()` сканирует доску.
+**v3.8.2:** 17 агентов (включая @quality), все Flash через Polza делегацию, CRG-интеграция, auto-resume через Mnemosyne.
 
 ## Key Design Decisions
 
@@ -14,9 +15,13 @@
 4. **Три уровня моделей** — Flash (напрямую), Pro (через delegation), OpenRouter free.
 5. **Я — оркестратор** — плагин даёт инструменты, я шагаю по таскам на доске.
 6. **Selective context** — каждый агент получает только те секции контекста, которые ему нужны (AGENT_CONTEXT_FIELDS).
-7. **Best-of-N Ensemble** — для @coder N=5 независимых генераций с разной temperature, judge выбирает лучшее.
+7. **Best-of-N Ensemble** — для @coder N=5 независимых генераций с разной temperature, LLM Judge выбирает лучшее (v3.3.0+, фикс реальной делегации в v3.3.3).
 8. **SQLite Kanban (v3.3.0)** — все операции с доской напрямую через sqlite3, без CLI-прослойки.
 9. **Retrospective** — JSONL-лог каждого прогона для анализа и отладки.
+10. **CRG Integration (v3.6.0)** — @reviewer/@security используют MCP-инструменты code-review-graph для blast radius, risk score.
+11. **Quality Gates (v3.8.1)** — @quality агент запускает ruff/bandit/compileall/pytest в конце пайплайна.
+12. **Handlers extraction (v3.7.2)** — 17 хендлеров вынесены в `handlers/__init__.py`, `__init__.py` 892→280 строк.
+13. **Auto-resume (v3.8.1)** — Mnemosyne persona permanent с правилом pipeline_resume() при старте сессии.
 
 ## Architecture
 
@@ -93,14 +98,14 @@
 
 | Category | Pipeline |
 |----------|----------|
-| FEATURE | finder → analyst → architect → planner → coder* → reviewer → integration → tester → documenter |
-| SECURITY_RELATED | finder → analyst → researcher → architect → planner → coder* → reviewer → security → integration → tester → documenter |
-| BUG_UNKNOWN | finder → debugger → fixer → reviewer → tester |
-| BUG_KNOWN | finder → fixer → reviewer → tester |
-| REFACTORING | finder → analyst → refactorer → reviewer → integration → tester |
-| PERFORMANCE | finder → analyst → optimizer → reviewer → tester |
-| INFRASTRUCTURE | finder → devops → (reviewer → tester if testable) |
-| DOCUMENTATION | finder → documenter → (reviewer optional) |
+| FEATURE | finder → analyst → architect → planner → coder* → reviewer → integration → tester → documenter → quality |
+| SECURITY_RELATED | finder → analyst → researcher → architect → planner → coder* → reviewer → security → integration → tester → documenter → quality |
+| BUG_UNKNOWN | finder → debugger → fixer → reviewer → tester → quality |
+| BUG_KNOWN | finder → fixer → reviewer → tester → quality |
+| REFACTORING | finder → analyst → refactorer → reviewer → integration → tester → quality |
+| PERFORMANCE | finder → analyst → optimizer → reviewer → tester → quality |
+| INFRASTRUCTURE | finder → devops → (reviewer → tester if testable) → quality |
+| DOCUMENTATION | finder → documenter → (reviewer optional) → quality |
 
 > * `@coder` заменяется на `@coder-ensemble` если ensemble включён (см. config.yaml pipeline.ensemble)
 
@@ -221,20 +226,24 @@ pipeline:
 
 | File | Purpose |
 |------|---------|
-| `plugin.yaml` | Manifest (v3.3.0, 12 tools) |
-| `__init__.py` | Plugin core: 12 tools + hot-reload MODEL_MAP + default prompt + AGENT_CONTEXT_FIELDS |
-| `models.py` | v3.2.0 Model config loader: YAML → merge → MODEL_MAP |
+| `plugin.yaml` | Manifest (v3.8.2, 12 tools) |
+| `__init__.py` | Plugin core: 12 tools + 17 handlers in handlers/ module |
+| `models.py` | v3.2.0 Model config loader: YAML → merge → MODEL_MAP. Hot-reload по mtime |
+| `handlers/__init__.py` | 12 tool handlers + `_build_agent_prompt` + `AGENT_CONTEXT_FIELDS` (вынесены из __init__.py в v3.7.2) |
 | `kanban.py` | **Kanban API — прямой SQLite** (create_tree, advance, converge, scan_board, resume, reopen) + ensemble |
 | `retro.py` | Retrospective logging + auto-analysis |
 | `ensemble.py` | Best-of-N core: generate_candidates (7 T-variations), judge_candidates (det + LLM), should_use_ensemble |
 | `classify.py` | Keyword-based request classification (8 categories) |
-| `agents/*.prompt` | Prompt templates for 16 agents |
+| `convergence.py` | Extracted convergence engine (deterministic, no LLM) |
+| `agents/*.prompt` | Prompt templates for 17 agents (включая @quality) |
 | `config.yaml` | Pipeline config (models + ensemble + retro) |
-| `AGENTS.md` | Agent documentation (v3.3.0) |
+| `AGENTS.md` | Agent documentation (v3.8.2) |
 | `ARCHITECTURE-FIXES.md` | Code review report — 20 bugs found and resolved |
 | `CONTRIBUTORS.md` | Список контрибуторов |
 | `CHANGELOG.md` | История изменений |
-| `skill/pipeline-orchestrator/` | Orchestrator skill |
+| `skill/pipeline-orchestrator/` | Orchestrator skill (v3.8.2) |
+| `skill/pipeline-audit-checklist/` | Audit checklist skill |
+| `skill/pipeline-ensemble/` | Best-of-N ensemble skill |
 
 ## Migration History
 
@@ -246,20 +255,21 @@ pipeline:
 | v2.1 | pipeline_run_agent — 10th tool. Delegation package pattern |
 | v2.2 | config.yaml вынос MODEL_MAP. models.py merge logic |
 | v2.3 | **Selective context** (AGENT_CONTEXT_FIELDS). full_context удалён |
-|| v3.0 | **Best-of-N skeleton**: pipeline_ensemble_run, pipeline_ensemble_judge |
-|| v3.1 | 20 bugfixes (4 P0+7 P1+9 P2) — SQLite rewrite, LLM Judge, classify RU, reopen |
-|| v3.2 | Flash prompt fix + model config hot-reload |
-|| v3.3 | LLM Judge delegation fix + AGENTS.md + community files |
-|| v3.4 | README rewrite (5-step install) + toolsets override docs |
-| **v3.5** | **scan_board order fix (pipeline из body) + ensemble judge output 2000→8000 + judge config passthrough** |
-|| **v3.6** | **CRG integration** — reviewer/security используют MCP-инструменты для blast radius, risk score |
-|| **v3.7** | **convergence.py + retro split + classify RU расширение (41 ключ) + primary priority fix** |
-|| **v3.7.1** | **CI quality gates** — bandit B108 suppressed, orchestrator skill ruff/bandit/compileall/pytest |
-|| **v3.7.2** | **Classify audit fix + handlers/extraction** — «аудит»/«audit» → REFACTORING. 17 хендлеров вынесены в `handlers/__init__.py`. `__init__.py` 892→280 строк |
-|| v3.1 | **Ensemble production**: ensemble.py, config-driven, LLM Judge, kanban subtasks |
-| **v3.2** | **Retrospective logging**, hot-reload MODEL_MAP, default prompt fallback, convergence status:fixed filter. 16 agents, 12 tools |
-| **v3.3** | **SQLite-native kanban** (PR#1 от @V0rt). Прямой SQLite без CLI. 20 bugfixes (4 P0 + 7 P1 + 9 P2). reopen(), AGENT_VERB, _extract_target(), try/finally resource leak fix |
+| v3.0 | **Best-of-N skeleton**: pipeline_ensemble_run, pipeline_ensemble_judge |
+| v3.1 | 20 bugfixes (4 P0+7 P1+9 P2) — SQLite rewrite, LLM Judge, classify RU, reopen |
+| v3.2 | Flash prompt fix + model config hot-reload |
+| v3.3 | LLM Judge delegation fix + AGENTS.md + community files |
+| **v3.3.0** | **SQLite-native kanban** (PR#1 от @V0rt). Прямой SQLite без CLI. 20 bugfixes (4 P0 + 7 P1 + 9 P2). reopen(), AGENT_VERB, _extract_target(), try/finally resource leak fix |
 | **v3.3.1** | **Bugfix release**: Flash prompt (P0), LLM Judge stub (P0), reopen() added, maxed_out children close, stale 1-child cleanup, scan_board LIMIT 1, integration.prompt dead Full context. 79/79 tests |
 | **v3.3.2** | **Classify fixes**: RU keywords (крашит, упал, валит, пофикс), word-boundary fix (crash→crashes), priority order (BUG_KNOWN > BUG_UNKNOWN). 14/14 classify tests |
 | **v3.3.3** | **LLM Judge orchestration fix**: delegate_task called with judge_call_args. Real LLM evaluation instead of ignored winner. |
+| **v3.4.0** | **README rewrite (5-step install) + toolsets override docs** |
+| **v3.5.0** | **scan_board order fix (pipeline из body) + ensemble judge output 2000→8000 + judge config passthrough** |
+| **v3.6.0** | **CRG integration** — @reviewer/@security используют MCP-инструменты для blast radius, risk score |
+| **v3.7.0** | **convergence.py + retro split + classify RU расширение (41 ключ) + primary priority fix** |
+| **v3.7.1** | **CI quality gates** — bandit B108 suppressed, orchestrator skill ruff/bandit/compileall/pytest |
+| **v3.7.2** | **Classify audit fix + handlers extraction** — «аудит»/«audit» → REFACTORING. 17 хендлеров вынесены в `handlers/__init__.py`. `__init__.py` 892→280 строк |
+| **v3.8.0** | **P1+P2+P3 final: register_auxiliary_task, ctx.llm, dispatch_tool, SQLite Pool** |
+| **v3.8.1** | **@quality agent, auto-resume (Правило 0), formatting sync, 17 agents** |
+| **v3.8.2** | **Memory + Docs + Flash delegation — Mnemosyne persona, doc cleanup, all agents on delegate/polza, @quality, auto-resume** |
 

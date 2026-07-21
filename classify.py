@@ -127,7 +127,7 @@ CATEGORIES = {
             "fail",
             "поломал",
         ],
-        "pipeline": ["finder", "debugger", "fixer", "reviewer", "tester"],
+        "pipeline": ["finder", "debugger", "fixer", "reviewer", "tester", "quality", "documenter"],
     },
     "BUG_KNOWN": {
         "keywords": [
@@ -139,7 +139,7 @@ CATEGORIES = {
             "чини",
             "реши проблем",
         ],
-        "pipeline": ["finder", "fixer", "reviewer", "tester"],
+        "pipeline": ["finder", "fixer", "reviewer", "tester", "quality", "documenter"],
     },
     "REFACTORING": {
         "keywords": [
@@ -167,6 +167,8 @@ CATEGORIES = {
             "dead code",
             "unused",
             "неиспользу",
+            "анализ",
+            "analysis",
             "lint",
             "code smell",
             "style",
@@ -182,7 +184,10 @@ CATEGORIES = {
             "аудит",
             "audit",
         ],
-        "pipeline": ["finder", "analyst", "refactorer", "reviewer", "integration", "tester"],
+        "pipeline": [
+            "finder", "analyst", "refactorer", "reviewer", "integration", "tester",
+            "quality", "documenter",
+        ],
     },
     "PERFORMANCE": {
         "keywords": [
@@ -194,8 +199,8 @@ CATEGORIES = {
             "быстродейств",
             "производител",
             "performance",
-            "memory",
-            "память",
+            "memory leak",
+            "утечк",
             "скорост",
             "latency",
             "задержк",
@@ -210,7 +215,10 @@ CATEGORIES = {
             "узк",
             "подвиса",
         ],
-        "pipeline": ["finder", "analyst", "optimizer", "reviewer", "tester"],
+        "pipeline": [
+            "finder", "analyst", "architect", "optimizer",
+            "reviewer", "tester", "quality", "documenter",
+        ],
     },
     "INFRASTRUCTURE": {
         "keywords": [
@@ -254,7 +262,10 @@ CATEGORIES = {
             "dns",
             "ssl",
         ],
-        "pipeline": ["finder", "devops", "reviewer", "tester"],
+        "pipeline": [
+            "finder", "devops", "architect",
+            "reviewer", "tester", "quality", "documenter",
+        ],
     },
     "DOCUMENTATION": {
         "keywords": [
@@ -281,7 +292,7 @@ CATEGORIES = {
             "spec",
             "спецификац",
         ],
-        "pipeline": ["finder", "documenter"],
+        "pipeline": ["finder", "reviewer", "documenter"],
     },
     "FEATURE": {
         "keywords": [
@@ -320,12 +331,14 @@ CATEGORIES = {
         "pipeline": [
             "finder",
             "analyst",
+            "researcher",
             "architect",
             "planner",
             "coder",
             "reviewer",
             "integration",
             "tester",
+            "quality",
             "documenter",
         ],
     },

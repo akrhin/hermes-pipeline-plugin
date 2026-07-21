@@ -197,7 +197,7 @@ def judge_candidates(
         # Build prompt for LLM Judge + delegate args
         prompt = _build_judge_prompt(request, candidates)
         judge_cfg = judge_config or read_ensemble_config().get("judge", {})
-        call_args = build_judge_call_args(prompt, {"judge": judge_cfg})
+        call_args = build_judge_call_args(prompt)
         return {
             "winner_id": None,  # unknown until LLM evaluates
             "rationale": "LLM Judge will evaluate via delegate_task",
@@ -292,14 +292,10 @@ def llm_judge_candidates(
         )
 
 
-def build_judge_call_args(prompt: str, config: dict) -> dict:
+def build_judge_call_args(prompt: str) -> dict:
     """Build delegate_task call args for LLM Judge execution."""
-    judge_cfg = config.get("judge", {})
     return {
-        "prompt": prompt,
-        "provider": judge_cfg.get("provider", "polza"),
-        "model": judge_cfg.get("model", "deepseek-v4-flash"),
-        "description": "Ensemble LLM Judge",
+        "goal": prompt,
     }
 
 

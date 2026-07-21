@@ -29,13 +29,13 @@ git checkout -b feature/ваше-изменение
 pytest tests/ -q
 ```
 
-**Все тесты должны проходить:** 79/79 (v3.3.3).
+**Все тесты должны проходить:** 311/311 (v3.8.2).
 
 Если добавляешь новую фичу — напиши тест. Если фиксишь баг — добавь регрессионный тест.
 
 ### 5. Архитектура плагина
 
-Прочитай [AGENTS.md](AGENTS.md) — там всё про 16 агентов, 8 категорий, selective context.
+Прочитай [AGENTS.md](AGENTS.md) — там всё про 17 агентов, 8 категорий, selective context.
 
 Основные файлы:
 
@@ -46,7 +46,7 @@ pytest tests/ -q
 | `ensemble.py` | Best-of-N ensemble (generate_candidates, judge_candidates) |
 | `classify.py` | Классификация запроса по 8 категориям |
 | `models.py` | Model routing + hot-reload config |
-| `agents/*.prompt` | Промпты для каждого из 16 агентов |
+| `agents/*.prompt` | Промпты для каждого из 17 агентов |
 | `skill/pipeline-orchestrator/SKILL.md` | Главный оркестратор-скилл |
 
 ### 6. Pull Request

@@ -28,13 +28,13 @@ skill_view('pipeline-orchestrator')
 | `__init__.py` | Хендлеры: handle_ensemble_run, handle_ensemble_judge |
 | `tests/test_ensemble.py` | Регрессионные тесты (3 штуки) |
 
-## Изменения 2026-07-21
+## Изменения 2026-07-21 (v3.8.2)
 1. **`llm_judge_candidates()`** — замена `delegate_task`-базированных вызовов на `ctx.llm.complete()`
 2. **Fallback** — детермистический джудж в случае недоступности контекста
 3. **Формат файлов кандидатов** — `tools/retro-summary.candidate_N` для каждого кандидата
-4. **Работа в pipeline-orchestrator**:
-   -וס crossing in `Convergence.py` (maniagtment candidate files)
-   - Валидация формата в `Ensemble Orchestrator`
+4. **Fix #2: build_judge_call_args** — теперь чисто `{'goal': prompt}` вместо `{prompt, config}`. Убран unused param `config`.
+5. **Делегация Judge** — `handle_ensemble_judge` передаёт `judge_call_args` с единственным полем `goal`
+6. **Тесты:** 311 passed (+35 новых test_delegation_contract.py на call_args.goal == prompt)
 
 ## Пользовательские требования
 - Все `/pipeline run ensemble` должны ссылаться на уникальные файлы кандидатов

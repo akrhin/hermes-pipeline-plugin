@@ -13,6 +13,56 @@
 - **plugin.yaml compliance**: добавлен provides_hooks (пустой), register_skill для bundled skills
 - **Hermes docs audit**: подтверждено соответствие Handler SDK — **kwargs, JSON return, try/except, toolset
 
+## v3.8.2 (2026-07-21)
+
+### Fix #1: threading.local() → модульная переменная (kanban.py)
+- `_KANBAN_CONN_LOCAL = threading.local()` удалён
+- `_KANBAN_CONN: sqlite3.Connection | None = None` — модульная переменная с проверкой живости (`SELECT 1`)
+- `_close_connection()`: вызывается в `on_clear()` (P1 — resource leak)
+- `threading.Lock()` добавлен для `_KANBAN_CONN` и `_MODEL_MAP_CACHE` (P2 — thread safety)
+- `import threading` удалён из kanban.py
+
+### Fix #2: call_args bypass (handlers, ensemble)
+- `handle_run_agent()`: call_args = `{'goal': prompt}` вместо `{'prompt': ..., 'provider': ..., 'model': ..., 'description': ...}`
+- `build_judge_call_args()` в ensemble.py: то же упрощение — `{'goal': prompt}`
+- Упрощение контракта между плагином и оркестратором: только goal, всё остальное — в промпте
+
+### Fix #3: Тест контракта — 35 новых тестов
+- `tests/test_delegation_contract.py` — 35 тестов, 499 строк
+- Покрытие: call_args.goal == prompt, все 17 агентов, edge cases (пустой prompt, None state)
+- Ensemble judge contract: build_judge_call_args возвращает goal
+- Verifies `not hasattr(call_args, 'prompt')` — старые поля отсутствуют
+
+### 9 issues от Analyst — все починены
+
+**P1:**
+- @quality добавлен в `AGENT_CONTEXT_FIELDS` (handlers/__init__.py)
+- `_close_connection()` вызывается в `on_clear()` (kanban.py)
+- `DEFAULT_RETRO_CONFIG['auto_analyze']: False → True` (retro.py)
+
+**P2:**
+- `threading.Lock()` для `_KANBAN_CONN` (kanban.py)
+- `threading.Lock()` для `_MODEL_MAP_CACHE` (handlers/__init__.py)
+- Unused params удалены: `promote(force)`, `complete(metadata)`, `block_task(reason)` (kanban.py)
+- Unused param `run_context` из `build_analysis_prompt()` (retro.py)
+- Unused param `config` из `build_judge_call_args()` (ensemble.py)
+- Dead code path в `_import_ensemble()` починен
+
+### Quality Gates
+- Ruff 0, Bandit 0, Compile 0
+- **311 тестов пройдено** (+199 новых: delegation contract, convergence edge, handlers, kanban edge, retro, ensemble)
+
+## v3.8.1 (2026-07-21)
+
+### Системные исправления — @quality агент + auto-resume + formatting
+
+- **Новый агент @quality** — встроенные quality gates (ruff → bandit → compileall → pytest) в конце пайплайна для BUG_KNOWN/BUG_UNKNOWN/REFACTORING
+- **Auto-resume** — новое «Правило 0» в скиле: при старте сессии вызывать `pipeline_resume()` + `skill_view('pipeline-orchestrator')`
+- **Formatting fix** — синхронизированы response-formatting (разрешены pipe-таблицы) и telegram-rich-formatting скилы
+- **17 агентов** — @quality добавлен в AGENT_VERB, AGENT_DESCRIPTIONS, BUILTIN_MODEL_MAP, classify pipelines
+- **Тесты** — 122/122 (3 новых TestQualityAgent), Ruff 0, Bandit 0, Compile 0
+- **Документация** — AGENTS.md, README.md, CONTRIBUTING.md обновлены под 17 агентов
+
 ## v3.8.0 (2026-07-21) — P1+P2+P3 + стабильный dev→main
 
 - `__init__.py`: `register()` вызывает `ctx.register_auxiliary_task("pipeline_classify", ...)` — классификатор

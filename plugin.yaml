@@ -1,6 +1,6 @@
 name: pipeline
-version: 3.8.0
-description: "Pipeline Plugin v3.8.0 — P1+P2+P3 complete, SQLite WAL+pool, ctx.llm, dispatch_tool, register_auxiliary_task"
+version: 3.8.2
+description: "Pipeline Plugin v3.8.2 — Mnemosyne memory, docs cleanup, formatting fix, @quality agent, CRG integration"
 author: Hermes + Vladimir
 provides_tools:
   - pipeline_classify
@@ -15,6 +15,5 @@ provides_tools:
   - pipeline_run_agent
   - pipeline_ensemble_run
   - pipeline_ensemble_judge
-provides_hooks:
-  - pre_tool_call
+provides_hooks: []
 requires_env: []

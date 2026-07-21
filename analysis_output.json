@@ -1,0 +1,91 @@
+{
+  "status": "NEEDS_INFO",
+  "summary": "Анализ Pipeline Plugin v3.8.2 (HEAD на v3.8.0, 23 modified files). Три фикса проверены: kanban.py threading.local→_KANBAN_CONN (✅), handlers/__init__.py call_args fix (✅), test_delegation_contract.py +35 тестов (✅). Найдено: 0 P0, 3 P1, 6 P2. Ключевые проблемы: quality agent отсутствует в AGENT_CONTEXT_FIELDS (будет получать full_context), _close_connection() никогда не вызывается (утечка SQLite-соединения при релоаде), auto_analyze default inconsistency (retro False vs handler True), race condition на _KANBAN_CONN/_MODEL_MAP_CACHE без блокировки. Устаревшие параметры в kanban.py API (force, metadata, reason).",
+  "findings": [
+    {
+      "severity": "P1",
+      "file": "handlers/__init__.py",
+      "line": 245,
+      "category": "inconsistency",
+      "description": "AGENT_CONTEXT_FIELDS содержит 16 агентов — @quality (17-й) отсутствует. При вызове _build_agent_prompt('quality', ...) fields будет None → fallback на все 7 секций включая full_context. Агент quality gates получит раздутый контекст вместо осмысленного набора секций.",
+      "fix": "Добавить 'quality': ['implementation'] (или аналогичную минимальную секцию) в AGENT_CONTEXT_FIELDS."
+    },
+    {
+      "severity": "P1",
+      "file": "kanban.py",
+      "line": 70,
+      "category": "dead_code",
+      "description": "Функция _close_connection() определена (закрывает модульное SQLite-соединение), но НИГДЕ не вызывается в кодовой базе. При hot-reload плагина или перезапуске Hermes старое соединение остаётся открытым — potential resource leak.",
+      "fix": "Добавить вызов _close_connection() в register() при shutdown плагина, или в __init__.py при перерегистрации, или удалить функцию если она никогда не понадобится."
+    },
+    {
+      "severity": "P1",
+      "file": "handlers/__init__.py",
+      "line": 119,
+      "category": "inconsistency",
+      "description": "В handle_convergence() проверка rt.DEFAULT_RETRO_CONFIG.get('auto_analyze', True): DEFAULT_RETRO_CONFIG в retro.py строке 27 явно задаёт 'auto_analyze': False, но fallback True в get() переопределяет это значение. В результате при отсутствии конфига auto_analyze = True, хотя default предполагает False.",
+      "fix": "Убрать fallback True: либо читать config['auto_analyze'] напрямую через _read_retro_config(), либо задать rt.DEFAULT_RETRO_CONFIG['auto_analyze'] = True если это ожидаемое поведение."
+    },
+    {
+      "severity": "P2",
+      "file": "kanban.py",
+      "line": 35,
+      "category": "race",
+      "description": "Module-level _KANBAN_CONN без threading.Lock. _get_connection() обращается к глобальной переменной без синхронизации. При одновременном вызове из двух потоков (stale conn → оба создают новое соединение) — одно соединение остаётся неиспользуемым. Плюс check_same_thread=True в sqlite3.connect() не защищает от race condition на уровне Python global.",
+      "fix": "Добавить threading.Lock() вокруг глобального доступа к _KANBAN_CONN аналогично _SingletonSlot в retro.py."
+    },
+    {
+      "severity": "P2",
+      "file": "handlers/__init__.py",
+      "line": 336,
+      "category": "race",
+      "description": "_MODEL_MAP_CACHE и _CONFIG_MTIME — глобальные переменные без блокировки. Hot-reload из нескольких потоков может привести к race: проверка mtime и запись кэша неатомарны.",
+      "fix": "Добавить threading.Lock() вокруг критической секции _load_model_map()."
+    },
+    {
+      "severity": "P2",
+      "file": "kanban.py",
+      "line": 263,
+      "category": "dead_code",
+      "description": "Параметр force=True в promote(task_id, force) объявлен, но никогда не используется — тело функции игнорирует его (мягкая обратная совместимость). Аналогично complete() не использует metadata, block_task() не использует reason.",
+      "fix": "Либо использовать параметры, либо удалить их из сигнатуры (breaking change для внешних вызовов — проверять есть ли они в тестах/оркестраторе)."
+    },
+    {
+      "severity": "P2",
+      "file": "retro.py",
+      "line": 530,
+      "category": "dead_code",
+      "description": "Параметр run_context: dict | None = None в build_analysis_prompt() объявлен, но никогда не используется в теле функции. Никто не передаёт run_context при вызовах.",
+      "fix": "Удалить параметр run_context или реализовать его использование."
+    },
+    {
+      "severity": "P2",
+      "file": "ensemble.py",
+      "line": 295,
+      "category": "dead_code",
+      "description": "Параметр config: dict в build_judge_call_args(prompt, config) объявлен, но никогда не используется в теле функции. judge_cfg уже прочитан до вызова и передан, но не используется.",
+      "fix": "Удалить параметр config (или использовать его для кастомизации call_args)."
+    },
+    {
+      "severity": "P2",
+      "file": "handlers/__init__.py",
+      "line": 36,
+      "category": "dead_code",
+      "description": "_import_ensemble() — сложный механизм импорта с try/except на относительный/абсолютный import. Функции 4 вызываются сразу после определения. При импорте handlers модуль уже гарантированно в sys.path (через __init__.py). ImportError никогда не возникнет — dead code path.",
+      "fix": "Упростить до from .ensemble import generate_candidates, judge_candidates, should_use_ensemble, read_ensemble_config (без try/except)."
+    }
+  ],
+  "p0_count": 0,
+  "p1_count": 3,
+  "p2_count": 6,
+  "recommendations": [
+    "ДОБАВИТЬ @quality в AGENT_CONTEXT_FIELDS (handlers/__init__.py:245) — ~1 строка, предотвращает раздутие контекста для quality gates агента",
+    "ДОБАВИТЬ _close_connection() в lifecycle плагина — предотвращает утечку SQLite-соединения при reload/restart",
+    "ФИКС auto_analyze default inconsistency — retro.py DEFAULT и handler проверка расходятся",
+    "ДОБАВИТЬ threading.Lock() к _KANBAN_CONN и _MODEL_MAP_CACHE — thread safety для hot-reload конфигов",
+    "УПРОСТИТЬ _import_ensemble() — убрать dead code path (try/except блок)",
+    "УДАЛИТЬ unused params: force/metadata/reason в kanban.py, run_context в retro.py, config в ensemble.py (или задокументировать намеренно)",
+    "УБЕДИТЬСЯ что config.yaml в ~/.hermes/plugins/pipeline/config.yaml синхронизирован с репозиторным — models.py читает оттуда, не из репо",
+    "Запустить тесты: pytest tests/ -q — убедиться что 112+ тестов проходят перед коммитом"
+  ]
+}

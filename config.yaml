@@ -1,20 +1,12 @@
-# Pipeline Plugin Config v3.2.0
-# Flash по умолчанию, security на Pro-делегации.
+# Pipeline Plugin Config v3.8.2
+# Все агенты на delegate через polza/deepseek-v4-flash.
 # Приоритет: agents > defaults > BUILTIN_MODEL_MAP (models.py)
 
 pipeline:
   models:
     defaults:
       delegate:
-        provider: direct
         model: deepseek-v4-flash
-      delegate_free:
-        provider: direct
-        model: deepseek-v4-flash
-    agents:
-      security:
-        provider: delegate
-        model: deepseek-v4-pro
 
   ensemble:
     enabled: true
@@ -33,7 +25,7 @@ pipeline:
 
   # ── Retrospective (v3.2.0) ──
   retro:
-    enabled: true                # вкл/выкл запись JSONL-лога
+    enabled: true
     dir: "~/.hermes/plugins/pipeline/retro"
-    max_files: 100               # автоочистка старых логов
-    auto_analyze: false          # автоанализ выключен — копим данные для саморефлексии
+    max_files: 100
+    auto_analyze: false

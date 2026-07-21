@@ -25,7 +25,7 @@
   │
   ▼
 Каждый агент делает свою часть работы.
-  ├─ Flash (direct) — в моём контексте: finder, coder, tester… (15 из 16)
+  ├─ Flash (delegate) — через Polza: finder, coder, tester… (16 из 17)
   └─ Pro (delegate) — через сабагента: только security (deepseek-v4-pro)
   │
   ▼
@@ -87,10 +87,8 @@ hermes plugins list | grep pipeline   # должен быть enabled
 pipeline:
   models:
     defaults:
-      direct:
-        model: deepseek-v4-flash
       delegate:
-        provider: direct
+        provider: polza
         model: deepseek-v4-flash
     agents:
       security:
@@ -129,33 +127,46 @@ cd ~/git/hermes-pipeline-plugin && git pull
 
 ---
 
-## Все 16 агентов и их модели
+## Все 17 агентов и их модели
 
 | Агент | Тип | Режим | Модель | Контекст | Что делает |
 |-------|-----|-------|--------|----------|------------|
-| **@finder** | Flash | `direct` | `deepseek-v4-flash` | research | Разведка: структура, файлы, зависимости |
-| **@analyst** | Flash | `direct` | `deepseek-v4-flash` | research | Диагностика: корень проблемы, логические ошибки |
-| **@researcher** | Flash | `direct` | `deepseek-v4-flash` | research | Поиск best practices и документации |
-| **@architect** | Flash | `direct` | `deepseek-v4-flash` | research, planning | Проектирование решения |
-| **@planner** | Flash | `direct` | `deepseek-v4-flash` | planning, infrastructure | Декомпозиция на задачи |
-| **@coder** | Flash | `direct` | `deepseek-v4-flash` | implementation, planning | Написание кода с ensemble (5 кандидатов) |
-| **@fixer** | Flash | `direct` | `deepseek-v4-flash` | implementation | Исправление известных багов |
-| **@refactorer** | Flash | `direct` | `deepseek-v4-flash` | implementation | Рефакторинг без изменения поведения |
-| **@reviewer** | Flash | `direct` | `deepseek-v4-flash` | implementation, research | Код-ревью |
+| **@finder** | Flash | `delegate` | `deepseek-v4-flash` | research | Разведка: структура, файлы, зависимости |
+| **@analyst** | Flash | `delegate` | `deepseek-v4-flash` | research | Диагностика: корень проблемы, логические ошибки |
+| **@researcher** | Flash | `delegate` | `deepseek-v4-flash` | research | Поиск best practices и документации |
+| **@architect** | Flash | `delegate` | `deepseek-v4-flash` | research, planning | Проектирование решения |
+| **@planner** | Flash | `delegate` | `deepseek-v4-flash` | planning, infrastructure | Декомпозиция на задачи |
+| **@coder** | Flash | `delegate` | `deepseek-v4-flash` | implementation, planning | Написание кода с ensemble (5 кандидатов) |
+| **@fixer** | Flash | `delegate` | `deepseek-v4-flash` | implementation | Исправление известных багов |
+| **@refactorer** | Flash | `delegate` | `deepseek-v4-flash` | implementation | Рефакторинг без изменения поведения |
+| **@reviewer** | Flash | `delegate` | `deepseek-v4-flash` | implementation, research | Код-ревью |
 | **@security** | **Pro** | **`delegate`** | **`deepseek-v4-pro`** | implementation, research | Аудит безопасности (OWASP Top 10) |
-| **@integration** | Flash | `direct` | `deepseek-v4-flash` | implementation, documentation, infrastructure | Кросс-файловая консистентность |
-| **@tester** | Flash | `direct` | `deepseek-v4-flash` | implementation | Написание и прогон тестов |
-| **@debugger** | Flash | `direct` | `deepseek-v4-flash` | implementation | Отладка (только BUG_UNKNOWN) |
-| **@documenter** | Flash | `direct` | `deepseek-v4-flash` | implementation, documentation | Документация |
-| **@devops** | Flash | `direct` | `deepseek-v4-flash` | infrastructure | Инфраструктура (только INFRASTRUCTURE) |
-| **@optimizer** | Flash | `direct` | `deepseek-v4-flash` | implementation | Оптимизация (только PERFORMANCE) |
+| **@integration** | Flash | `delegate` | `deepseek-v4-flash` | implementation, documentation, infrastructure | Кросс-файловая консистентность |
+| **@tester** | Flash | `delegate` | `deepseek-v4-flash` | implementation | Написание и прогон тестов |
+| **@debugger** | Flash | `delegate` | `deepseek-v4-flash` | implementation | Отладка (только BUG_UNKNOWN) |
+| **@documenter** | Flash | `delegate` | `deepseek-v4-flash` | implementation, documentation | Документация |
+| **@devops** | Flash | `delegate` | `deepseek-v4-flash` | infrastructure | Инфраструктура (только INFRASTRUCTURE) |
+| **@optimizer** | Flash | `delegate` | `deepseek-v4-flash` | implementation | Оптимизация (только PERFORMANCE) |
+- **@quality** | Flash | **`delegate`** | **`deepseek-v4-flash`** | implementation | Quality gates (ruff/bandit/compileall/pytest) |
 
-**Два режима выполнения:**
-- **Flash** (`direct`) — агент работает прямо в моём контексте. Быстро, дёшево. Подходит для механической работы.
-- **Pro** (`delegate`) — я поручу задачу сабагенту через `delegate_task`. Дороже, но качественнее. Используется только для security-аудита.
+**Три режима выполнения (v3.8.2):**
+- **Flash** (`delegate`) — через Polza: `delegate_task` c `polza/deepseek-v4-flash`. Все 16 Flash-агентов. Быстро, дёшево.
+- **Pro** (`delegate`) — через Polza: `delegate_task` c `deepseek-v4-pro`. Только @security. Дороже, качественнее.
+- **`direct`** — (устарел в v3.8.2) раньше использовался для Flash-агентов в v3.7.x, заменён на `delegate` через Polza.
 
-> **Примечание:** по умолчанию все агенты — Flash. Security переведён на Pro через конфиг.
-> Файлы `.prompt` есть для всех 16 агентов. Без файла — генерируется default prompt из AGENT_CONTEXT_FIELDS.
+> **Примечание:** 17 агентов: 16 Flash + @security (Pro) + @quality (Flash). Все Flash-агенты используют Polza-делегацию (`delegate/polza/deepseek-v4-flash`). Без .prompt файла — генерируется default prompt из `AGENT_CONTEXT_FIELDS`.
+
+## call_args контракт (v3.8.2)
+
+Начиная с v3.8.2, `pipeline_run_agent()` возвращает `call_args = {'goal': prompt}` — единственное поле.
+**Никаких** `prompt`, `provider`, `model`, `description` в call_args. Всё, что нужно агенту — в самом промпте.
+
+```text
+pkg = pipeline_run_agent(state, 'coder')
+delegate_task(**pkg.call_args)           # call_args.goal == prompt
+```
+
+То же для `pipeline_ensemble_judge()` — `build_judge_call_args()` возвращает `{'goal': prompt}`.
 
 ---
 
@@ -329,11 +340,47 @@ for k,v in sorted(cats.items()):
 
 - **5 кандидатов** (T=0.3, 0.5, 0.7, 0.9, 1.1)
 - **LLM Judge** реально оценивает кандидатов через `delegate_task` (багфикс #3 v3.3.3)
-- На round ≥ 2 ensemble автоматически отключается (экономия токенов)
+На round ≥ 2 ensemble автоматически отключается (экономия токенов)
 
 ---
 
-## Инструменты плагина (v3.3.3 — 12 штук)
+## Memory Setup
+
+Pipeline plugin использует **Mnemosyne** (L3 persona) или **MEMORY.md** для сохранения контекста между сессиями.
+
+### Mnemosyne (рекомендуется)
+
+**Persona permanent** — правило auto-resume вшивается в system prompt каждого старта:
+
+```bash
+mnemosyne_remember(content="При старте: 1) pipeline_resume() 2) skill_view('pipeline-orchestrator') 3) если стейт — продолжать", importance=1.0, scope="global")
+mnemosyne_persona_promote(memory_id="<id>", tier="permanent")
+```
+
+**Canonical backup:**
+```bash
+mnemosyne_remember(content="[canonical:workflow/pipeline_auto_resume] ...", importance=0.95, scope="global")
+```
+
+### Стандартная память (MEMORY.md)
+
+Добавить в `~/.hermes/memories/MEMORY.md`:
+```
+Pipeline auto-resume: вызывать pipeline_resume() и skill_view('pipeline-orchestrator') при старте
+```
+
+### Форматирование
+
+```yaml
+display:
+  final_response_markdown: auto   # не strip — сохраняет таблицы и разметку
+```
+
+Скилы: `skill_view('response-formatting')`, `skill_view('telegram-rich-formatting')`
+
+---|---|---
+
+## Инструменты плагина (v3.8.2 — 12 штук)
 
 | Инструмент | Что делает |
 |-----------|------------|

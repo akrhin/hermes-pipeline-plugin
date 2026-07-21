@@ -1,0 +1,89 @@
+{
+  "total_nodes": 267,
+  "total_edges": 2032,
+  "files_count": 16,
+  "languages": [
+    "python",
+    "bash"
+  ],
+  "communities": [
+    "tests-handle (139)",
+    "kanban (30)",
+    "retro (27)",
+    "tools (19)",
+    "__init__ (17)",
+    "classify (6)",
+    "ensemble (6)",
+    "models (5)",
+    "convergence (2)"
+  ],
+  "cross_community_edges": 44,
+  "bridge_nodes": [
+    {
+      "name": "classify",
+      "betweenness": 0.053
+    },
+    {
+      "name": "load_model_config",
+      "betweenness": 0.029
+    }
+  ],
+  "hub_nodes": [
+    {
+      "name": "_event",
+      "total_degree": 78
+    },
+    {
+      "name": "render",
+      "total_degree": 76
+    },
+    {
+      "name": "classify",
+      "total_degree": 62
+    }
+  ],
+  "large_functions": [
+    {
+      "name": "scan_board",
+      "lines": 135,
+      "file": "kanban.py"
+    },
+    {
+      "name": "handle_run_agent",
+      "lines": 110,
+      "file": "__init__.py"
+    },
+    {
+      "name": "evaluate_convergence",
+      "lines": 74,
+      "file": "convergence.py"
+    },
+    {
+      "name": "judge_candidates",
+      "lines": 64,
+      "file": "ensemble.py"
+    },
+    {
+      "name": "create_task_tree",
+      "lines": 59,
+      "file": "kanban.py"
+    },
+    {
+      "name": "advance",
+      "lines": 58,
+      "file": "kanban.py"
+    }
+  ],
+  "knowledge_gaps": {
+    "total": 29,
+    "untested_hotspots": 20,
+    "isolated_nodes": 1,
+    "thin_communities": 1,
+    "single_file_communities": 7
+  },
+  "risk_score": 0.65,
+  "graph_built_at": "2026-07-21T01:33:24",
+  "graph_commit": "c3570d2317e5",
+  "head_commit": "95b11c45db16",
+  "head_matches_build": false
+}

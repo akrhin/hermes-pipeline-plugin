@@ -24,7 +24,7 @@ DEFAULT_RETRO_CONFIG = {
     "enabled": True,
     "dir": "~/.hermes/plugins/pipeline/retro",
     "max_files": 100,
-    "auto_analyze": False,
+    "auto_analyze": True,
 }
 
 
@@ -388,29 +388,19 @@ def _classify_events(events: list[dict]) -> dict:
 def _build_metrics_sections(classed: dict) -> list[str]:
     """Build metric sections from classified events."""
     lines = []
-    agents_run = classed["agents_run"]
-    durations = classed["durations"]
-    convergences = classed["convergences"]
-    routings = classed["routings"]
-    ensembles = classed["ensembles"]
-    errors = classed["errors"]
-    findings_events = classed["findings_events"]
-
-    if agents_run:
-        agents_str = " → ".join(agents_run)
-        lines.append(f"### Agent sequence ({len(agents_run)} agents)")
+    if classed.get("agents_run"):
+        agents_str = " → ".join(classed["agents_run"])
+        lines.append(f"### Agent sequence ({len(classed['agents_run'])} agents)")
         lines.append(f"  {agents_str}")
         lines.append("")
-
-    if durations:
+    if classed.get("durations"):
         lines.append("### Per-agent duration (seconds)")
-        for agent, dur in sorted(durations.items(), key=lambda x: -x[1]):
+        for agent, dur in sorted(classed["durations"].items(), key=lambda x: -x[1]):
             lines.append(f"  {agent}: {dur:.1f}s")
         lines.append("")
-
-    if convergences:
+    if classed.get("convergences"):
         lines.append("### Convergence rounds")
-        for c in convergences:
+        for c in classed["convergences"]:
             lines.append(
                 f"  Round {c.get('round', '?')}: {c.get('decision', '?')} — "
                 f"P0={c.get('p0', 0)} P1={c.get('p1', 0)} P2={c.get('p2', 0)}"
@@ -419,10 +409,9 @@ def _build_metrics_sections(classed: dict) -> list[str]:
             if reason:
                 lines.append(f"    reason: {reason}")
         lines.append("")
-
-    if routings:
+    if classed.get("routings"):
         lines.append("### Model routing events")
-        warnings = [r for r in routings if r.get("warning")]
+        warnings = [r for r in classed["routings"] if r.get("warning")]
         if warnings:
             lines.append("  ⚠️  Warnings:")
             for r in warnings:
@@ -430,34 +419,32 @@ def _build_metrics_sections(classed: dict) -> list[str]:
         else:
             lines.append("  All clean — no routing warnings")
         lines.append("")
-
-    if ensembles:
+    if classed.get("ensembles"):
         lines.append("### Ensemble runs")
-        for e in ensembles:
+        for e in classed["ensembles"]:
             lines.append(
                 f"  {e.get('agent', '?')}: N={e.get('n', 0)} temps={e.get('temperatures', [])}"
             )
         lines.append("")
-
-    if errors:
+    if classed.get("errors"):
         lines.append("### Errors")
-        for err in errors:
+        for err in classed["errors"]:
             resolution = err.get("resolution", "")
-            resolution_suffix = f" → {resolution}" if resolution else ""
-            lines.append(
-                f"  ❌ {err.get('agent', '?')}: {err.get('error', '?')}{resolution_suffix}"
-            )
+            suffix = f" → {resolution}" if resolution else ""
+            lines.append(f"  ❌ {err.get('agent', '?')}: {err.get('error', '?')}{suffix}")
         lines.append("")
-
-    if findings_events:
+    if classed.get("findings_events"):
         lines.append("### Findings summary")
-        for f in findings_events:
+        for f in classed["findings_events"]:
             lines.append(
                 f"  P0={f.get('p0', 0)} P1={f.get('p1', 0)} P2={f.get('p2', 0)} "
                 f"fixed={f.get('fixed', 0)} accepted={f.get('accepted', 0)}"
             )
         lines.append("")
     return lines
+
+
+
 
 
 def _detect_patterns(events: list[dict], classed: dict) -> list[str]:
@@ -540,7 +527,7 @@ def _build_raw_events_section(events: list[dict]) -> list[str]:
     return lines
 
 
-def build_analysis_prompt(events: list[dict], run_context: dict | None = None) -> str:
+def build_analysis_prompt(events: list[dict]) -> str:
     """Build a structured analysis prompt from retro events for LLM consumption.
 
     The output is a text summary that an LLM can analyze to find
