@@ -15,13 +15,13 @@
 | 2 | CLI-команда `hermes pipeline` | feature | `ctx.register_cli_command()` — то же в терминале | ✅ |
 | 3 | `check_fn` для инструментов | perf | Скрывать `pipeline_ensemble_run`/`pipeline_ensemble_judge`, если ensemble выключен | ✅ |
 
-### 🟡 P2 — Скоро
+### 🟡 P2 — Скоро ✅
 
-| # | Задача | Тип | Описание |
-|---|--------|-----|----------|
-| 4 | `lazy_singleton` для retro | refactor | Заменить глобальный синглтон на thread-safe из `plugin_utils` |
-| 5 | `pre_tool_call` хук метрик | feature | Собирать статистику: сколько раз вызван `pipeline_advance` |
-| 6 | `requires_env` в plugin.yaml | docs | Добавить пустой блок для формального соответствия |
+| # | Задача | Тип | Описание | Статус |
+|---|--------|-----|----------|--------|
+| 4 | `lazy_singleton` для retro | refactor | _SingletonSlot — thread-safe, double-checked locking | ✅ |
+| 5 | `pre_tool_call` хук метрик | feature | _on_pre_tool_call — считает pipeline_* + agent_* вызовы | ✅ |
+| 6 | `requires_env` в plugin.yaml | docs | Пустой блок для формального соответствия | ✅ |
 
 ### 🟢 P3 — Когда-нибудь
 

@@ -409,3 +409,7 @@ def register(ctx):
         setup_fn=_setup_pipeline_argparse,
         handler_fn=handle_pipeline_cli,
     )
+
+    # Register metrics hook — counts pipeline_* and agent_* calls
+    from handlers import _on_pre_tool_call
+    ctx.register_hook("pre_tool_call", _on_pre_tool_call)

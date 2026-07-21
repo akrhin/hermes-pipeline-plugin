@@ -12,6 +12,7 @@ log and generates improvement suggestions (findings + fixes).
 import json
 import logging
 import os
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -249,27 +250,66 @@ class RetroLogger:
 
 # ── Global singleton ───────────────────────────────────────────────────────────
 
-# Simple approach: one retro logger per pipeline run.
-# The orchestrator creates a new retro when pipeline_save is called.
-_ACTIVE_RETRO: RetroLogger | None = None
+# Thread-safe lazy singleton: заменяет global _ACTIVE_RETRO на
+# потокобезопасный слот из stdlib (Double-checked locking).
+
+
+class _SingletonSlot:
+    """Thread-safe lazy slot — копия Hermes SingletonSlot из plugin_utils.
+
+    Встроена в плагин, чтобы не зависеть от sys.path Hermes core.
+    """
+
+    __slots__ = ("_lock", "_value", "_set")
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._value: RetroLogger | None = None
+        self._set = False
+
+    def get(self, factory):
+        if self._set:
+            return self._value
+        with self._lock:
+            if self._set:
+                return self._value
+            value = factory()
+            self._value = value
+            self._set = True
+            return value
+
+    def peek(self) -> "RetroLogger | None":
+        return self._value if self._set else None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._value = None
+            self._set = False
+
+
+_ACTIVE_RETRO_SLOT = _SingletonSlot()
 
 
 def get_retro(run_id: str = "") -> RetroLogger:
-    """Get or create the active retro logger for this pipeline run."""
-    global _ACTIVE_RETRO
-    if _ACTIVE_RETRO is None:
-        _ACTIVE_RETRO = RetroLogger(run_id=run_id)
-    elif run_id:
-        _ACTIVE_RETRO.set_run_id(run_id)
-    return _ACTIVE_RETRO
+    """Get or create the active retro logger for this pipeline run.
+
+    Thread-safe: the slot's factory runs at most once even under concurrent first calls.
+    """
+    def _build() -> RetroLogger:
+        return RetroLogger(run_id=run_id)
+
+    retro = _ACTIVE_RETRO_SLOT.get(_build)
+    if run_id:
+        retro.set_run_id(run_id)
+    return retro
 
 
 def reset_retro() -> None:
-    """Close and reset the active retro logger."""
-    global _ACTIVE_RETRO
-    if _ACTIVE_RETRO:
-        _ACTIVE_RETRO.close()
-    _ACTIVE_RETRO = None
+    """Close and reset the active retro logger. Thread-safe."""
+    existing = _ACTIVE_RETRO_SLOT.peek()
+    if existing is not None:
+        existing.close()
+    _ACTIVE_RETRO_SLOT.reset()
 
 
 # ── Analysis ────────────────────────────────────────────────────────────────────

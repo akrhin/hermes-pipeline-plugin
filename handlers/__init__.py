@@ -562,6 +562,31 @@ def handle_pipeline_cli(args):
     print(result)
 
 
+# ── Metrics hook ────────────────────────────────────────────────────────────
+
+
+_PIPELINE_TOOL_COUNTERS: dict[str, int] = {}
+"""tool_name → call count — обнуляется при рестарте плагина."""
+
+
+def _on_pre_tool_call(tool_name: str, args: dict, task_id: str, **kwargs) -> None:
+    """pre_tool_call hook: считает вызовы pipeline-инструментов.
+
+    Регистрируется в __init__.py через ctx.register_hook('pre_tool_call', fn).
+    """
+    if tool_name.startswith("pipeline_") or tool_name.startswith("agent_"):
+        count = _PIPELINE_TOOL_COUNTERS.get(tool_name, 0) + 1
+        _PIPELINE_TOOL_COUNTERS[tool_name] = count
+
+
+def get_pipeline_metrics() -> dict:
+    """Return the current call counters.
+
+    Exposed so /pipeline status может показать статистику.
+    """
+    return dict(_PIPELINE_TOOL_COUNTERS)
+
+
 def _render_pipeline_status(cmd: str) -> str:
     """Shared rendering for both slash and CLI commands."""
     if cmd == "clear":

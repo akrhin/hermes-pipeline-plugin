@@ -16,4 +16,5 @@ provides_tools:
   - pipeline_ensemble_run
   - pipeline_ensemble_judge
 provides_hooks:
-  # No hooks currently — declared for documentation compliance
+  - pre_tool_call
+requires_env: []
