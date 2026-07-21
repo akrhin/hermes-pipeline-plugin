@@ -1,4 +1,10 @@
-"""All pipeline tool handlers extracted from __init__.py (v3.7.2)."""
+"""Pipeline Plugin v3.7.2 — all tool handlers.
+
+Extracted from __init__.py (was 892 lines) in v3.7.2 refactoring.
+12 handlers: classify, convergence, save, load, clear, resume,
+advance, prompt, model, run_agent, ensemble_run, ensemble_judge.
++ _build_agent_prompt, AGENT_CONTEXT_FIELDS, hot-reload model config.
+"""
 
 import json
 import logging

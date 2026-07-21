@@ -1,10 +1,18 @@
-# AGENTS.md — Pipeline Plugin (v3.6.0, SQLite-native + code-review-graph)
+# AGENTS.md — Pipeline Plugin (v3.7.2, SQLite-native + handlers/)
 
 ## What This Is
 
 Плагин-оркестратор multi-agent пайплайнов для Hermes Agent.
 **Variant C:** `state.json` удалён. `kanban.db` — единое состояние.
-**v3.6.0:** интеграция с **code-review-graph (CRG)** — локальный граф кода на Tree-sitter. @reviewer и @security используют MCP-инструменты CRG (blast radius, risk score, test gaps) вместо сканирования всего кода. Экономия токенов 38–528×.
+**v3.7.2:** 17 хендлеров вынесены из `__init__.py` (892→280 строк) в `handlers/__init__.py`.
+
+### v3.7.2 — handlers/extraction
+
+- **17 хендлеров** вынесены из `__init__.py` (892→280 строк) в `handlers/__init__.py`
+- `__init__.py` содержит только 12 tool schemas + `register()`
+- Классификатор: «аудит»/«audit» → REFACTORING (было SECURITY_RELATED)
+
+**v3.6.0:** интеграция с **code-review-graph (CRG)** — локальный граф кода на Tree-sitter. @reviewer и @security используют MCP-инструменты CRG.
 
 ## Quick Start
 
