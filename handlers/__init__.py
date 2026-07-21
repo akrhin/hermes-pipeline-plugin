@@ -542,14 +542,44 @@ def handle_ensemble_judge(args, **kwargs):
 
 
 def handle_pipeline_command(raw_args: str) -> str:
-    """Slash-command /pipeline — show kanban status.
+    """Slash-command /pipeline — show kanban status or run tools.
 
-    Usage: /pipeline [status|show|clear]
+    Usage:
+      /pipeline [status|show|clear]
+      /pipeline run <tool> [key=val key2=val2 ...]
     """
-    args = raw_args.strip().lower().split()
-    cmd = args[0] if args else "status"
+    args = raw_args.strip().split()
+    cmd = args[0].lower() if args else "status"
+
+    if cmd == "run" and len(args) >= 2:
+        return _handle_pipeline_run(args[1], args[2:])
 
     return _render_pipeline_status(cmd)
+
+
+def _handle_pipeline_run(tool_name: str, raw_kv_args: list[str]) -> str:
+    """Execute a pipeline tool via dispatch_tool."""
+    from .._ctx import get_ctx
+
+    ctx = get_ctx()
+    if ctx is None:
+        return "❌ Pipeline plugin not initialized (register(ctx) not called)"
+
+    # Parse key=val arguments
+    tool_args = {}
+    for kv in raw_kv_args:
+        if "=" in kv:
+            key, value = kv.split("=", 1)
+            tool_args[key] = value
+        else:
+            tool_args[kv] = True
+
+    try:
+        import json
+        result = ctx.dispatch_tool(tool_name, tool_args)
+        return result
+    except Exception as e:
+        return f"❌ dispatch_tool({tool_name}) failed: {e}"
 
 
 def handle_pipeline_cli(args):

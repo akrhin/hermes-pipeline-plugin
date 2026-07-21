@@ -354,6 +354,9 @@ ENSEMBLE_JUDGE_SCHEMA = {
 
 
 def register(ctx):
+    # Store ctx for slash-command dispatch_tool
+    from . import _ctx as plugin_ctx
+    plugin_ctx.set_ctx(ctx)
     # Register bundled skills via ctx.register_skill() (Hermes plugin SDK)
     skills_dir = Path(__file__).parent / "skill"
     if skills_dir.is_dir():

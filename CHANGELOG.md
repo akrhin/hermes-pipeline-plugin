@@ -13,12 +13,12 @@
 - **plugin.yaml compliance**: добавлен provides_hooks (пустой), register_skill для bundled skills
 - **Hermes docs audit**: подтверждено соответствие Handler SDK — **kwargs, JSON return, try/except, toolset
 
-### v3.7.2-dev (2026-07-21) — UX + @documenter
+### v3.7.2-dev (2026-07-21) — dispatch_tool из slash-команд
 
-- `classify.py`: добавлен `CATEGORY_EMOJI`, возвращает `emoji` в результате классификации
-- `handlers/__init__.py`: `_render_pipeline_status()` — прогресс-бар, emoji категорий, компактный вывод
-- `kanban.py`: добавлен `import retro as rt`, вызов `rt.get_retro().agent_done()` в `advance()`
-- `PLAN.md`: все P1+P2 закрыты, P3 актуализирован
+- `_ctx.py`: новый модуль — module-level ctx reference (без циркулярных импортов)
+- `__init__.py`: `register()` сохраняет ctx в `_ctx.set_ctx()`
+- `handlers/__init__.py`: `/pipeline run <tool> [key=val...]` вызывает `ctx.dispatch_tool()`
+- `PLAN.md`, `BUG.md`: актуализированы
 
 ## v3.7.1 (2026-07-21)
 
