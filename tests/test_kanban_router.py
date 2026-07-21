@@ -183,6 +183,8 @@ class TestDbPath:
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setenv("HERMES_HOME", "/tmp/test_native")
+            import kanban_adapter
+            kanban_adapter._DB_PATH_CACHE = None
             path2 = kb._db_path()
             assert path2.startswith("/tmp/test_native/")
             assert path2.endswith("kanban/boards/pipeline/kanban.db")
@@ -197,6 +199,8 @@ class TestDbPath:
 
             with pytest.MonkeyPatch.context() as mp:
                 mp.setenv("HERMES_HOME", "/tmp/test_hermes_home_legacy")
+                import kanban_adapter
+                kanban_adapter._DB_PATH_CACHE = None
                 path2 = kb._db_path()
                 assert path2.startswith("/tmp/test_hermes_home_legacy/")
                 assert path2.endswith("kanban/boards/pipeline/kanban.db")
@@ -207,6 +211,10 @@ class TestDbPath:
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setenv("HERMES_HOME", "/tmp/test_common")
+            # Clear adapter cache so it re-reads env
+            from kanban_adapter import _DB_PATH_CACHE
+            import kanban_adapter
+            kanban_adapter._DB_PATH_CACHE = None
             native_path = kb._db_path()
 
             with _kanban_mode("legacy") as kb_l:
