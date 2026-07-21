@@ -13,7 +13,7 @@
 - **plugin.yaml compliance**: добавлен provides_hooks (пустой), register_skill для bundled skills
 - **Hermes docs audit**: подтверждено соответствие Handler SDK — **kwargs, JSON return, try/except, toolset
 
-### v3.7.2-dev (2026-07-21) — P3 полный комплект
+## v3.7.2 (2026-07-21) — P1+P2+P3 + стабильный dev→main
 
 - `__init__.py`: `register()` вызывает `ctx.register_auxiliary_task("pipeline_classify", ...)` — классификатор
   теперь настраивается через `auxiliary.pipeline_classify` в конфиге с независимой моделью
