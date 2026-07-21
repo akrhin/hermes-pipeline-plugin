@@ -7,6 +7,8 @@ and selects the best via LLM Judge or deterministic fallback.
 
 import logging
 
+import retro as rt
+
 logger = logging.getLogger(__name__)
 
 # ── Default variations (temperature + instruction) ──
@@ -263,7 +265,6 @@ def llm_judge_candidates(
 
         # Log to retro
         try:
-            import retro as rt
             rt.get_retro().ensemble_judge(
                 winner=winner_id,
                 mode="llm",

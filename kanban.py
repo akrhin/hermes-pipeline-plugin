@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import sqlite3
+import threading
 
 import retro as rt
 import time
@@ -33,6 +34,44 @@ logger = logging.getLogger(__name__)
 
 MAX_CONVERGENCE_ROUNDS = 3
 NEXT_ACTION_STATUSES = {"ready", "todo"}
+
+# ── SQLite connection pool ───────────────────────────────────────────────────
+
+_KANBAN_CONN_LOCAL = threading.local()
+"""Thread-local SQLite connection for kanban operations.
+WAL-mode enabled, check_same_thread=True (thread-local)."""
+
+
+def _get_connection() -> sqlite3.Connection | None:
+    """Get or create a thread-local SQLite connection with WAL mode."""
+    db_path = _db_path()
+    if not os.path.isfile(db_path):
+        return None
+    conn = getattr(_KANBAN_CONN_LOCAL, "conn", None)
+    if conn is None:
+        try:
+            conn = sqlite3.connect(db_path, timeout=5.0)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=5000")
+            conn.row_factory = sqlite3.Row
+            _KANBAN_CONN_LOCAL.conn = conn
+            logger.debug("kanban: opened SQLite connection (WAL) to %s", db_path)
+        except sqlite3.Error as exc:
+            logger.warning("kanban: failed to open DB %s: %s", db_path, exc)
+            return None
+    return conn
+
+
+def _close_connection():
+    """Close the thread-local connection (if any)."""
+    conn = getattr(_KANBAN_CONN_LOCAL, "conn", None)
+    if conn:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        _KANBAN_CONN_LOCAL.conn = None
+
 
 
 def _extract_target(request: str) -> str:
@@ -176,40 +215,40 @@ def create_child(
 
 
 def _sqlite_update(query: str, params: tuple = ()) -> bool:
-    """Execute a write query on the kanban DB via direct SQLite."""
+    """Execute a write query on the kanban DB via connection pool."""
     if not query:
         return False
     db_path = _db_path()
     if not os.path.isfile(db_path):
         logger.warning("kanban DB not found: %s", db_path)
         return False
+    conn = _get_connection()
+    if conn is None:
+        return False
     try:
-        conn = sqlite3.connect(db_path)
-        try:
-            conn.execute(query, params)
-            conn.commit()
-            return True
-        finally:
-            conn.close()
+        conn.execute(query, params)
+        conn.commit()
+        return True
     except sqlite3.Error as exc:
-        logger.warning("sqlite error: %s", exc)
+        logger.warning("sqlite error in %s: %s", query[:80], exc)
         return False
 
 
 def _sqlite_select(query: str, params: tuple = ()) -> list[dict]:
-    """Execute a SELECT query and return rows as list of dicts."""
+    """Execute a SELECT query and return rows as list of dicts.
+    Returns [] on error (logged)."""
     db_path = _db_path()
     if not os.path.isfile(db_path):
+        logger.warning("kanban DB not found: %s", db_path)
+        return []
+    conn = _get_connection()
+    if conn is None:
         return []
     try:
-        conn = sqlite3.connect(db_path)
-        try:
-            conn.row_factory = sqlite3.Row
-            cur = conn.execute(query, params)
-            return [dict(r) for r in cur.fetchall()]
-        finally:
-            conn.close()
-    except sqlite3.Error:
+        cur = conn.execute(query, params)
+        return [dict(r) for r in cur.fetchall()]
+    except sqlite3.Error as exc:
+        logger.warning("sqlite error in %s: %s", query[:80], exc)
         return []
 
 
@@ -427,55 +466,34 @@ def _claim_and_assign(task_id: str, assignee: str) -> bool:
         (assignee, now, now, task_id),
     )
 
-
 def _update_parent_body(parent_id: str, state: dict) -> bool:
     """Update parent task body with current findings."""
     import json
-    from sqlite3 import connect
+
     findings_json = "[]"
     if state.get("findings"):
         findings_json = json.dumps(state["findings"], ensure_ascii=False)
-    try:
-        conn = connect(_db_path())
-        # Append findings to existing body
-        conn.execute(
-            "UPDATE tasks SET body = COALESCE(body, '') || ? WHERE id=?",
-            (f"\nFindings:{findings_json}", parent_id),
-        )
-        conn.commit()
-        conn.close()
-        return True
-    except Exception:
-        return False
+    return _sqlite_update(
+        "UPDATE tasks SET body = COALESCE(body, '') || ? WHERE id=?",
+        (f"\nFindings:{findings_json}", parent_id),
+    )
 
 
 def _update_parent_status(parent_id: str | None, status: str):
     """Update parent task status directly via SQLite."""
     if not parent_id:
         return
-    import sqlite3
-
-    db_path = _db_path()
-    conn = None
-    try:
-        conn = sqlite3.connect(db_path)
-        now = int(time.time())
-        if status == "running":
-            conn.execute(
-                "UPDATE tasks SET status=?, started_at=COALESCE(started_at,?) WHERE id=?",
-                (status, now, parent_id),
-            )
-        else:
-            conn.execute(
-                "UPDATE tasks SET status=?, completed_at=? WHERE id=?",
-                (status, now, parent_id),
-            )
-        conn.commit()
-    except sqlite3.Error as exc:
-        logger.warning("sqlite error in _update_parent_status: %s", exc)
-    finally:
-        if conn:
-            conn.close()
+    now = int(time.time())
+    if status == "running":
+        _sqlite_update(
+            "UPDATE tasks SET status=?, started_at=COALESCE(started_at,?) WHERE id=?",
+            (status, now, parent_id),
+        )
+    else:
+        _sqlite_update(
+            "UPDATE tasks SET status=?, completed_at=? WHERE id=?",
+            (status, now, parent_id),
+        )
 
 
 def advance(state: dict, completed_agent: str) -> dict:
